@@ -181,17 +181,28 @@ npm run dev
 
 ## PDF Template Matching
 
-The official PDF template is the source of truth. To tune exact output:
+The official PDF template is the source of truth. The FRCRCE-style print implementation now lives in:
+
+- [backend/static/css/print.css](</C:/comps/backend/static/css/print.css>)
+- [backend/templates/base.html](</C:/comps/backend/templates/base.html>)
+- [backend/templates/cover_page.html](</C:/comps/backend/templates/cover_page.html>)
+- [backend/templates/preamble.html](</C:/comps/backend/templates/preamble.html>)
+- [backend/templates/semester_structure.html](</C:/comps/backend/templates/semester_structure.html>)
+- [backend/templates/course_detail.html](</C:/comps/backend/templates/course_detail.html>)
+- [backend/templates/annexure.html](</C:/comps/backend/templates/annexure.html>)
+- [backend/templates/reviewer_readonly.html](</C:/comps/backend/templates/reviewer_readonly.html>)
+
+Admin/faculty PDF preview uses the official publishing template. Reviewers receive the separate read-only reviewer template and attach comments against sections; they do not edit the admin/faculty template or source form.
+
+To tune exact output:
 
 1. Upload/store the official PDF in `CurriculumTemplate.template_pdf`.
 2. Put logos and seals under `backend/static/branding` or department media.
 3. Adjust `backend/templates/pdf/base.html` for margins, typography, headers, footers, page numbers.
-4. Adjust reusable page partials:
-   - `course_detail.html`
-   - `partials/course_body.html`
-   - `curriculum_book.html`
-5. Use `GET /api/courses/{id}/preview_pdf/` for faculty preview.
-6. Use `POST /api/published-curricula/publish/` for final assembly.
+4. Place the institutional logo at `backend/static/img/frcrce_logo.png`.
+5. Use `GET /api/courses/{id}/preview_pdf/` for admin/faculty preview.
+6. Use `GET /api/courses/{id}/reviewer_readonly_pdf/` for reviewer read-only links.
+7. Use `POST /api/published-curricula/publish/` for final assembly.
 
 The current implementation provides the exact rendering mechanism and a formal academic layout. Pixel-perfect matching requires the actual university PDF asset, logo files, fonts, and measured spacing from the uploaded source document.
 

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="text-left">Preamble:</h3>
+<p style="text-align: justify; margin-bottom: 10pt;">{{ preamble_text_1 }}</p>
+<p style="text-align: justify; margin-bottom: 10pt;">{{ preamble_text_2 }}</p>
+<p style="text-align: justify; margin-bottom: 10pt;">{{ preamble_text_3 }}</p>
+
+<h3 class="mt-10 text-left">Salient Features of Curriculum:</h3>
+<ul style="padding-left: 5mm; text-align: justify;">
+    {% for feature in salient_features %}
+    <li style="margin-bottom: 4pt;">{{ feature }}</li>
+    {% endfor %}
+</ul>
+
+<div class="page-break"></div>
+{% endblock %}

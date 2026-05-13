@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="text-left">Annexure: Self-Learning Effective from Academic Year {{ academic_year }}</h3>
+<h4 class="text-left mt-10">Semester {{ semester_roman }}</h4>
+
+<table>
+    <colgroup>
+        <col style="width: 14%;"> <col style="width: 10%;"> <col style="width: 32%;"> <col style="width: 11%;"> <col style="width: 11%;"> <col style="width: 11%;"> <col style="width: 11%;"> </colgroup>
+    <thead>
+        <tr>
+            <th>Course Code</th>
+            <th>Course Vertical</th>
+            <th>Course Name</th>
+            <th>Classroom<br>Instruction (CI)<br><span class="small-text">(hrs/sem)</span></th>
+            <th>Lab<br>Instruction (LI)<br><span class="small-text">(hrs/sem)</span></th>
+            <th>Self-<br>Learning (SL)<br><span class="small-text">(hrs/sem)</span></th>
+            <th>Total Hours<br><span class="small-text">per semester</span></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in self_learning_courses %}
+        <tr>
+            <td class="text-center">{{ row.code }}</td>
+            <td class="text-center">{{ row.vertical }}</td>
+            <td>{{ row.name }}</td>
+            <td class="text-center">{{ row.ci_hours }}</td>
+            <td class="text-center">{{ row.li_hours }}</td>
+            <td class="text-center">{{ row.sl_hours }}</td>
+            <td class="text-center text-bold">{{ row.total_hours }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr>
+            <th colspan="6" class="text-right">Total Number of Hours</th>
+            <th class="text-center">{{ annexure_total_hours }}</th>
+        </tr>
+    </tfoot>
+</table>
+
+<p style="font-size: 9.5pt; margin-top: 10pt; text-align: justify;">
+    <em>As part of the self-learning component, faculty members will assign specific topics or activities to students as per number of hours given in the above table that align with the course outcomes. Students are expected to independently explore, research, and perform the assigned tasks, thereby enhancing their critical thinking and problem-solving abilities. Upon completion, the faculty will evaluate the work based on appropriate assessment methods defined by the faculty.</em>
+</p>
+
+<div class="page-break"></div>
+{% endblock %}

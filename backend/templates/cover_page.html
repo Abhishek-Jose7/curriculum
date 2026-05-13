@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="cover-page" style="padding-top: 100px; text-align: center;">
+    <h1 style="font-size: 20pt; font-weight: bold; letter-spacing: 1px;">CURRICULUM STRUCTURE</h1>
+
+    <h2 class="mt-10" style="font-size: 16pt;">SECOND YEAR UG: B.E.</h2>
+    <h2 style="font-size: 22pt; text-decoration: underline; margin-top: 15px;">{{ department_name|default:"COMPUTER ENGINEERING" }}</h2>
+
+    <div style="margin-top: 40px; font-size: 12pt; line-height: 1.5;">
+        <p><strong>REVISION:</strong> {{ revision_code }}</p>
+        <p><strong>Effective from Academic Year:</strong> {{ academic_year }}</p>
+    </div>
+
+    <div style="margin-top: 60px; font-size: 11pt; line-height: 1.5;">
+        <p>Board of Studies Approval: {{ bos_approval_date }}</p>
+        <p>Academic Council Approval: {{ ac_approval_dates }}</p>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-top: 180px; padding: 0 20px;">
+        <div style="width: 28%; text-align: center; border-top: 1pt solid #000; padding-top: 5px;">
+            <p class="small-text text-bold" style="margin: 0;">Dr. DEEPAK BHOIR</p>
+            <p class="small-text" style="margin: 0;">Dean Academics</p>
+        </div>
+        <div style="width: 28%; text-align: center; border-top: 1pt solid #000; padding-top: 5px;">
+            <p class="small-text text-bold" style="margin: 0;">Dr. Sujata P. Deshmukh</p>
+            <p class="small-text" style="margin: 0;">HOD (Computer)</p>
+        </div>
+        <div style="width: 28%; text-align: center; border-top: 1pt solid #000; padding-top: 5px;">
+            <p class="small-text text-bold" style="margin: 0;">DR. SURENDRA RATHOD</p>
+            <p class="small-text" style="margin: 0;">Principal</p>
+        </div>
+    </div>
+</div>
+
+<div class="page-break"></div>
+{% endblock %}

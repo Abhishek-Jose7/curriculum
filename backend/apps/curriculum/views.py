@@ -32,7 +32,7 @@ from apps.curriculum.serializers import (
     TopicSerializer,
 )
 from apps.curriculum.services import create_course_version
-from apps.publishing.services import render_course_preview_pdf
+from apps.publishing.services import render_course_preview_pdf, render_reviewer_readonly_pdf
 
 
 class AdminWriteMixin:
@@ -125,6 +125,12 @@ class CourseViewSet(viewsets.ModelViewSet):
     def preview_pdf(self, request, pk=None):
         course = self.get_object()
         pdf = render_course_preview_pdf(course)
+        return HttpResponse(pdf, content_type="application/pdf")
+
+    @decorators.action(detail=True, methods=["get"], permission_classes=[permissions.AllowAny])
+    def reviewer_readonly_pdf(self, request, pk=None):
+        course = self.get_object()
+        pdf = render_reviewer_readonly_pdf(course)
         return HttpResponse(pdf, content_type="application/pdf")
 
 

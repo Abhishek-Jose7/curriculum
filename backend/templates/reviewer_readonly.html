@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="review-readonly-banner avoid-break" style="border: 0.5pt solid #000; padding: 2mm; margin-bottom: 8pt;">
+    <h4 class="text-left" style="margin-bottom: 2pt;">Reviewer Read-Only Curriculum View</h4>
+    <p class="small-text" style="margin: 0;">This view is generated from structured curriculum data for review comments only. Reviewers cannot edit the official publishing template or curriculum source fields.</p>
+</div>
+
+<table>
+    <colgroup>
+        <col style="width: 16%;">
+        <col style="width: 44%;">
+        <col style="width: 5%;">
+        <col style="width: 5%;">
+        <col style="width: 5%;">
+        <col style="width: 5%;">
+        <col style="width: 5%;">
+        <col style="width: 5%;">
+        <col style="width: 10%;">
+    </colgroup>
+    <tr>
+        <th rowspan="2">Course Code</th>
+        <th rowspan="2">Course Name</th>
+        <th colspan="3">Teaching Scheme (Hrs/week)</th>
+        <th colspan="4">Credits Assigned</th>
+    </tr>
+    <tr>
+        <th>L</th><th>T</th><th>P</th>
+        <th>L</th><th>T</th><th>P</th><th>Total</th>
+    </tr>
+    <tr>
+        <td class="text-center text-bold">{{ course.code }}</td>
+        <td class="text-bold">{{ course.name }}</td>
+        <td class="text-center">{{ course.lecture_hrs }}</td>
+        <td class="text-center">{{ course.tutorial_hrs }}</td>
+        <td class="text-center">{{ course.practical_hrs }}</td>
+        <td class="text-center">{{ course.lecture_credits }}</td>
+        <td class="text-center">{{ course.tutorial_credits }}</td>
+        <td class="text-center">{{ course.practical_credits }}</td>
+        <td class="text-center text-bold">{{ course.total_credits }}</td>
+    </tr>
+</table>
+
+<table class="avoid-break mt-10">
+    <colgroup>
+        <col style="width: 16%;">
+        <col style="width: 10%;">
+        <col style="width: 74%;">
+    </colgroup>
+    <tr>
+        <th colspan="2" class="text-center">Pre-requisite<br>Course Codes</th>
+        <td>{{ course.prerequisites }}</td>
+    </tr>
+    <tr>
+        <th rowspan="{{ course.outcomes|length|add:'1' }}" class="text-center">Course<br>Outcomes</th>
+        <td colspan="2" class="text-bold" style="border-bottom: 0.5pt solid #000;">At the end of the course learner will be able to:</td>
+    </tr>
+    {% for outcome in course.outcomes %}
+    <tr>
+        <td class="text-center text-bold">{{ outcome.id }}</td>
+        <td>{{ outcome.description }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<div class="mt-10">
+    <table style="margin-bottom: 0;">
+        <colgroup>
+            <col style="width: 8%;">
+            <col style="width: 8%;">
+            <col style="width: 66%;">
+            <col style="width: 10%;">
+            <col style="width: 8%;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Module<br>No.</th>
+                <th>Unit<br>No.</th>
+                <th>Topics</th>
+                <th>Ref.</th>
+                <th>Hrs.</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for module in course.modules %}
+            <tr>
+                <td class="text-center text-bold" rowspan="{{ module.units|length }}">{{ module.number }}</td>
+                {% for unit in module.units %}
+                    {% if not forloop.first %}<tr>{% endif %}
+                    <td class="text-center">{{ unit.number }}</td>
+                    <td style="padding-right: 3mm;">{{ unit.topic }}</td>
+                    <td class="text-center">{{ unit.ref }}</td>
+                    {% if forloop.first %}
+                        <td class="text-center text-bold" rowspan="{{ module.units|length }}">{{ module.hours }}</td>
+                    {% endif %}
+                    {% if not forloop.first %}</tr>{% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="page-break"></div>
+
+<h3 class="text-left">Structured Review Comments</h3>
+<table>
+    <colgroup>
+        <col style="width: 24%;">
+        <col style="width: 56%;">
+        <col style="width: 20%;">
+    </colgroup>
+    <thead>
+        <tr>
+            <th>Section</th>
+            <th>Comment</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for comment in comments %}
+        <tr>
+            <td>{{ comment.section_label }}</td>
+            <td>{{ comment.body }}</td>
+            <td class="text-center">{% if comment.is_resolved %}Resolved{% else %}Open{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="3" class="text-center">No reviewer comments submitted.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

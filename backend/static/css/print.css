@@ -1,0 +1,105 @@
+/* --- STRICT A4 PAGE GEOMETRY --- */
+@page {
+    size: A4 portrait;
+    margin: 15mm 12mm 18mm 12mm; /* Top, Right, Bottom, Left */
+    @bottom-center {
+        content: counter(page);
+        font-family: "Times New Roman", Times, serif;
+        font-size: 9pt;
+        padding-top: 5mm;
+    }
+}
+
+/* --- TYPOGRAPHIC DENSITY --- */
+body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
+    line-height: 1.15;
+    color: #000;
+    margin: 0;
+    padding: 0;
+    text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5 {
+    text-align: center;
+    margin: 0 0 4pt 0;
+    line-height: 1.1;
+}
+
+h3 { font-size: 12pt; font-weight: bold; }
+h4 { font-size: 11pt; font-weight: bold; }
+
+/* --- RIGID TABLE ARCHITECTURE --- */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8pt;
+    table-layout: fixed; /* NON-NEGOTIABLE FOR PDF FIDELITY */
+    page-break-inside: auto;
+}
+
+tr {
+    page-break-inside: avoid;
+}
+
+th, td {
+    border: 0.5pt solid #000;
+    padding: 1.5mm 1mm;
+    text-align: left;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+th {
+    font-weight: bold;
+    text-align: center;
+}
+
+/* Fix for dynamic HTML lists (like syllabus or books) inside tables */
+td ul, td ol {
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 4mm;
+}
+
+/* --- UTILITY & ALIGNMENT --- */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+.text-bold { font-weight: bold; }
+.no-wrap { white-space: nowrap; }
+.small-text { font-size: 8.5pt; }
+.mt-10 { margin-top: 10pt; }
+
+/* --- HEADER REPLICATION --- */
+.institutional-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1pt solid #000;
+    padding-bottom: 4pt;
+    margin-bottom: 12pt;
+}
+
+.logo-container {
+    width: 16mm;
+    height: 16mm;
+    margin-right: 4mm;
+}
+
+.logo-container img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.header-text h4 { font-size: 10pt; font-weight: normal; margin-bottom: 1pt;}
+.header-text h3 { font-size: 13pt; font-weight: bold; margin-bottom: 1pt;}
+.header-text p { font-size: 8.5pt; margin: 0; line-height: 1.1;}
+
+/* --- PRINT CONTROL --- */
+.avoid-break { page-break-inside: avoid; }
+.page-break { page-break-before: always; }
