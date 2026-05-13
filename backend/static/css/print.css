@@ -1,10 +1,26 @@
+@font-face {
+    font-family: 'Times New Roman Custom';
+    src: url('../fonts/times.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Times New Roman Custom';
+    src: url('../fonts/timesbd.ttf') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+}
+
 /* --- STRICT A4 PAGE GEOMETRY --- */
 @page {
     size: A4 portrait;
-    margin: 15mm 12mm 18mm 12mm; /* Top, Right, Bottom, Left */
+    margin: 28mm 12mm 18mm 12mm; /* Top, Right, Bottom, Left */
+    @top-center {
+        content: element(running-header);
+    }
     @bottom-center {
         content: counter(page);
-        font-family: "Times New Roman", Times, serif;
+        font-family: "Times New Roman Custom", "Times New Roman", Times, serif;
         font-size: 9pt;
         padding-top: 5mm;
     }
@@ -12,7 +28,7 @@
 
 /* --- TYPOGRAPHIC DENSITY --- */
 body {
-    font-family: "Times New Roman", Times, serif;
+    font-family: "Times New Roman Custom", "Times New Roman", Times, serif;
     font-size: 10pt;
     line-height: 1.15;
     color: #000;
@@ -76,12 +92,12 @@ td ul, td ol {
 
 /* --- HEADER REPLICATION --- */
 .institutional-header {
+    position: running(running-header);
     display: flex;
     align-items: center;
     justify-content: center;
     border-bottom: 1pt solid #000;
     padding-bottom: 4pt;
-    margin-bottom: 12pt;
 }
 
 .logo-container {
@@ -103,3 +119,11 @@ td ul, td ol {
 /* --- PRINT CONTROL --- */
 .avoid-break { page-break-inside: avoid; }
 .page-break { page-break-before: always; }
+tbody.module-group { page-break-inside: avoid; }
+.course-section { page-break-before: always; }
+.annexure-section { page-break-before: always; }
+.strict-height-cell {
+    max-height: 40mm;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

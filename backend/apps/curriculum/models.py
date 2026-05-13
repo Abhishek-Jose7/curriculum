@@ -1,6 +1,10 @@
+import uuid
+from datetime import timedelta
+
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxLengthValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 class TimestampedModel(models.Model):
@@ -79,9 +83,9 @@ class Course(TimestampedModel):
     internal_marks = models.PositiveSmallIntegerField(default=0)
     external_marks = models.PositiveSmallIntegerField(default=0)
     duration_hours = models.DecimalField(max_digits=3, decimal_places=1, default=3)
-    pre_requisites = models.TextField(blank=True)
-    objectives = models.TextField(blank=True)
-    syllabus_intro = models.TextField(blank=True)
+    pre_requisites = models.TextField(blank=True, validators=[MaxLengthValidator(300)])
+    objectives = models.TextField(blank=True, validators=[MaxLengthValidator(300)])
+    syllabus_intro = models.TextField(blank=True, validators=[MaxLengthValidator(800)])
     online_resources = models.JSONField(default=list, blank=True)
     section_order = models.JSONField(default=list, blank=True)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_courses")
@@ -120,7 +124,7 @@ class Module(TimestampedModel):
     number = models.PositiveSmallIntegerField()
     title = models.CharField(max_length=220)
     contact_hours = models.PositiveSmallIntegerField(default=0)
-    content = models.TextField()
+    content = models.TextField(validators=[MaxLengthValidator(500)])
 
     class Meta:
         unique_together = ("course", "number")
@@ -130,7 +134,7 @@ class Module(TimestampedModel):
 class Topic(TimestampedModel):
     module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name="topics")
     title = models.CharField(max_length=220)
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, validators=[MaxLengthValidator(500)])
     order = models.PositiveSmallIntegerField(default=1)
 
     class Meta:
@@ -185,3 +189,29 @@ class CourseVersion(TimestampedModel):
     class Meta:
         unique_together = ("course", "version_number")
         ordering = ["-version_number"]
+
+
+def default_invitation_expiry():
+    return timezone.now() + timedelta(days=14)
+
+
+class CourseInvitation(TimestampedModel):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="invitations")
+    email = models.EmailField()
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="sent_course_invitations")
+    accepted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="accepted_course_invitations")
+    expires_at = models.DateTimeField(default=default_invitation_expiry)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["email"]), models.Index(fields=["token"])]
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_accepted(self) -> bool:
+        return self.accepted_at is not None

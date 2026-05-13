@@ -4,6 +4,7 @@ from apps.curriculum.models import (
     AcademicYear,
     AssessmentScheme,
     Course,
+    CourseInvitation,
     CourseOutcome,
     CourseVersion,
     Department,
@@ -25,3 +26,4 @@ admin.site.register(Experiment)
 admin.site.register(AssessmentScheme)
 admin.site.register(ReferenceBook)
 admin.site.register(CourseVersion)
+admin.site.register(CourseInvitation)

@@ -1,5 +1,8 @@
 from django.db import transaction
 from django.http import HttpResponse
+from django.conf import settings
+from django.core.mail import send_mail
+from django.utils import timezone
 from rest_framework import decorators, filters, permissions, response, status, viewsets
 
 from apps.accounts.permissions import CourseObjectPermission, IsAdminOrHOD
@@ -7,6 +10,7 @@ from apps.curriculum.models import (
     AcademicYear,
     AssessmentScheme,
     Course,
+    CourseInvitation,
     CourseOutcome,
     CourseStatus,
     CourseVersion,
@@ -23,6 +27,7 @@ from apps.curriculum.serializers import (
     AssessmentSchemeSerializer,
     CourseOutcomeSerializer,
     CourseSerializer,
+    CourseInvitationSerializer,
     CourseVersionSerializer,
     DepartmentSerializer,
     ExperimentSerializer,
@@ -32,7 +37,7 @@ from apps.curriculum.serializers import (
     TopicSerializer,
 )
 from apps.curriculum.services import create_course_version
-from apps.publishing.services import render_course_preview_pdf, render_reviewer_readonly_pdf
+from apps.publishing.services import PdfOverflowError, render_course_preview_pdf, render_reviewer_readonly_pdf
 
 
 class AdminWriteMixin:
@@ -124,7 +129,10 @@ class CourseViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=True, methods=["get"])
     def preview_pdf(self, request, pk=None):
         course = self.get_object()
-        pdf = render_course_preview_pdf(course)
+        try:
+            pdf = render_course_preview_pdf(course)
+        except PdfOverflowError as exc:
+            return response.Response({"detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         return HttpResponse(pdf, content_type="application/pdf")
 
     @decorators.action(detail=True, methods=["get"], permission_classes=[permissions.AllowAny])
@@ -132,6 +140,53 @@ class CourseViewSet(viewsets.ModelViewSet):
         course = self.get_object()
         pdf = render_reviewer_readonly_pdf(course)
         return HttpResponse(pdf, content_type="application/pdf")
+
+    @decorators.action(detail=True, methods=["post"], permission_classes=[IsAdminOrHOD])
+    def invite_teacher(self, request, pk=None):
+        course = self.get_object()
+        email = request.data.get("email", "").strip().lower()
+        if not email:
+            return response.Response({"email": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        invitation = CourseInvitation.objects.create(course=course, email=email, invited_by=request.user)
+        invitation_url = f"{settings.FRONTEND_URL}/invite/{invitation.token}"
+        send_mail(
+            subject=f"Curriculum editing invitation: {course.code} {course.title}",
+            message=(
+                f"You have been invited to edit the curriculum for {course.code} - {course.title}.\n\n"
+                f"Open this subject link: {invitation_url}\n\n"
+                "Use your faculty account to accept the invitation. This link is subject-specific and read/write access is limited to the assigned course."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+        return response.Response(CourseInvitationSerializer(invitation, context={"request": request}).data, status=201)
+
+
+class CourseInvitationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CourseInvitation.objects.select_related("course", "course__semester", "invited_by", "accepted_by").all()
+    serializer_class = CourseInvitationSerializer
+    lookup_field = "token"
+
+    def get_permissions(self):
+        if self.action in {"retrieve", "accept"}:
+            return [permissions.AllowAny()]
+        return [IsAdminOrHOD()]
+
+    @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def accept(self, request, token=None):
+        invitation = self.get_object()
+        if invitation.is_expired:
+            return response.Response({"detail": "Invitation link has expired."}, status=status.HTTP_400_BAD_REQUEST)
+        if invitation.is_accepted:
+            return response.Response({"detail": "Invitation has already been accepted."}, status=status.HTTP_400_BAD_REQUEST)
+        course = invitation.course
+        course.faculty = request.user
+        course.save(update_fields=["faculty", "updated_at"])
+        invitation.accepted_by = request.user
+        invitation.accepted_at = timezone.now()
+        invitation.save(update_fields=["accepted_by", "accepted_at", "updated_at"])
+        return response.Response(CourseInvitationSerializer(invitation, context={"request": request}).data)
 
 
 class CourseOutcomeViewSet(viewsets.ModelViewSet):

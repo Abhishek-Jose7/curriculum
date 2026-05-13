@@ -58,7 +58,7 @@ create table semesters (
 create table courses (
   id uuid primary key default gen_random_uuid(),
   semester_id uuid not null references semesters(id) on delete cascade,
-  faculty_id uuid references profiles(id) on delete set null,
+  faculty_user_id uuid references profiles(id) on delete set null,
   code text not null,
   title text not null,
   course_type course_type not null default 'THEORY',
@@ -76,7 +76,7 @@ create table courses (
   syllabus_intro text,
   online_resources jsonb not null default '[]'::jsonb,
   section_order jsonb not null default '[]'::jsonb,
-  approved_by uuid references profiles(id) on delete set null,
+  approved_by_user_id_user_id uuid references profiles(id) on delete set null,
   approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -84,7 +84,7 @@ create table courses (
 );
 
 create index courses_status_idx on courses(status);
-create index courses_faculty_idx on courses(faculty_id);
+create index courses_faculty_user_idx on courses(faculty_user_id);
 create index courses_type_idx on courses(course_type);
 
 create table course_outcomes (
@@ -162,7 +162,7 @@ create table course_versions (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references courses(id) on delete cascade,
   version_number integer not null,
-  edited_by uuid references profiles(id) on delete set null,
+  edited_by_user_id uuid references profiles(id) on delete set null,
   previous_version_id uuid references course_versions(id) on delete set null,
   snapshot jsonb not null,
   change_summary text,
@@ -170,15 +170,31 @@ create table course_versions (
   unique (course_id, version_number)
 );
 
+create table course_invitations (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references courses(id) on delete cascade,
+  email text not null,
+  token uuid not null unique default gen_random_uuid(),
+  invited_by_user_id uuid references profiles(id) on delete set null,
+  accepted_by_user_id uuid references profiles(id) on delete set null,
+  expires_at timestamptz not null default (now() + interval '14 days'),
+  accepted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index course_invitations_email_idx on course_invitations(email);
+create index course_invitations_course_idx on course_invitations(course_id);
+
 create table reviewer_comments (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references courses(id) on delete cascade,
-  reviewer_id uuid references profiles(id) on delete set null,
+  reviewer_user_id uuid references profiles(id) on delete set null,
   section_key text not null,
   section_label text not null,
   body text not null,
   is_resolved boolean not null default false,
-  resolved_by uuid references profiles(id) on delete set null,
+  resolved_by_user_id uuid references profiles(id) on delete set null,
   resolved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -189,7 +205,7 @@ create index reviewer_comments_section_idx on reviewer_comments(course_id, secti
 create table approval_workflows (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references courses(id) on delete cascade,
-  actor_id uuid references profiles(id) on delete set null,
+  actor_user_id uuid references profiles(id) on delete set null,
   from_status course_status not null,
   to_status course_status not null,
   decision workflow_decision not null,
@@ -214,7 +230,7 @@ create table published_curricula (
   department_id uuid not null references departments(id) on delete cascade,
   academic_year_id uuid not null references academic_years(id) on delete cascade,
   template_id uuid not null references curriculum_templates(id) on delete restrict,
-  published_by uuid references profiles(id) on delete set null,
+  published_by_user_id uuid references profiles(id) on delete set null,
   pdf_url text not null,
   docx_url text,
   version_label text not null,
@@ -265,25 +281,46 @@ create trigger touch_topics before update on topics for each row execute functio
 create trigger touch_experiments before update on experiments for each row execute function touch_updated_at();
 create trigger touch_assessment_schemes before update on assessment_schemes for each row execute function touch_updated_at();
 create trigger touch_reference_books before update on reference_books for each row execute function touch_updated_at();
+create trigger touch_course_invitations before update on course_invitations for each row execute function touch_updated_at();
 create trigger touch_reviewer_comments before update on reviewer_comments for each row execute function touch_updated_at();
 create trigger touch_curriculum_templates before update on curriculum_templates for each row execute function touch_updated_at();
 create trigger touch_published_curricula before update on published_curricula for each row execute function touch_updated_at();
 create trigger touch_notifications before update on notifications for each row execute function touch_updated_at();
 
-create or replace function current_role()
-returns app_role language sql stable as $$
-  select role from profiles where id = auth.uid()
+create or replace function auth_user_role()
+returns app_role
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.role
+  from profiles p
+  where p.id = auth.uid()
+  limit 1
 $$;
 
+grant execute on function auth_user_role()
+to authenticated;
+
 create or replace function is_academic_admin()
-returns boolean language sql stable as $$
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
   select exists (
-    select 1 from profiles
-    where id = auth.uid()
-      and role in ('ADMIN', 'HOD')
-      and is_active = true
+    select 1
+    from profiles p
+    where p.id = auth.uid()
+      and p.role in ('ADMIN', 'HOD')
+      and p.is_active = true
   )
 $$;
+
+grant execute on function is_academic_admin()
+to authenticated;
 
 alter table departments enable row level security;
 alter table profiles enable row level security;
@@ -297,6 +334,7 @@ alter table experiments enable row level security;
 alter table assessment_schemes enable row level security;
 alter table reference_books enable row level security;
 alter table course_versions enable row level security;
+alter table course_invitations enable row level security;
 alter table reviewer_comments enable row level security;
 alter table approval_workflows enable row level security;
 alter table curriculum_templates enable row level security;
@@ -305,7 +343,7 @@ alter table notifications enable row level security;
 alter table audit_logs enable row level security;
 
 create policy "public can read published curricula" on published_curricula
-  for select using (is_public = true or is_academic_admin() or published_by = auth.uid());
+  for select using (is_public = true or is_academic_admin() or published_by_user_id = auth.uid());
 
 create policy "authenticated read departments" on departments for select to authenticated using (true);
 create policy "admins manage departments" on departments for all to authenticated using (is_academic_admin()) with check (is_academic_admin());
@@ -321,86 +359,91 @@ create policy "admins manage semesters" on semesters for all to authenticated us
 
 create policy "course visible to participants" on courses for select to authenticated using (
   is_academic_admin()
-  or faculty_id = auth.uid()
-  or current_role() = 'REVIEWER'
+  or faculty_user_id = auth.uid()
+  or auth_user_role() = 'REVIEWER'
   or status in ('PUBLISHED')
 );
 
 create policy "faculty edit editable assigned courses" on courses for update to authenticated using (
-  faculty_id = auth.uid()
+  faculty_user_id = auth.uid()
   and status in ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CHANGES_REQUESTED')
 ) with check (
-  faculty_id = auth.uid()
+  faculty_user_id = auth.uid()
   and status in ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CHANGES_REQUESTED')
 );
 
 create policy "admins manage courses" on courses for all to authenticated using (is_academic_admin()) with check (is_academic_admin());
 
+create policy "admins manage course invitations" on course_invitations for all to authenticated using (is_academic_admin()) with check (is_academic_admin());
+create policy "invited teacher reads own invitation after login" on course_invitations for select to authenticated using (
+  lower(email) = lower((auth.jwt() ->> 'email')) or is_academic_admin()
+);
+
 create policy "course children readable" on course_outcomes for select to authenticated using (exists (select 1 from courses c where c.id = course_id));
 create policy "course outcomes editable by owner/admin" on course_outcomes for all to authenticated using (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "modules readable" on modules for select to authenticated using (exists (select 1 from courses c where c.id = course_id));
 create policy "modules editable by owner/admin" on modules for all to authenticated using (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "topics readable" on topics for select to authenticated using (exists (select 1 from modules m join courses c on c.id = m.course_id where m.id = module_id));
 create policy "topics editable by owner/admin" on topics for all to authenticated using (
-  is_academic_admin() or exists (select 1 from modules m join courses c on c.id = m.course_id where m.id = module_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from modules m join courses c on c.id = m.course_id where m.id = module_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from modules m join courses c on c.id = m.course_id where m.id = module_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from modules m join courses c on c.id = m.course_id where m.id = module_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "experiments readable" on experiments for select to authenticated using (exists (select 1 from courses c where c.id = course_id));
 create policy "experiments editable by owner/admin" on experiments for all to authenticated using (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "assessments readable" on assessment_schemes for select to authenticated using (exists (select 1 from courses c where c.id = course_id));
 create policy "assessments editable by owner/admin" on assessment_schemes for all to authenticated using (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "references readable" on reference_books for select to authenticated using (exists (select 1 from courses c where c.id = course_id));
 create policy "references editable by owner/admin" on reference_books for all to authenticated using (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 ) with check (
-  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
+  is_academic_admin() or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid() and c.status in ('DRAFT','SUBMITTED','UNDER_REVIEW','CHANGES_REQUESTED'))
 );
 
 create policy "versions readable by participants" on course_versions for select to authenticated using (
   is_academic_admin()
-  or exists (select 1 from courses c where c.id = course_id and (c.faculty_id = auth.uid() or current_role() = 'REVIEWER'))
+  or exists (select 1 from courses c where c.id = course_id and (c.faculty_user_id = auth.uid() or auth_user_role() = 'REVIEWER'))
 );
 create policy "versions created by participants" on course_versions for insert to authenticated with check (
   is_academic_admin()
-  or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid())
+  or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid())
 );
 
 create policy "comments readable by participants" on reviewer_comments for select to authenticated using (
   is_academic_admin()
-  or reviewer_id = auth.uid()
-  or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid())
+  or reviewer_user_id = auth.uid()
+  or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid())
 );
-create policy "reviewers write comments" on reviewer_comments for insert to authenticated with check (current_role() in ('REVIEWER','ADMIN','HOD'));
-create policy "reviewers resolve own comments or admin" on reviewer_comments for update to authenticated using (reviewer_id = auth.uid() or is_academic_admin()) with check (reviewer_id = auth.uid() or is_academic_admin());
+create policy "reviewers write comments" on reviewer_comments for insert to authenticated with check (auth_user_role() in ('REVIEWER','ADMIN','HOD'));
+create policy "reviewers resolve own comments or admin" on reviewer_comments for update to authenticated using (reviewer_user_id = auth.uid() or is_academic_admin()) with check (reviewer_user_id = auth.uid() or is_academic_admin());
 
 create policy "workflow readable by participants" on approval_workflows for select to authenticated using (
   is_academic_admin()
-  or actor_id = auth.uid()
-  or exists (select 1 from courses c where c.id = course_id and c.faculty_id = auth.uid())
+  or actor_user_id = auth.uid()
+  or exists (select 1 from courses c where c.id = course_id and c.faculty_user_id = auth.uid())
 );
-create policy "reviewers create workflow decisions" on approval_workflows for insert to authenticated with check (current_role() in ('REVIEWER','ADMIN','HOD'));
+create policy "reviewers create workflow decisions" on approval_workflows for insert to authenticated with check (auth_user_role() in ('REVIEWER','ADMIN','HOD'));
 
 create policy "templates read authenticated" on curriculum_templates for select to authenticated using (true);
 create policy "admins manage templates" on curriculum_templates for all to authenticated using (is_academic_admin()) with check (is_academic_admin());
@@ -409,3 +452,4 @@ create policy "users read own notifications" on notifications for select to auth
 create policy "users update own notifications" on notifications for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy "admins read audit logs" on audit_logs for select to authenticated using (is_academic_admin());
+

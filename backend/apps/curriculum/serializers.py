@@ -4,6 +4,7 @@ from apps.curriculum.models import (
     AcademicYear,
     AssessmentScheme,
     Course,
+    CourseInvitation,
     CourseOutcome,
     CourseVersion,
     Department,
@@ -81,6 +82,41 @@ class CourseVersionSerializer(serializers.ModelSerializer):
         model = CourseVersion
         fields = "__all__"
         read_only_fields = ["version_number", "snapshot", "previous_version", "edited_by"]
+
+
+class CourseInvitationSerializer(serializers.ModelSerializer):
+    course_code = serializers.CharField(source="course.code", read_only=True)
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    invitation_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseInvitation
+        fields = [
+            "id",
+            "course",
+            "course_code",
+            "course_title",
+            "email",
+            "token",
+            "invited_by",
+            "accepted_by",
+            "expires_at",
+            "accepted_at",
+            "is_expired",
+            "is_accepted",
+            "invitation_url",
+            "created_at",
+        ]
+        read_only_fields = ["token", "invited_by", "accepted_by", "accepted_at", "created_at"]
+
+    def get_invitation_url(self, obj):
+        request = self.context.get("request")
+        frontend_url = getattr(request, "frontend_url", None)
+        if not frontend_url:
+            from django.conf import settings
+
+            frontend_url = settings.FRONTEND_URL
+        return f"{frontend_url}/invite/{obj.token}"
 
 
 class CourseSerializer(serializers.ModelSerializer):

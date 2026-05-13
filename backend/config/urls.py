@@ -12,6 +12,7 @@ from apps.curriculum.views import (
     AssessmentSchemeViewSet,
     CourseOutcomeViewSet,
     CourseViewSet,
+    CourseInvitationViewSet,
     DepartmentViewSet,
     ExperimentViewSet,
     ModuleViewSet,
@@ -29,6 +30,7 @@ router.register("departments", DepartmentViewSet)
 router.register("academic-years", AcademicYearViewSet)
 router.register("semesters", SemesterViewSet)
 router.register("courses", CourseViewSet)
+router.register("course-invitations", CourseInvitationViewSet)
 router.register("course-outcomes", CourseOutcomeViewSet)
 router.register("modules", ModuleViewSet)
 router.register("topics", TopicViewSet)

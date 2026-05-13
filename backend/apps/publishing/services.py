@@ -64,11 +64,24 @@ def official_course_context(course) -> dict:
     }
 
 
-def render_pdf(template_name: str, context: dict) -> bytes:
+class PdfOverflowError(ValueError):
+    pass
+
+
+def validate_and_render(html_string: str, base_url: str, expected_max_pages: int | None = None) -> bytes:
     from weasyprint import HTML
 
+    document = HTML(string=html_string, base_url=base_url).render()
+    if expected_max_pages is not None and len(document.pages) > expected_max_pages:
+        raise PdfOverflowError(
+            f"Content overflow: rendered document has {len(document.pages)} pages, expected at most {expected_max_pages}."
+        )
+    return document.write_pdf()
+
+
+def render_pdf(template_name: str, context: dict, expected_max_pages: int | None = None) -> bytes:
     html = render_to_string(template_name, context)
-    return HTML(string=html, base_url=str(context["base_url"])).write_pdf()
+    return validate_and_render(html, str(context["base_url"]), expected_max_pages=expected_max_pages)
 
 
 def render_course_preview_pdf(course) -> bytes:
@@ -80,6 +93,7 @@ def render_course_preview_pdf(course) -> bytes:
             "academic_year": course.semester.academic_year,
             "base_url": ".",
         },
+        expected_max_pages=4,
     )
 
 

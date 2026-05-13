@@ -157,6 +157,50 @@ Seed users:
 - `faculty` / `ChangeMe123!`
 - `reviewer` / `ChangeMe123!`
 
+## Admin Workflow
+
+As an admin/HOD:
+
+1. Sign in and create the academic structure:
+   - Department
+   - Academic year
+   - Semester
+   - Course shell
+2. Open `/admin`.
+3. In **Invite Teacher to Subject**, select the course and enter the teacher email.
+4. The frontend calls:
+
+```http
+POST /api/courses/{course_id}/invite_teacher/
+Authorization: Bearer <admin-access-token>
+Content-Type: application/json
+
+{ "email": "teacher@college.edu" }
+```
+
+5. The backend creates a `CourseInvitation`, sends the teacher a subject-specific link, and returns:
+
+```json
+{
+  "course_code": "CS301",
+  "course_title": "Data Structures and Algorithms",
+  "email": "teacher@college.edu",
+  "invitation_url": "http://localhost:3000/invite/<token>"
+}
+```
+
+6. The teacher opens the link, signs in, accepts the invitation, and is assigned only to that subject.
+7. The teacher lands in the Course Editor and edits structured sections with live PDF preview.
+
+Development email uses Django's console backend by default, so invitation emails appear in the backend logs. Configure `EMAIL_BACKEND`, SMTP credentials, and `DEFAULT_FROM_EMAIL` for production.
+
+Teacher accept API:
+
+```http
+POST /api/course-invitations/{token}/accept/
+Authorization: Bearer <teacher-access-token>
+```
+
 ## Development Without Docker
 
 Backend:
