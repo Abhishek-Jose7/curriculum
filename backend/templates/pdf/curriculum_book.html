@@ -1,0 +1,57 @@
+{% extends "pdf/base.html" %}
+{% block content %}
+<section class="center">
+  <h1>{{ department.university_name|default:"University" }}</h1>
+  <h2>{{ department.college_name|default:"College of Engineering" }}</h2>
+  <h2>{{ department.name }}</h2>
+  <p><strong>Curriculum Structure and Syllabus</strong></p>
+  <p>Academic Year {{ academic_year.name }}</p>
+</section>
+
+<section class="page-break">
+  <h2>Preamble</h2>
+  <p>
+    This curriculum document defines the structured teaching, learning, assessment,
+    and outcome framework for the department. It is generated from approved
+    structured curriculum records and rendered through the official publishing template.
+  </p>
+</section>
+
+{% for semester in semesters %}
+<section class="page-break">
+  <h2>Semester {{ semester.number }} - {{ semester.title }}</h2>
+  <table>
+    <tr>
+      <th>Course Code</th><th>Course Title</th><th>L</th><th>T</th><th>P</th><th>Credits</th><th>Marks</th>
+    </tr>
+    {% for course in semester.courses.all %}
+    <tr>
+      <td>{{ course.code }}</td><td>{{ course.title }}</td><td class="center">{{ course.lecture_hours }}</td>
+      <td class="center">{{ course.tutorial_hours }}</td><td class="center">{{ course.practical_hours }}</td>
+      <td class="center">{{ course.credits }}</td><td class="center">{{ course.total_marks }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endfor %}
+
+{% for course in courses %}
+<section class="page-break">
+  {% include "pdf/partials/course_body.html" with course=course only %}
+</section>
+{% endfor %}
+
+<section class="page-break">
+  <h2>Annexure</h2>
+  <p>Electives, interdisciplinary offerings, project guidelines, and additional academic notes are appended here.</p>
+</section>
+
+<section class="page-break">
+  <h2>Approval Signatures</h2>
+  <div class="signature-row">
+    <div class="signature-line">Faculty Coordinator</div>
+    <div class="signature-line">Head of Department</div>
+    <div class="signature-line">Dean Academics</div>
+  </div>
+</section>
+{% endblock %}

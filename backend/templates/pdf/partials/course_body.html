@@ -1,0 +1,61 @@
+<h2>{{ course.code }}: {{ course.title }}</h2>
+<table>
+  <tr><th>Teaching Scheme</th><th>Examination Scheme</th><th>Credits</th></tr>
+  <tr>
+    <td>L: {{ course.lecture_hours }} &nbsp; T: {{ course.tutorial_hours }} &nbsp; P: {{ course.practical_hours }}</td>
+    <td>Internal: {{ course.internal_marks }} &nbsp; External: {{ course.external_marks }} &nbsp; Total: {{ course.total_marks }}</td>
+    <td class="center">{{ course.credits }}</td>
+  </tr>
+</table>
+
+{% if course.objectives %}
+<h3>Course Objectives</h3>
+<p>{{ course.objectives|linebreaksbr }}</p>
+{% endif %}
+
+<h3>Course Outcomes</h3>
+<table>
+  <tr><th style="width: 18%">CO</th><th>Description</th><th style="width: 20%">Bloom Level</th></tr>
+  {% for outcome in course.outcomes.all %}
+  <tr><td class="center">{{ outcome.code }}</td><td>{{ outcome.description }}</td><td>{{ outcome.bloom_level }}</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Detailed Syllabus</h3>
+{% for module in course.modules.all %}
+<div class="no-break">
+  <table>
+    <tr><th colspan="2">Module {{ module.number }}: {{ module.title }}</th><th style="width: 18%">Hours</th></tr>
+    <tr><td colspan="2">{{ module.content|linebreaksbr }}</td><td class="center">{{ module.contact_hours }}</td></tr>
+    {% for topic in module.topics.all %}
+    <tr><td style="width: 8%">{{ forloop.counter }}</td><td colspan="2"><strong>{{ topic.title }}</strong>{% if topic.description %}: {{ topic.description }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+
+{% if course.experiments.all %}
+<h3>List of Experiments</h3>
+<table>
+  <tr><th style="width: 12%">No.</th><th>Experiment</th><th style="width: 14%">Hours</th></tr>
+  {% for experiment in course.experiments.all %}
+  <tr><td class="center">{{ experiment.number }}</td><td><strong>{{ experiment.title }}</strong><br>{{ experiment.description }}</td><td class="center">{{ experiment.hours }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h3>Assessment Scheme</h3>
+<table>
+  <tr><th>Component</th><th style="width: 18%">Marks</th><th>Description</th></tr>
+  {% for assessment in course.assessments.all %}
+  <tr><td>{{ assessment.component }}</td><td class="center">{{ assessment.marks }}</td><td>{{ assessment.description }}</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Recommended Books</h3>
+<table>
+  <tr><th style="width: 10%">No.</th><th>Book</th><th style="width: 22%">Publisher</th></tr>
+  {% for book in course.reference_books.all %}
+  <tr><td class="center">{{ forloop.counter }}</td><td>{{ book.authors }}. <em>{{ book.title }}</em>. {{ book.edition }} {{ book.year }}</td><td>{{ book.publisher }}</td></tr>
+  {% endfor %}
+</table>
