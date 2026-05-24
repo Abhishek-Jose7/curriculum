@@ -244,9 +244,20 @@ To tune exact output:
 2. Put logos and seals under `backend/static/branding` or department media.
 3. Adjust `backend/templates/pdf/base.html` for margins, typography, headers, footers, page numbers.
 4. Place the institutional logo at `backend/static/img/frcrce_logo.png`.
-5. Use `GET /api/courses/{id}/preview_pdf/` for admin/faculty preview.
-6. Use `GET /api/courses/{id}/reviewer_readonly_pdf/` for reviewer read-only links.
-7. Use `POST /api/published-curricula/publish/` for final assembly.
+5. Place deterministic Times font files at:
+   - `backend/static/fonts/times.ttf`
+   - `backend/static/fonts/timesbd.ttf`
+6. Use `GET /api/courses/{id}/preview_pdf/` for admin/faculty preview.
+7. Use `GET /api/courses/{id}/reviewer_readonly_pdf/` for reviewer read-only links.
+8. Use `POST /api/published-curricula/publish/` for final assembly.
+
+Pagination controls now include:
+
+- `tbody.module-group { page-break-inside: avoid; }`
+- WeasyPrint running institutional headers via `element(running-header)`
+- embedded font-face hooks for deterministic text metrics
+- `course-section` and `annexure-section` forced page starts
+- backend hard limits for high-risk text fields and a two-pass WeasyPrint page-count validation before PDF write
 
 The current implementation provides the exact rendering mechanism and a formal academic layout. Pixel-perfect matching requires the actual university PDF asset, logo files, fonts, and measured spacing from the uploaded source document.
 

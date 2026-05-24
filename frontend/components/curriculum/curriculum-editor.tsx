@@ -1,12 +1,12 @@
 "use client";
 
 import { BookOpen, Check, ClipboardList, Eye, FlaskConical, Library, MessageSquare, Plus, Save, ScrollText, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { A4Preview } from "@/components/curriculum/a4-preview";
 import { useAutosave } from "@/hooks/use-autosave";
-import { sampleCourse } from "@/lib/sample-course";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Assessment, CourseDraft, CourseModule, CourseOutcome, Experiment, ReferenceBook } from "@/types/curriculum";
 
@@ -20,6 +20,7 @@ const tabs = [
   { key: "assessments", label: "Assessments", icon: ClipboardList },
   { key: "references", label: "References", icon: Library },
   { key: "comments", label: "Comments", icon: MessageSquare },
+  { key: "versions", label: "History", icon: ClipboardList },
   { key: "preview", label: "Live Preview", icon: Eye }
 ] as const;
 
@@ -27,14 +28,37 @@ type TabKey = (typeof tabs)[number]["key"];
 
 export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [active, setActive] = useState<TabKey>("basic");
-  const [course, setCourse] = useState<CourseDraft>({ ...sampleCourse, id: courseId });
-  const [version, setVersion] = useState(7);
+  const [course, setCourse] = useState<CourseDraft | null>(null);
+  const [version, setVersion] = useState(1);
+  const [pdfKey, setPdfKey] = useState(Date.now());
 
-  const save = useCallback(async () => {
-    setVersion((current) => current + 1);
+  useEffect(() => {
+    apiFetch<CourseDraft>(`/courses/${courseId}/`).then(setCourse).catch(console.error);
+  }, [courseId]);
+
+  const save = useCallback(async (dataToSave: CourseDraft) => {
+    try {
+      const res = await apiFetch<{ status: string; course: CourseDraft }>(`/courses/${dataToSave.id}/autosave/`, {
+        method: "POST",
+        body: JSON.stringify(dataToSave),
+      });
+      // Update with server data to get real IDs for nested objects
+      setCourse(res.course);
+      setVersion((current) => current + 1);
+      // Also refresh the PDF preview
+      setPdfKey(Date.now());
+    } catch (err) {
+      console.error("Autosave failed", err);
+      throw err;
+    }
   }, []);
-  const autosaveState = useAutosave(course, save, 900);
-  const validation = useMemo(() => validateCourse(course), [course]);
+  
+  const autosaveState = useAutosave(course, save, 1500);
+  const validation = useMemo(() => course ? validateCourse(course) : { missing: [] }, [course]);
+
+  if (!course) {
+    return <div className="flex h-full items-center justify-center p-8">Loading curriculum data...</div>;
+  }
 
   const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => ({ ...current, [key]: value }));
   const updateNested = <K extends keyof CourseDraft>(key: K, value: Partial<CourseDraft[K]>) => setCourse((current) => ({ ...current, [key]: { ...(current[key] as object), ...value } as CourseDraft[K] }));
@@ -54,7 +78,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
             <div className="mt-1 text-sm text-foreground/60">Autosave: {autosaveState} · Version {version} · Last modified {course.last_modified}</div>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => void save()}><Save className="h-4 w-4" />Save</Button>
+            <Button variant="secondary" onClick={() => void save(course)}><Save className="h-4 w-4" />Save</Button>
             <Button>Submit for Review</Button>
           </div>
         </div>
@@ -111,17 +135,22 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "assessments" && <AssessmentEditor assessments={course.assessments} onChange={(assessments) => updateCourse("assessments", assessments)} />}
           {active === "references" && <ReferenceEditor references={course.references} onChange={(references) => updateCourse("references", references)} />}
           {active === "comments" && <CommentsPanel course={course} />}
-          {active === "preview" && <A4Preview course={course} />}
+          {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
+          {active === "preview" && (
+            <div className="h-full w-full overflow-hidden rounded border border-border">
+              <iframe key={pdfKey} src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/courses/${course.id}/preview_pdf/`} className="h-full w-full" />
+            </div>
+          )}
         </div>
       </section>
 
       <aside className="hidden min-w-0 border-l border-border bg-muted/40 xl:block">
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="font-medium">Live Rendered Curriculum Pages</div>
-          <span className="text-xs text-foreground/60">A4 · print CSS simulation · overflow visible</span>
+          <span className="text-xs text-foreground/60">WeasyPrint PDF preview</span>
         </div>
         <div className="h-[calc(100vh-153px)]">
-          <A4Preview course={course} />
+          <iframe key={pdfKey} src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/courses/${course.id}/preview_pdf/`} className="h-full w-full" />
         </div>
       </aside>
     </div>
@@ -227,20 +256,170 @@ function ReferenceEditor({ references, onChange }: { references: ReferenceBook[]
 }
 
 function CommentsPanel({ course }: { course: CourseDraft }) {
+  const [comments, setComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<any>(`/reviewer-comments/?course=${course.id}`)
+      .then((data) => setComments(Array.isArray(data) ? data : data.results ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [course.id]);
+
+  const handleResolve = async (commentId: number) => {
+    try {
+      const resolved = await apiFetch<any>(`/reviewer-comments/${commentId}/resolve/`, { method: "POST" });
+      setComments((prev) => prev.map((c) => (c.id === commentId ? resolved : c)));
+    } catch {
+      alert("Failed to resolve comment.");
+    }
+  };
+
+  const openCount = comments.filter((c) => !c.is_resolved).length;
+
   return (
-    <Panel title="Reviewer Comments" description="Structured comments attached to official curriculum sections.">
-      <div className="space-y-3">
-        {course.comments.map((comment) => (
-          <div key={comment.id} className="rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-medium">{comment.section_label}</div>
-              <span className={cn("rounded px-2 py-1 text-xs", comment.is_resolved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{comment.is_resolved ? "Resolved" : "Open"}</span>
+    <Panel title="Reviewer Comments" description={`Structured comments attached to official curriculum sections. ${openCount} open.`}>
+      {loading ? (
+        <div className="p-4 text-sm">Loading comments...</div>
+      ) : comments.length === 0 ? (
+        <div className="p-4 text-center text-sm text-foreground/60">No reviewer comments yet.</div>
+      ) : (
+        <div className="space-y-3">
+          {comments.map((comment) => (
+            <div key={comment.id} className={cn("rounded-md border p-3", comment.is_resolved ? "border-emerald-200 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-border")}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-medium">{comment.section_label}</div>
+                <div className="flex items-center gap-2">
+                  <span className={cn("rounded px-2 py-1 text-xs", comment.is_resolved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{comment.is_resolved ? "Resolved" : "Open"}</span>
+                  {!comment.is_resolved && (
+                    <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => void handleResolve(comment.id)}>Resolve</Button>
+                  )}
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-foreground/75">{comment.body}</p>
+              <div className="mt-2 text-xs text-foreground/55">{comment.reviewer_name}</div>
             </div>
-            <p className="mt-2 text-sm text-foreground/75">{comment.body}</p>
-            <div className="mt-2 text-xs text-foreground/55">{comment.reviewer_name}</div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+
+function VersionsPanel({ course, onRestore }: { course: CourseDraft; onRestore: (course: CourseDraft) => void }) {
+  const [versions, setVersions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [diffData, setDiffData] = useState<any>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [compareTarget, setCompareTarget] = useState<number | null>(null);
+
+  useEffect(() => {
+    apiFetch<any[]>(`/courses/${course.id}/versions/`)
+      .then((data) => setVersions(Array.isArray(data) ? data : (data as any).results ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [course.id]);
+
+  const handleRestore = async (versionId: number) => {
+    if (!confirm("Are you sure you want to rollback to this version? This will overwrite your current draft.")) return;
+    try {
+      const res = await apiFetch<CourseDraft>(`/courses/${course.id}/rollback/`, {
+        method: "POST",
+        body: JSON.stringify({ version_id: versionId }),
+      });
+      onRestore(res);
+      setDiffData(null);
+    } catch (e) {
+      alert("Failed to rollback.");
+    }
+  };
+
+  const handleCompare = async (versionId: number) => {
+    if (versions.length < 2) return;
+    setDiffLoading(true);
+    setCompareTarget(versionId);
+    try {
+      // Compare with the previous version (or the first available)
+      const targetIdx = versions.findIndex((v) => v.id === versionId);
+      const compareWith = versions[targetIdx + 1] ?? versions[0];
+      const data = await apiFetch(`/courses/${course.id}/compare_versions/`, {
+        method: "POST",
+        body: JSON.stringify({ version_a: compareWith.id, version_b: versionId }),
+      });
+      setDiffData(data);
+    } catch (e) {
+      alert("Failed to load diff.");
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  return (
+    <Panel title="Revision History" description="Historical snapshots, side-by-side diff comparison, and rollback capabilities.">
+      {loading ? (
+        <div className="p-4 text-sm">Loading versions...</div>
+      ) : (
+        <div className="space-y-3">
+          {versions.map((v) => (
+            <div key={v.id} className={cn("rounded-md border p-3", compareTarget === v.id ? "border-primary" : "border-border")}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">Version {v.version_number}</div>
+                  <div className="text-xs text-foreground/60">{new Date(v.created_at).toLocaleString()}</div>
+                  {v.change_summary && <div className="mt-1 text-sm">{v.change_summary}</div>}
+                  {v.edited_by_name && <div className="mt-1 text-xs text-foreground/50">by {v.edited_by_name}</div>}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={diffLoading || versions.length < 2}
+                    onClick={() => void handleCompare(v.id)}
+                  >
+                    {diffLoading && compareTarget === v.id ? "Loading..." : "Compare"}
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => void handleRestore(v.id)}>Restore</Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {diffData && (
+        <div className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="font-semibold">
+              Diff: Version {diffData.version_a?.number} → Version {diffData.version_b?.number}
+            </h4>
+            <Button variant="ghost" size="sm" onClick={() => setDiffData(null)}>Close</Button>
           </div>
-        ))}
-      </div>
+          {diffData.changes?.length === 0 ? (
+            <div className="rounded-md border border-border bg-muted/30 p-4 text-center text-sm text-foreground/60">No differences found.</div>
+          ) : (
+            <div className="space-y-3">
+              {diffData.changes?.map((change: any, i: number) => (
+                <div key={i} className="rounded-md border border-border overflow-hidden">
+                  <div className="bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide">
+                    {change.section} → {change.field}
+                  </div>
+                  <div className="grid grid-cols-2 divide-x divide-border text-sm">
+                    <div className="bg-red-50/50 p-3 dark:bg-red-950/20">
+                      <div className="mb-1 text-xs font-medium text-red-700 dark:text-red-400">Before</div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">{typeof change.old === "string" ? change.old : JSON.stringify(change.old, null, 2)}</pre>
+                    </div>
+                    <div className="bg-emerald-50/50 p-3 dark:bg-emerald-950/20">
+                      <div className="mb-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">After</div>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">{typeof change.new === "string" ? change.new : JSON.stringify(change.new, null, 2)}</pre>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }

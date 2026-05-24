@@ -1,54 +1,164 @@
 {% load static %}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  {# --- CANONICAL CSS: identical to /static/css/print.css --- #}
+  {# This is inlined so WeasyPrint can resolve it without a running server. #}
   <style>
+    /* --- STRICT A4 PAGE GEOMETRY --- */
     @page {
-      size: A4;
-      margin: 22mm 16mm 20mm 16mm;
-      @top-center { content: element(page-header); }
-      @bottom-center { content: element(page-footer); }
+        size: A4 portrait;
+        margin: 28mm 12mm 18mm 12mm;
+        @top-center {
+            content: element(running-header);
+        }
+        @bottom-center {
+            content: counter(page);
+            font-family: "Times New Roman", Times, serif;
+            font-size: 9pt;
+            padding-top: 5mm;
+        }
     }
+
+    /* --- TYPOGRAPHIC DENSITY --- */
     body {
-      font-family: "Times New Roman", serif;
-      font-size: 11pt;
-      color: #111;
-      line-height: 1.25;
+        font-family: "Times New Roman", Times, serif;
+        font-size: 10pt;
+        line-height: 1.15;
+        color: #000;
+        margin: 0;
+        padding: 0;
+        text-rendering: optimizeLegibility;
     }
-    .page-header { position: running(page-header); text-align: center; border-bottom: 0.8pt solid #111; padding-bottom: 4mm; }
-    .page-footer { position: running(page-footer); font-size: 9pt; border-top: 0.6pt solid #111; padding-top: 2mm; }
-    .footer-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
-    .footer-grid span:last-child { text-align: right; }
-    .page-number::after { content: counter(page); }
-    h1, h2, h3 { text-align: center; margin: 0 0 8pt; }
+
+    h1, h2, h3, h4, h5 {
+        text-align: center;
+        margin: 0 0 4pt 0;
+        line-height: 1.1;
+    }
+
     h1 { font-size: 16pt; text-transform: uppercase; }
     h2 { font-size: 13pt; text-transform: uppercase; }
-    h3 { font-size: 11.5pt; }
-    table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; page-break-inside: avoid; }
-    th, td { border: 0.7pt solid #111; padding: 4pt 5pt; vertical-align: top; }
-    th { text-align: center; font-weight: bold; background: #f2f2f2; }
-    .no-break { page-break-inside: avoid; }
+    h3 { font-size: 12pt; font-weight: bold; }
+    h4 { font-size: 11pt; font-weight: bold; }
+
+    /* --- RIGID TABLE ARCHITECTURE --- */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 8pt;
+        table-layout: fixed;
+        page-break-inside: auto;
+    }
+
+    tr {
+        page-break-inside: avoid;
+    }
+
+    th, td {
+        border: 0.5pt solid #000;
+        padding: 1.5mm 1mm;
+        text-align: left;
+        vertical-align: middle;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+
+    th {
+        font-weight: bold;
+        text-align: center;
+    }
+
+    td ul, td ol {
+        margin-top: 0;
+        margin-bottom: 0;
+        padding-left: 4mm;
+    }
+
+    /* --- UTILITY & ALIGNMENT --- */
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .text-bold { font-weight: bold; }
+    .no-wrap { white-space: nowrap; }
+    .small-text { font-size: 8.5pt; }
+    .mt-10 { margin-top: 10pt; }
+
+    /* --- HEADER REPLICATION --- */
+    .institutional-header {
+        position: running(running-header);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1pt solid #000;
+        padding-bottom: 4pt;
+    }
+
+    .logo-container {
+        width: 16mm;
+        height: 16mm;
+        margin-right: 4mm;
+    }
+
+    .logo-container img {
+        width: 100%;
+        height: auto;
+        object-fit: contain;
+    }
+
+    .header-text h4 { font-size: 10pt; font-weight: normal; margin-bottom: 1pt; }
+    .header-text h3 { font-size: 13pt; font-weight: bold; margin-bottom: 1pt; }
+    .header-text p { font-size: 8.5pt; margin: 0; line-height: 1.1; }
+
+    /* --- PRINT CONTROL --- */
+    .avoid-break { page-break-inside: avoid; }
     .page-break { page-break-before: always; }
+    tbody.module-group { page-break-inside: avoid; }
+    .course-section { page-break-before: always; }
+    .annexure-section { page-break-before: always; }
+    .strict-height-cell {
+        max-height: 40mm;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* --- SIGNATURE / BOOK SECTIONS --- */
+    .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20mm; margin-top: 24mm; text-align: center; }
+    .signature-line { border-top: 0.7pt solid #000; padding-top: 4pt; }
     .center { text-align: center; }
     .right { text-align: right; }
-    .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20mm; margin-top: 24mm; text-align: center; }
-    .signature-line { border-top: 0.7pt solid #111; padding-top: 4pt; }
+    .no-break { page-break-inside: avoid; }
   </style>
+  {# DB-stored template CSS (override layer — kept minimal) #}
+  {% if template_css %}<style>{{ template_css }}</style>{% endif %}
   {% block extra_css %}{% endblock %}
 </head>
 <body>
-  <div class="page-header">
-    <strong>{{ department.university_name|default:"University Curriculum" }}</strong><br>
-    {{ department.college_name|default:"Engineering Department" }}{% if department.name %} - {{ department.name }}{% endif %}
-  </div>
-  <div class="page-footer">
-    <div class="footer-grid">
-      <span>{{ academic_year.name|default:"Preview" }}</span>
-      <span>Page <span class="page-number"></span></span>
-      <span>{{ department.code|default:"Course" }}</span>
+
+    {% if not is_cover_page %}
+    <div class="institutional-header">
+        <div class="logo-container">
+            {% if department.logo %}
+                <img src="{{ department.logo.url }}" alt="Institutional Logo">
+            {% else %}
+                <img src="{% static 'img/frcrce_logo.png' %}" alt="Institutional Logo">
+            {% endif %}
+        </div>
+        <div class="header-text">
+            <h4>{{ department.university_name|default:"University of Mumbai" }}</h4>
+            <h3>{{ department.college_name|default:"Fr. Conceicao Rodrigues College of Engineering" }}</h3>
+            <p>Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai - 400 050<br>
+            (Autonomous College affiliated to University of Mumbai)</p>
+        </div>
     </div>
-  </div>
-  {% block content %}{% endblock %}
+    {% endif %}
+
+    <div class="content-wrapper">
+        {% block content %}
+        {% endblock %}
+    </div>
+
 </body>
 </html>
