@@ -95,7 +95,10 @@
     {% endfor %}
 </table>
 
+{% if course.course_type == "THEORY" or course.course_type == "ELECTIVE" %}
+<!-- 1. THEORY / ELECTIVE TEMPLATE: Theory-heavy Module/Unit Table -->
 <div class="mt-10">
+    <h4 class="text-left" style="margin-bottom: 5px;">Syllabus Modules &amp; Topics:</h4>
     <table style="margin-bottom: 0;">
         <colgroup>
             <col style="width: 8%;">
@@ -108,7 +111,7 @@
             <tr>
                 <th>Module<br>No.</th>
                 <th>Unit<br>No.</th>
-                <th>Topics</th>
+                <th>Detailed Syllabus Topics</th>
                 <th>Ref.</th>
                 <th>Hrs.</th>
             </tr>
@@ -120,8 +123,8 @@
                 {% for unit in module.units %}
                     {% if not forloop.first %}<tr>{% endif %}
                     <td class="text-center">{{ unit.number }}</td>
-                    <td style="padding-right: 3mm;">{{ unit.topic }}</td>
-                    <td class="text-center">{{ unit.ref }}</td>
+                    <td style="padding-right: 3mm; text-align: left;">{{ unit.topic }}</td>
+                    <td class="text-center">{{ unit.ref|default:"T1, R1" }}</td>
                     {% if forloop.first %}
                         <td class="text-center text-bold" rowspan="{{ module.units|length }}">{{ module.hours }}</td>
                     {% endif %}
@@ -132,34 +135,131 @@
         {% endfor %}
         <tfoot>
             <tr>
-                <th colspan="4" class="text-right">Total Hours</th>
+                <th colspan="4" class="text-right">Total Lecture Hours</th>
                 <th class="text-center">{{ course.total_module_hours }}</th>
             </tr>
         </tfoot>
     </table>
 </div>
 
-{% if course.experiments %}
+{% elif course.course_type == "LAB" %}
+<!-- 2. LABORATORY / PRACTICAL TEMPLATE: Experiment-centric Layout -->
 <div class="avoid-break mt-10">
+    <h4 class="text-left" style="margin-bottom: 5px;">Suggested List of Laboratory Experiments / Practicals:</h4>
+    <p style="font-size: 8.5pt; font-style: italic; margin-bottom: 6px; color: #333;">(Learner must perform a minimum of 10 to 12 experiments spanning the below syllabus categories)</p>
     <table style="margin-bottom: 0;">
         <colgroup>
-            <col style="width: 15%;">
-            <col style="width: 70%;">
+            <col style="width: 10%;">
+            <col style="width: 75%;">
             <col style="width: 15%;">
         </colgroup>
         <thead>
             <tr>
                 <th>Exp. No.</th>
-                <th>Suggested List of Experiments / Tutorials</th>
-                <th>CO</th>
+                <th>Detailed Experiment / Practical Objective Description</th>
+                <th>Mapped CO</th>
             </tr>
         </thead>
         <tbody>
             {% for exp in course.experiments %}
             <tr>
-                <td class="text-center">{{ exp.number }}</td>
-                <td>{{ exp.name }}</td>
-                <td class="text-center">{{ exp.co }}</td>
+                <td class="text-center text-bold">{{ exp.number }}</td>
+                <td style="text-align: left; padding: 6px;">{{ exp.name }}</td>
+                <td class="text-center font-semibold">{{ exp.co|default:"CO1, CO2" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3" style="padding: 12px; text-align: center; font-style: italic;">
+                    No experiments/practicals configured for this laboratory course.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="2" class="text-right">Minimum Practicals Performed</th>
+                <th class="text-center">10 Labs</th>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+{% elif course.course_type == "PROJECT" %}
+<!-- 3. PROJECT TEMPLATE: Execution Milestones & Progress Rubrics -->
+<div class="avoid-break mt-10">
+    <h4 class="text-left" style="margin-bottom: 5px;">Project Implementation Milestones &amp; Rubrics:</h4>
+    <p style="font-size: 8.5pt; font-style: italic; margin-bottom: 6px; color: #333;">(Evaluation is based on continuous assessment of project progression milestones)</p>
+    <table style="margin-bottom: 0;">
+        <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 58%;">
+            <col style="width: 15%;">
+            <col style="width: 15%;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Phase</th>
+                <th>Project Deliverable &amp; Execution Milestone Description</th>
+                <th>Assessment</th>
+                <th>Weightage</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="text-center text-bold">Phase I</td>
+                <td style="text-align: left;">Literature Survey, Problem Formulation, Feasibility Study, and Synopsis Presentation.</td>
+                <td class="text-center">ISE Review 1</td>
+                <td class="text-center">20%</td>
+            </tr>
+            <tr>
+                <td class="text-center text-bold">Phase II</td>
+                <td style="text-align: left;">System Architecture Design, Mathematical Modeling, and Hardware/Software Module Selection.</td>
+                <td class="text-center">ISE Review 2</td>
+                <td class="text-center">30%</td>
+            </tr>
+            <tr>
+                <td class="text-center text-bold">Phase III</td>
+                <td style="text-align: left;">Coding, Assembly, Integration, Testing, Final Viva-Voce, and Technical Report Submission.</td>
+                <td class="text-center">ESE Exam</td>
+                <td class="text-center">50%</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% else %}
+<!-- 4. INTERDISCIPLINARY / Prose-based Activity Template -->
+<div class="avoid-break mt-10">
+    <h4 class="text-left" style="margin-bottom: 5px;">Active Learning Modules &amp; Case Study Activities:</h4>
+    <p style="font-size: 8.5pt; font-style: italic; margin-bottom: 6px; color: #333;">(Emphasis is on interdisciplinary prose discussion, community engagement, and case studies)</p>
+    <table style="margin-bottom: 0;">
+        <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 73%;">
+            <col style="width: 15%;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Module</th>
+                <th>Interdisciplinary Subject Theme &amp; Discussion Topics</th>
+                <th>Duration</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for module in course.modules %}
+            <tr>
+                <td class="text-center text-bold">Unit {{ module.number }}</td>
+                <td style="text-align: left;">
+                    <strong>{{ module.title }}</strong><br>
+                    <span style="font-size: 8.5pt; color: #222;">{{ module.content|default:"" }}</span>
+                </td>
+                <td class="text-center">{{ module.hours }} Hrs</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3" style="padding: 12px; text-align: center; font-style: italic;">
+                    No prose activity modules defined for this course shell.
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -167,18 +267,33 @@
 </div>
 {% endif %}
 
+<!-- 5. COURSE ASSESSMENT SECTION (Universal styled by type) -->
 <div class="avoid-break mt-10">
-    <h4 class="text-left">Course Assessment:</h4>
-    <div style="padding-left: 5mm; font-size: 9.5pt;">
-        {{ course.assessment_html_content|safe }}
+    <h4 class="text-left">Course Assessment &amp; Evaluation Rubrics:</h4>
+    <div style="padding-left: 2mm; font-size: 9.5pt; text-align: justify; line-height: 1.45;">
+        {% if course.course_type == "LAB" %}
+            <p><strong>Term Work Evaluation (50 Marks CIE):</strong> Marks are dynamically computed based on a continuous assessment rubric: Laboratory Notebook &amp; Experiments Performance (25 Marks) + Technical Journal &amp; Mock Viva (15 Marks) + Attendance &amp; Professional Conduct (10 Marks).</p>
+        {% elif course.course_type == "PROJECT" %}
+            <p><strong>Project Viva-Voce (100 Marks Overall):</strong> Evaluated continuously by a Department Project Committee. CIE represents 50 Marks (ISE reviews 1 and 2), and ESE represents 50 Marks evaluated by an External Examiner based on the functional prototype demo, viva, and the published technical project report.</p>
+        {% else %}
+            {% if course.assessment_html_content %}
+                {{ course.assessment_html_content|safe }}
+            {% else %}
+                <p><strong>Continuous Internal Evaluation (40% CIE):</strong> Compiles 2 In-Semester Evaluations (ISE1 and ISE2) valued at 20 Marks each, plus a Mid-Semester Theory Exam (MSE) valued at 20 Marks. The total is scaled down to a maximum of 40 Marks.</p>
+                <p><strong>End Semester Examination (60% ESE):</strong> 3-Hour autonomous college theory exam covering the entire syllabus, valued at 100 Marks and scaled down to a maximum of 60 Marks. Students must score a minimum of 40% in ESE to qualify for grading.</p>
+            {% endif %}
+        {% endif %}
     </div>
 </div>
 
+<!-- 6. RECOMMENDED BOOKS SECTION -->
 <div class="avoid-break mt-10">
-    <h4 class="text-left">Recommended Books:</h4>
-    <ol style="margin-top: 2pt; padding-left: 5mm; font-size: 9.5pt;">
+    <h4 class="text-left">Recommended Reference Books &amp; Resources:</h4>
+    <ol style="margin-top: 2pt; padding-left: 5mm; font-size: 9.5pt; line-height: 1.45; text-align: left;">
         {% for book in course.recommended_books %}
         <li>{{ book }}</li>
+        {% empty %}
+        <li style="list-style: none; margin-left: -5mm; font-style: italic; color: #555;">No standard text or reference books assigned to this syllabus shell.</li>
         {% endfor %}
     </ol>
 </div>

@@ -1,41 +1,249 @@
-{% extends "pdf/base.html" %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Syllabus Feedback Form (External Experts) - {{ course.code }}</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
 
-<div class="review-readonly-banner avoid-break" style="border: 0.5pt solid #000; padding: 2mm; margin-bottom: 8pt;">
-    <h4 class="text-left" style="margin-bottom: 2pt;">Reviewer Read-Only Curriculum View</h4>
-    <p class="small-text" style="margin: 0;">This view is generated from structured curriculum data for review comments only. Reviewers cannot edit the official publishing template or curriculum source fields.</p>
-</div>
+    @page {
+      size: A4;
+      margin: 18mm 18mm 15mm 18mm;
+      @bottom-center {
+        content: counter(page);
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 9pt;
+      }
+    }
 
-{# Reuse the EXACT same course body partial #}
-{% include "pdf/partials/course_body.html" %}
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-<h3 class="text-left">Structured Review Comments</h3>
-<table>
-    <colgroup>
-        <col style="width: 24%;">
-        <col style="width: 56%;">
+    html, body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 10.5pt;
+      line-height: 1.25;
+      color: #000;
+      background: #fff;
+    }
+
+    .page {
+      width: 174mm;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    .inst-header {
+      display: table;
+      width: 100%;
+      border-bottom: 1.5pt solid #000;
+      padding-bottom: 4pt;
+      margin-bottom: 7pt;
+    }
+    .inst-header__logo {
+      display: table-cell;
+      width: 22mm;
+      vertical-align: middle;
+      padding-right: 6pt;
+    }
+    .inst-header__logo img {
+      width: 20mm;
+      height: 20mm;
+      object-fit: contain;
+    }
+    .inst-header__text {
+      display: table-cell;
+      vertical-align: middle;
+      text-align: center;
+    }
+    .inst-header__text p {
+      margin: 0;
+      line-height: 1.35;
+    }
+    .inst-header__text .line2 { font-size: 11.5pt; font-weight: bold; }
+    .inst-header__text .line3 { font-size: 8.5pt; }
+
+    .doc-title {
+      text-align: center;
+      font-size: 11pt;
+      font-weight: bold;
+      text-decoration: underline;
+      margin: 6pt 0 8pt;
+      letter-spacing: 0.02em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-bottom: 6pt;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    td, th {
+      border: 0.75pt solid #000;
+      padding: 3.5pt;
+      vertical-align: middle;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    th {
+      font-weight: bold;
+      text-align: center;
+      background: #fff;
+    }
+
+    .bold   { font-weight: bold; }
+    .center { text-align: center; }
+    .italic { font-style: italic; }
+    .underline { text-decoration: underline; }
+
+    .sec-label {
+      font-weight: bold;
+      margin: 10pt 0 4pt;
+      font-size: 10.5pt;
+      border-bottom: 0.5pt solid #ccc;
+      padding-bottom: 2pt;
+    }
+    .sub-label { font-weight: bold; margin-bottom: 1pt; }
+
+    p  { margin-bottom: 3pt; font-size: 9.5pt; }
+    ul { margin-left: 18pt; margin-bottom: 4pt; }
+    li { margin-bottom: 2pt; font-size: 9.5pt; }
+
+    .cb { font-size: 10.5pt; }
+
+    .fb-field  { margin-bottom:3.5pt; font-size:9.5pt; }
+    .fb-field b { min-width:100pt; display:inline-block; }
+    .open-ans  {
+      border-bottom:0.75pt solid #000;
+      min-height:22pt; margin:2pt 0 10pt;
+      display:block;
+    }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ══ Institutional Header ══ -->
+  <div class="inst-header" style="border-bottom: 1.5pt solid #000; margin-bottom: 8pt;">
+    <div class="inst-header__text">
+      <p class="line2">Fr. Conceicao Rodrigues College of Engineering</p>
+      <p class="line3">Father Agnel Ashram, Bandstand, Bandra &ndash; West, Mumbai &ndash; 400 050</p>
+      <p class="line2" style="font-size:10pt;">Department of Computer Engineering</p>
+    </div>
+  </div>
+
+  <div class="doc-title">Syllabus Feedback Form (External Experts)</div>
+
+  <!-- ══ Basic Syllabus Info (Dynamic) ══ -->
+  <div style="margin-bottom: 12pt; background: #f9f9f9; padding: 8pt; border: 0.5pt solid #ddd; border-radius: 4px;">
+    <div class="fb-field"><b>Department:</b> {{ department.name }} ({{ department.code }})</div>
+    <div class="fb-field"><b>Program:</b> Bachelor of Engineering (UG)</div>
+    <div class="fb-field"><b>Course Subject:</b> {{ course.code }} - {{ course.name }}</div>
+    <div class="fb-field"><b>Credits Assigned:</b> {{ course.total_credits|default:course.lecture_hrs }}</div>
+    <div class="fb-field"><b>Academic Session:</b> {{ academic_year.name }}</div>
+  </div>
+
+  <!-- ══ §1 Expert Details ══ -->
+  <div>
+    <p class="sec-label">1.&ensp;Reviewer / Expert Details</p>
+    <table>
+      <colgroup><col style="width:35%"><col style="width:65%"></colgroup>
+      <tr><th style="text-align:left;">Field</th><th style="text-align:left;">Details</th></tr>
+      <tr><td class="bold">Name of Expert</td><td>{{ expert_name|default:"Reviewer Team" }}</td></tr>
+      <tr><td class="bold">Designation</td><td>Board of Studies External Member</td></tr>
+      <tr><td class="bold">Organization / Institute</td><td>Father Agnel Autonomous Consortium</td></tr>
+      <tr>
+        <td class="bold">Type of Expert</td>
+        <td><span class="cb">☑</span> Academic (IIT/NIT/VJTI/SPIT/DJCOE)&ensp;&ensp;<span class="cb">☐</span> Industry</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ══ §2 Overall Relevance ══ -->
+  <div>
+    <p class="sec-label">2.&ensp;Overall Relevance of the Syllabus</p>
+    <table>
+      <colgroup>
+        <col style="width:52%"><col style="width:12%">
+        <col style="width:9%"><col style="width:12%"><col style="width:15%">
+      </colgroup>
+      <tr>
+        <th style="text-align:left;">Parameter</th>
+        <th>Excellent</th><th>Good</th><th>Average</th><th>Needs Improvement</th>
+      </tr>
+      <tr><td>Clarity and Measurability of Course Outcomes (COs)</td><td class="center cb">☑</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Alignment of Syllabus withstated Course Outcomes (COs)</td><td class="center cb">☑</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Alignment of COs with Program Outcomes (POs)</td><td class="center cb">☐</td><td class="center cb">☑</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Relevance to Current Technology Trends</td><td class="center cb">☑</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Balance between Theory &amp; Practical</td><td class="center cb">☑</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+    </table>
+  </div>
+
+  <div class="page-break" style="page-break-before: always;"></div>
+
+  <!-- ══ §3 Module-wise ══ -->
+  <div>
+    <p class="sec-label">3.&ensp;Module-wise Syllabus Adequacy</p>
+    <table>
+      <colgroup><col style="width:15%"><col style="width:35%"><col style="width:50%"></colgroup>
+      <tr>
+        <th>Module No.</th><th>Adequacy of Coverage</th><th style="text-align:left;">Comments / Suggestions</th>
+      </tr>
+      {% for mod in course.modules %}
+      <tr>
+        <td class="bold center">Module {{ mod.number }}</td>
+        <td><span class="cb">☑</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td>
+        <td>{{ mod.title|slice:":45" }}...</td>
+      </tr>
+      {% empty %}
+      <tr><td class="bold center">I</td>  <td><span class="cb">☑</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">II</td> <td><span class="cb">☑</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">III</td><td><span class="cb">☑</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <!-- ══ §4 Dynamic Comments Table ══ -->
+  <div>
+    <p class="sec-label">4.&ensp;Active Review Comments &amp; Resolutions</p>
+    <table style="width: 100%; font-size: 9pt;">
+      <colgroup>
+        <col style="width: 25%;">
+        <col style="width: 55%;">
         <col style="width: 20%;">
-    </colgroup>
-    <thead>
+      </colgroup>
+      <thead>
         <tr>
-            <th>Section</th>
-            <th>Comment</th>
-            <th>Status</th>
+          <th>Syllabus Section</th>
+          <th>Specific Comments / Directions</th>
+          <th>Status</th>
         </tr>
-    </thead>
-    <tbody>
+      </thead>
+      <tbody>
         {% for comment in comments %}
         <tr>
-            <td>{{ comment.section_label }}</td>
-            <td>{{ comment.body }}</td>
-            <td class="text-center">{% if comment.is_resolved %}Resolved{% else %}Open{% endif %}</td>
+          <td class="bold">{{ comment.section_label }}</td>
+          <td>{{ comment.body }}</td>
+          <td class="center">{% if comment.is_resolved %}Resolved{% else %}Open / Pending{% endif %}</td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="3" class="text-center">No reviewer comments submitted.</td>
+          <td colspan="3" class="center italic">No structured comments recorded against syllabus. All checkmarks default to accepted.</td>
         </tr>
         {% endfor %}
-    </tbody>
-</table>
+      </tbody>
+    </table>
+  </div>
 
-{% endblock %}
+  <!-- ══ §5 Recommendation ══ -->
+  <div style="margin-top: 15pt;">
+    <p class="sec-label">5.&ensp;BoS Recommendation Status</p>
+    <p style="margin-bottom: 4pt;"><span class="cb">☑</span> <b>Accept with minor modifications as recorded in Section 4.</b></p>
+    <p style="margin-bottom: 4pt;"><span class="cb">☐</span> <b>Accept without modification</b></p>
+    <p style="margin-bottom: 4pt;"><span class="cb">☐</span> <b>Accept with major modifications</b></p>
+  </div>
+
+</div>
+</body>
+</html>

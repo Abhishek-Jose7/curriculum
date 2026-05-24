@@ -31,6 +31,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [course, setCourse] = useState<CourseDraft | null>(null);
   const [version, setVersion] = useState(1);
   const [pdfKey, setPdfKey] = useState(Date.now());
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiFetch<CourseDraft>(`/courses/${courseId}/`).then(setCourse).catch(console.error);
@@ -42,10 +43,8 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
         method: "POST",
         body: JSON.stringify(dataToSave),
       });
-      // Update with server data to get real IDs for nested objects
       setCourse(res.course);
       setVersion((current) => current + 1);
-      // Also refresh the PDF preview
       setPdfKey(Date.now());
     } catch (err) {
       console.error("Autosave failed", err);
@@ -55,6 +54,22 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   
   const autosaveState = useAutosave(course, save, 1500);
   const validation = useMemo(() => course ? validateCourse(course) : { missing: [] }, [course]);
+
+  const handleSubmitForReview = async () => {
+    if (!course) return;
+    setSubmitting(true);
+    try {
+      const updated = await apiFetch<CourseDraft>(`/courses/${course.id}/submit/`, {
+        method: "POST"
+      });
+      setCourse(updated);
+      alert("Subject syllabus successfully submitted for review!");
+    } catch (err: any) {
+      alert("Failed to submit for review: " + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (!course) {
     return <div className="flex h-full items-center justify-center p-8">Loading curriculum data...</div>;
@@ -79,13 +94,13 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => void save(course)}><Save className="h-4 w-4" />Save</Button>
-            <Button>Submit for Review</Button>
+            <Button onClick={() => void handleSubmitForReview()} disabled={submitting}>Submit for Review</Button>
           </div>
         </div>
 
-        <div className="flex overflow-x-auto border-b border-border bg-muted/35">
-          {tabs.map((tab) => (
-            <button key={tab.key} className={cn("flex h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm", active === tab.key ? "border-primary bg-background text-primary" : "border-transparent text-foreground/70 hover:bg-background/70")} onClick={() => setActive(tab.key)}>
+        <div className="flex border-b border-border overflow-x-auto">
+          {tabs.map(tab => (
+            <button key={tab.key} onClick={() => setActive(tab.key)} className={cn("flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors", active === tab.key ? "border-primary text-primary" : "border-transparent text-foreground/60 hover:text-foreground")}>
               <tab.icon className="h-4 w-4" />
               {tab.label}
             </button>

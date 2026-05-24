@@ -43,6 +43,38 @@ class Semester(TimestampedModel):
     title = models.CharField(max_length=120)
     ordinance = models.CharField(max_length=80, blank=True)
 
+    @property
+    def total_lecture_hours(self) -> int:
+        return sum(c.lecture_hours for c in self.courses.all())
+
+    @property
+    def total_tutorial_hours(self) -> int:
+        return sum(c.tutorial_hours for c in self.courses.all())
+
+    @property
+    def total_practical_hours(self) -> int:
+        return sum(c.practical_hours for c in self.courses.all())
+
+    @property
+    def total_lecture_credits(self) -> int:
+        return sum(c.lecture_credits for c in self.courses.all())
+
+    @property
+    def total_tutorial_credits(self) -> int:
+        return sum(c.tutorial_credits for c in self.courses.all())
+
+    @property
+    def total_practical_credits(self) -> int:
+        return sum(c.practical_credits for c in self.courses.all())
+
+    @property
+    def total_semester_credits(self) -> float:
+        return float(sum(c.credits for c in self.courses.all()))
+
+    @property
+    def total_semester_marks(self) -> int:
+        return sum(c.exam_total_marks for c in self.courses.all())
+
     class Meta:
         unique_together = ("department", "academic_year", "number")
         ordering = ["academic_year__starts_on", "department__code", "number"]
@@ -105,6 +137,48 @@ class Course(TimestampedModel):
     @property
     def total_marks(self) -> int:
         return self.internal_marks + self.external_marks
+
+    @property
+    def lecture_credits(self) -> int:
+        return self.lecture_hours
+
+    @property
+    def tutorial_credits(self) -> int:
+        return self.tutorial_hours
+
+    @property
+    def practical_credits(self) -> int:
+        return self.practical_hours
+
+    @property
+    def exam_theory_ise1(self) -> int:
+        return min(self.internal_marks, 20)
+
+    @property
+    def exam_theory_ise2(self) -> int:
+        return max(min(self.internal_marks - self.exam_theory_ise1, 20), 0)
+
+    @property
+    def exam_theory_mse(self) -> int:
+        return 0
+
+    @property
+    def exam_theory_ese(self) -> int:
+        return self.external_marks
+
+    @property
+    def exam_lab_ise1(self) -> int:
+        return 25 if self.practical_hours or self.course_type == "LAB" else 0
+
+    @property
+    def exam_lab_ise2(self) -> int:
+        return 25 if self.practical_hours or self.course_type == "LAB" else 0
+
+    @property
+    def exam_total_marks(self) -> int:
+        theory = self.exam_theory_ise1 + self.exam_theory_ise2 + self.exam_theory_mse + self.exam_theory_ese
+        lab = self.exam_lab_ise1 + self.exam_lab_ise2
+        return theory + lab
 
 
 class CourseOutcome(TimestampedModel):

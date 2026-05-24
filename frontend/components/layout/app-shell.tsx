@@ -4,6 +4,7 @@ import { BookOpen, CheckCircle2, FileText, GraduationCap, LayoutDashboard, Moon,
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -16,6 +17,7 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-muted/40 md:block">
@@ -27,12 +29,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="p-3">
-          {nav.map((item) => (
-            <Link key={item.href} href={item.href} className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-background", item.href === "/" && "bg-background")}>
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          {nav.map((item) => {
+            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-background transition-colors",
+                  isActive ? "bg-primary text-white hover:bg-primary/95" : "text-foreground/70"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
       </aside>
       <main className="md:pl-64">

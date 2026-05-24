@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Syllabus Feedback Form (External Experts)</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
+
+    @page {
+      size: A4;
+      margin: 18mm 18mm 15mm 18mm;
+      @bottom-center {
+        content: counter(page);
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 9pt;
+      }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 10.5pt;
+      line-height: 1.25;
+      color: #000;
+      background: #fff;
+    }
+
+    /* ── Page wrapper ── */
+    .page {
+      width: 174mm;            /* A4 - margins */
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    /* ── Institutional header ── */
+    .inst-header {
+      display: table;
+      width: 100%;
+      border-bottom: 1.5pt solid #000;
+      padding-bottom: 4pt;
+      margin-bottom: 7pt;
+    }
+    .inst-header__logo {
+      display: table-cell;
+      width: 22mm;
+      vertical-align: middle;
+      padding-right: 6pt;
+    }
+    .inst-header__logo img {
+      width: 20mm;
+      height: 20mm;
+      object-fit: contain;
+    }
+    .inst-header__text {
+      display: table-cell;
+      vertical-align: middle;
+      text-align: center;
+    }
+    .inst-header__text p {
+      margin: 0;
+      line-height: 1.35;
+    }
+    .inst-header__text .line1 { font-size: 9pt; font-style: italic; }
+    .inst-header__text .line2 { font-size: 11.5pt; font-weight: bold; }
+    .inst-header__text .line3 { font-size: 8.5pt; }
+    .inst-header__text .line4 { font-size: 8pt; font-style: italic; }
+
+    /* ── Page title / doc label ── */
+    .doc-title {
+      text-align: center;
+      font-size: 11pt;
+      font-weight: bold;
+      text-decoration: underline;
+      margin: 6pt 0 8pt;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-bottom: 6pt;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    td, th {
+      border: 0.75pt solid #000;
+      padding: 2pt 3.5pt;
+      vertical-align: middle;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    th {
+      font-weight: bold;
+      text-align: center;
+      background: #fff;
+    }
+
+    /* ── Utility ── */
+    .bold   { font-weight: bold; }
+    .center { text-align: center; }
+    .italic { font-style: italic; }
+    .underline { text-decoration: underline; }
+    .small  { font-size: 8.5pt; }
+
+    /* ── Inline-nested exam table (no outer border) ── */
+    .exam-inner { border: none; margin: 0; font-size: 9pt; }
+    .exam-inner td { border: none; padding: 1pt 3pt; }
+    .exam-inner td:first-child { width: 36pt; }
+
+    /* ── Section labels ── */
+    .sec-label {
+      font-weight: bold;
+      margin: 6pt 0 3pt;
+      font-size: 10pt;
+    }
+    .sub-label { font-weight: bold; margin-bottom: 1pt; }
+
+    /* ── Body text / lists ── */
+    p  { margin-bottom: 3pt; font-size: 9.5pt; }
+    ul { margin-left: 18pt; margin-bottom: 4pt; }
+    li { margin-bottom: 2pt; font-size: 9.5pt; }
+
+    /* ── Page-break control ── */
+    .no-break { page-break-inside: avoid; }
+    .break-before { page-break-before: always; }
+
+    /* ── Module / Lab blocks ── */
+    .module-block { page-break-inside: avoid; }
+    .lab-block    { page-break-inside: avoid; }
+
+    /* ── Signature line ── */
+    .sig-line {
+      display: inline-block;
+      border-bottom: 0.75pt solid #000;
+      min-width: 120pt;
+    }
+
+    /* ── Checkbox symbol ── */
+    .cb { font-size: 10.5pt; }
+
+  .fb-field  { margin-bottom:3pt; font-size:9.5pt; }
+  .fb-field b { min-width:90pt; display:inline-block; }
+  .open-ans  {
+    border-bottom:0.75pt solid #000;
+    min-height:20pt; margin:2pt 0 10pt;
+    display:block;
+  }
+  .rec-opt   { margin-bottom:4pt; font-size:9.5pt; }
+  .sig-row   { margin-top:14pt; font-size:9.5pt; }
+  .sig-row p { margin-bottom:10pt; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ══ Header: logo left, college name centered ══ -->
+  <div class="inst-header" style="border-bottom:none; margin-bottom:2pt;">
+    <div class="inst-header__logo">
+      <img src="data:image/jpeg;base64,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" alt="FRCRCE Logo">
+    </div>
+    <div class="inst-header__text">
+      <p class="line2">Fr. Conceicao Rodrigues College of Engineering</p>
+      <p class="line3">Father Agnel Ashram, Bandstand, Bandra &ndash;west, Mumbai&ndash;50</p>
+      <p class="line2" style="font-size:10pt;">Department of Computer Engineering</p>
+    </div>
+  </div>
+  <hr style="border:none; border-top:1.5pt solid #000; margin-bottom:7pt;">
+
+  <div class="doc-title">Syllabus Feedback (For External Experts)</div>
+
+  <!-- ══ Basic info ══ -->
+  <div class="no-break">
+    <div class="fb-field"><b>Department:</b> {{department}}</div>
+    <div class="fb-field"><b>Program:</b> {{program}}</div>
+    <div class="fb-field"><b>Course Name:</b> {{course_name}}</div>
+    <div class="fb-field"><b>Semester:</b> {{semester}}</div>
+    <div class="fb-field" style="margin-bottom:8pt;"><b>Academic Year:</b> {{academic_year}}</div>
+  </div>
+
+  <!-- ══ §1 Expert Details ══ -->
+  <div class="no-break">
+    <p class="sec-label">1.&ensp;Expert Details</p>
+    <table>
+      <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+      <tr><th style="text-align:left;">Field</th><th style="text-align:left;">Details</th></tr>
+      <tr><td class="bold">Name of Expert</td><td>{{expert_name}}</td></tr>
+      <tr><td class="bold">Designation</td><td>{{expert_designation}}</td></tr>
+      <tr><td class="bold">Organization / Institute</td><td>{{expert_org}}</td></tr>
+      <tr>
+        <td class="bold">Type of Expert</td>
+        <td><span class="cb">☐</span> Academic (IIT/NIT/VJTI/SPIT/DJCOE)&ensp;&ensp;<span class="cb">☐</span> Industry</td>
+      </tr>
+      <tr><td class="bold">Area of Specialization</td><td>{{expert_area}}</td></tr>
+      <tr><td class="bold">Email ID</td><td>{{expert_email}}</td></tr>
+    </table>
+  </div>
+
+  <!-- ══ §2 Overall Relevance ══ -->
+  <div class="no-break">
+    <p class="sec-label">2.&ensp;Overall Relevance of the Syllabus</p>
+    <table>
+      <colgroup>
+        <col style="width:52%"><col style="width:12%">
+        <col style="width:9%"><col style="width:12%"><col style="width:15%">
+      </colgroup>
+      <tr>
+        <th style="text-align:left;">Parameter</th>
+        <th>Excellent</th><th>Good</th><th>Average</th><th>Needs Improvement</th>
+      </tr>
+      <tr><td>Clarity and Measurability of Course Outcomes (COs)</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Alignment of Syllabus with the stated Course Outcomes (COs)</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Alignment of COs with Program Outcomes (POs) &amp; PSOs</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Relevance to Current Technology Trends</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Balance between Theory &amp; Practical</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Industry / Research Orientation</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+    </table>
+  </div>
+
+  <!-- ══ §3 Module-wise ══ -->
+  <div class="no-break">
+    <p class="sec-label">3.&ensp;Module-wise Feedback</p>
+    <table>
+      <colgroup><col style="width:14%"><col style="width:34%"><col style="width:52%"></colgroup>
+      <tr>
+        <th>Module No.</th><th>Adequacy of Coverage</th><th style="text-align:left;">Comments / Suggestions</th>
+      </tr>
+      <tr><td class="bold center">I</td>  <td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">II</td> <td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">III</td><td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">IV</td> <td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">V</td>  <td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+      <tr><td class="bold center">VI</td> <td><span class="cb">☐</span> Adequate &ensp; <span class="cb">☐</span> Needs Change</td><td>&nbsp;</td></tr>
+    </table>
+  </div>
+
+  <!-- ══ §4 Suggestions ══ -->
+  <div class="no-break">
+    <p class="sec-label">4.&ensp;Suggestions on Syllabus Content</p>
+    <p class="sub-label">a) Topics to be Added (if any):</p>
+    <span class="open-ans">&nbsp;</span>
+    <p class="sub-label">b) Topics to be Removed / Reduced:</p>
+    <span class="open-ans">&nbsp;</span>
+    <p class="sub-label">c) Emerging Technologies / Tools to Include:</p>
+    <span class="open-ans">&nbsp;</span>
+  </div>
+
+  <!-- ══ §5 Practical ══ -->
+  <div class="no-break">
+    <p class="sec-label">5.&ensp;Practical / Laboratory Component (if applicable)</p>
+    <table>
+      <colgroup><col style="width:55%"><col style="width:10%"><col style="width:10%"><col style="width:25%"></colgroup>
+      <tr><th style="text-align:left;">Parameter</th><th>Yes</th><th>No</th><th style="text-align:left;">Remarks</th></tr>
+      <tr><td>Practical support theoretical concepts</td><td class="center cb">☐</td><td class="center cb">☐</td><td>&nbsp;</td></tr>
+      <tr><td>Experiments reflect real-world problems</td><td class="center cb">☐</td><td class="center cb">☐</td><td>&nbsp;</td></tr>
+      <tr><td>Practical includes use of modern tools / platforms</td><td class="center cb">☐</td><td class="center cb">☐</td><td>&nbsp;</td></tr>
+    </table>
+  </div>
+
+  <!-- ══ §6 Industry Readiness ══ -->
+  <div class="no-break">
+    <p class="sec-label">6.&ensp;Industry / Research Readiness</p>
+    <table>
+      <colgroup>
+        <col style="width:52%"><col style="width:12%">
+        <col style="width:9%"><col style="width:12%"><col style="width:15%">
+      </colgroup>
+      <tr><th style="text-align:left;">Statement</th><th>Strongly Agree</th><th>Agree</th><th>Neutral</th><th>Disagree</th></tr>
+      <tr><td>Syllabus prepares students for industry roles</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+      <tr><td>Syllabus supports higher studies / research</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td><td class="center cb">☐</td></tr>
+    </table>
+  </div>
+
+  <!-- ══ §7 Recommendation ══ -->
+  <div class="no-break">
+    <p class="sec-label">7.&ensp;Overall Recommendation</p>
+    <p class="rec-opt"><span class="cb">☐</span> <b>Accept without modification</b></p>
+    <p class="rec-opt"><span class="cb">☐</span> <b>Accept with minor modifications</b></p>
+    <p class="rec-opt"><span class="cb">☐</span> <b>Accept with major modifications</b></p>
+    <p class="bold" style="margin-top:5pt;">Comments:</p>
+    <span class="open-ans" style="min-height:36pt;">&nbsp;</span>
+  </div>
+
+  <!-- ══ Declaration / Signature ══ -->
+  <div class="no-break sig-row">
+    <p>I have reviewed the syllabus and provided my feedback to the best of my knowledge.</p>
+    <p><b>Signature:</b>&ensp;<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+    <p><b>Date:</b>&ensp;&ensp;&ensp;&ensp;&ensp;<span class="sig-line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+  </div>
+
+</div><!-- .page -->
+</body>
+</html>

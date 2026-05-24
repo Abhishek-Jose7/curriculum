@@ -35,7 +35,6 @@ function computeValidation(course: CourseListItem): { label: string; missing: st
     missing,
   };
 }
-
 export default function CoursesPage() {
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +68,11 @@ export default function CoursesPage() {
           <Button variant="secondary" onClick={() => void fetchCourses()}>
             <RefreshCw className="h-4 w-4" />Refresh
           </Button>
-          <Button><Plus className="h-4 w-4" />Create Structured Course</Button>
+          <Button asChild>
+            <Link href="/admin">
+              <Plus className="h-4 w-4" />Create Structured Course
+            </Link>
+          </Button>
         </div>
       </div>
 

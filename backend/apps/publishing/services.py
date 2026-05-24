@@ -39,6 +39,7 @@ def official_course_context(course) -> dict:
     return {
         "code": course.code,
         "name": course.title,
+        "course_type": course.course_type,
         "lecture_hrs": course.lecture_hours,
         "tutorial_hrs": course.tutorial_hours,
         "practical_hrs": course.practical_hours,
