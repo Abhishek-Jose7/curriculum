@@ -14,6 +14,10 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   
   const response = await fetch(`${API_URL}${path}`, { ...options, headers, cache: "no-store" });
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.localStorage.removeItem("accessToken");
+      window.location.href = "/login";
+    }
     throw new Error(await response.text());
   }
   

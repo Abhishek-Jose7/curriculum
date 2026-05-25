@@ -30,14 +30,14 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [active, setActive] = useState<TabKey>("basic");
   const [course, setCourse] = useState<CourseDraft | null>(null);
   const [version, setVersion] = useState(1);
-  const [pdfKey, setPdfKey] = useState(Date.now());
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     apiFetch<CourseDraft>(`/courses/${courseId}/`).then(setCourse).catch(console.error);
   }, [courseId]);
 
-  const save = useCallback(async (dataToSave: CourseDraft) => {
+  const save = useCallback(async (dataToSave: CourseDraft | null) => {
+    if (!dataToSave || !dataToSave.id) return;
     try {
       const res = await apiFetch<{ status: string; course: CourseDraft }>(`/courses/${dataToSave.id}/autosave/`, {
         method: "POST",
@@ -45,7 +45,6 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
       });
       setCourse(res.course);
       setVersion((current) => current + 1);
-      setPdfKey(Date.now());
     } catch (err) {
       console.error("Autosave failed", err);
       throw err;
@@ -76,7 +75,6 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   }
 
   const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => ({ ...current, [key]: value }));
-  const updateNested = <K extends keyof CourseDraft>(key: K, value: Partial<CourseDraft[K]>) => setCourse((current) => ({ ...current, [key]: { ...(current[key] as object), ...value } as CourseDraft[K] }));
 
   return (
     <div className="grid min-h-[calc(100vh-104px)] gap-0 overflow-hidden rounded-md border border-border xl:grid-cols-[minmax(560px,1fr)_minmax(460px,0.9fr)]">
@@ -125,10 +123,10 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "teaching" && (
             <Panel title="Teaching Scheme" description="Lecture, tutorial, practical load, and credit values used in semester structure pages.">
               <div className="grid gap-4 md:grid-cols-4">
-                <NumberField label="Lecture Hours" value={course.teaching.lecture_hours} onChange={(value) => updateNested("teaching", { lecture_hours: value })} />
-                <NumberField label="Tutorial Hours" value={course.teaching.tutorial_hours} onChange={(value) => updateNested("teaching", { tutorial_hours: value })} />
-                <NumberField label="Practical Hours" value={course.teaching.practical_hours} onChange={(value) => updateNested("teaching", { practical_hours: value })} />
-                <NumberField label="Credits" value={course.teaching.credits} step="0.5" onChange={(value) => updateNested("teaching", { credits: value })} />
+                <NumberField label="Lecture Hours" value={course.lecture_hours} onChange={(value) => updateCourse("lecture_hours", value)} />
+                <NumberField label="Tutorial Hours" value={course.tutorial_hours} onChange={(value) => updateCourse("tutorial_hours", value)} />
+                <NumberField label="Practical Hours" value={course.practical_hours} onChange={(value) => updateCourse("practical_hours", value)} />
+                <NumberField label="Credits" value={course.credits} step="0.5" onChange={(value) => updateCourse("credits", value)} />
               </div>
             </Panel>
           )}
@@ -136,10 +134,9 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "exam" && (
             <Panel title="Examination Scheme" description="Marks, duration, and passing rules rendered into the official scheme table.">
               <div className="grid gap-4 md:grid-cols-4">
-                <NumberField label="Internal Marks" value={course.examination.internal_marks} onChange={(value) => updateNested("examination", { internal_marks: value })} />
-                <NumberField label="External Marks" value={course.examination.external_marks} onChange={(value) => updateNested("examination", { external_marks: value })} />
-                <NumberField label="Duration Hours" value={course.examination.duration_hours} step="0.5" onChange={(value) => updateNested("examination", { duration_hours: value })} />
-                <NumberField label="Passing Marks" value={course.examination.passing_marks} onChange={(value) => updateNested("examination", { passing_marks: value })} />
+                <NumberField label="Internal Marks" value={course.internal_marks} onChange={(value) => updateCourse("internal_marks", value)} />
+                <NumberField label="External Marks" value={course.external_marks} onChange={(value) => updateCourse("external_marks", value)} />
+                <NumberField label="Duration Hours" value={course.duration_hours} step="0.5" onChange={(value) => updateCourse("duration_hours", value)} />
               </div>
             </Panel>
           )}
@@ -148,12 +145,12 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "modules" && <ModuleEditor modules={course.modules} onChange={(modules) => updateCourse("modules", modules)} />}
           {active === "experiments" && <ExperimentEditor experiments={course.experiments} onChange={(experiments) => updateCourse("experiments", experiments)} />}
           {active === "assessments" && <AssessmentEditor assessments={course.assessments} onChange={(assessments) => updateCourse("assessments", assessments)} />}
-          {active === "references" && <ReferenceEditor references={course.references} onChange={(references) => updateCourse("references", references)} />}
+          {active === "references" && <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} />}
           {active === "comments" && <CommentsPanel course={course} />}
           {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
           {active === "preview" && (
             <div className="h-full w-full overflow-hidden rounded border border-border">
-              <iframe key={pdfKey} src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/courses/${course.id}/preview_pdf/`} className="h-full w-full" />
+              <A4Preview course={course} />
             </div>
           )}
         </div>
@@ -162,10 +159,10 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
       <aside className="hidden min-w-0 border-l border-border bg-muted/40 xl:block">
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="font-medium">Live Rendered Curriculum Pages</div>
-          <span className="text-xs text-foreground/60">WeasyPrint PDF preview</span>
+          <span className="text-xs text-foreground/60">Instant Preview</span>
         </div>
         <div className="h-[calc(100vh-153px)]">
-          <iframe key={pdfKey} src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/courses/${course.id}/preview_pdf/`} className="h-full w-full" />
+          <A4Preview course={course} />
         </div>
       </aside>
     </div>
@@ -514,7 +511,7 @@ function validateCourse(course: CourseDraft) {
     course.outcomes.length === 0 && "Course outcomes",
     course.modules.length === 0 && "Modules",
     course.assessments.length === 0 && "Assessments",
-    course.references.length === 0 && "References"
+    (course.reference_books?.length || 0) === 0 && "References"
   ].filter(Boolean) as string[];
   return { missing };
 }

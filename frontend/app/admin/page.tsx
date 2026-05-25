@@ -15,6 +15,8 @@ import {
   Loader2,
   CheckCircle,
   HelpCircle,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +54,10 @@ export default function AdminPage() {
   const [semNumber, setSemNumber] = useState(1);
   const [semTitle, setSemTitle] = useState("");
   const [semOrdinance, setSemOrdinance] = useState("");
+
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editingYearId, setEditingYearId] = useState<string | null>(null);
+  const [editingSemId, setEditingSemId] = useState<string | null>(null);
 
   const getSemesterTitle = (num: number, deptId: string, depts: any[]) => {
     const dept = depts.find(d => String(d.id) === String(deptId));
@@ -118,13 +124,15 @@ export default function AdminPage() {
     return message;
   };
 
-  const handleCreateDept = async (e: React.FormEvent) => {
+  const handleSaveDept = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg("");
     try {
-      await apiFetch("/departments/", {
-        method: "POST",
+      const url = editingDeptId ? `/departments/${editingDeptId}/` : "/departments/";
+      const method = editingDeptId ? "PUT" : "POST";
+      await apiFetch(url, {
+        method,
         body: JSON.stringify({
           code: deptCode,
           name: deptName,
@@ -134,21 +142,42 @@ export default function AdminPage() {
       });
       setDeptCode("");
       setDeptName("");
-      triggerSuccess("Department created successfully!");
+      setEditingDeptId(null);
+      triggerSuccess(`Department ${editingDeptId ? "updated" : "created"} successfully!`);
     } catch (err: any) {
-      setErrorMsg(formatError(err, "Failed to create department"));
+      setErrorMsg(formatError(err, "Failed to save department"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateYear = async (e: React.FormEvent) => {
+  const handleEditDept = (d: any) => {
+    setEditingDeptId(d.id);
+    setDeptCode(d.code);
+    setDeptName(d.name);
+    setDeptCollege(d.college_name || "");
+    setDeptUniv(d.university_name || "");
+  };
+
+  const handleDeleteDept = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this department?")) return;
+    try {
+      await apiFetch(`/departments/${id}/`, { method: "DELETE" });
+      triggerSuccess("Department deleted successfully!");
+    } catch (err: any) {
+      setErrorMsg(formatError(err, "Failed to delete department"));
+    }
+  };
+
+  const handleSaveYear = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg("");
     try {
-      await apiFetch("/academic-years/", {
-        method: "POST",
+      const url = editingYearId ? `/academic-years/${editingYearId}/` : "/academic-years/";
+      const method = editingYearId ? "PUT" : "POST";
+      await apiFetch(url, {
+        method,
         body: JSON.stringify({
           name: yearName,
           starts_on: yearStart,
@@ -156,15 +185,34 @@ export default function AdminPage() {
           is_active: yearActive,
         }),
       });
-      triggerSuccess("Academic Year created successfully!");
+      setEditingYearId(null);
+      triggerSuccess(`Academic Year ${editingYearId ? "updated" : "created"} successfully!`);
     } catch (err: any) {
-      setErrorMsg(formatError(err, "Failed to create academic year"));
+      setErrorMsg(formatError(err, "Failed to save academic year"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateSemester = async (e: React.FormEvent) => {
+  const handleEditYear = (y: any) => {
+    setEditingYearId(y.id);
+    setYearName(y.name);
+    setYearStart(y.starts_on || "");
+    setYearEnd(y.ends_on || "");
+    setYearActive(y.is_active);
+  };
+
+  const handleDeleteYear = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this academic year?")) return;
+    try {
+      await apiFetch(`/academic-years/${id}/`, { method: "DELETE" });
+      triggerSuccess("Academic Year deleted successfully!");
+    } catch (err: any) {
+      setErrorMsg(formatError(err, "Failed to delete academic year"));
+    }
+  };
+
+  const handleSaveSemester = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!semDept || !semYear) {
       setErrorMsg("Please ensure department and academic year are selected.");
@@ -173,8 +221,10 @@ export default function AdminPage() {
     setLoading(true);
     setErrorMsg("");
     try {
-      await apiFetch("/semesters/", {
-        method: "POST",
+      const url = editingSemId ? `/semesters/${editingSemId}/` : "/semesters/";
+      const method = editingSemId ? "PUT" : "POST";
+      await apiFetch(url, {
+        method,
         body: JSON.stringify({
           department: Number(semDept),
           academic_year: Number(semYear),
@@ -183,11 +233,31 @@ export default function AdminPage() {
           ordinance: semOrdinance,
         }),
       });
-      triggerSuccess("Semester tier created successfully!");
+      setEditingSemId(null);
+      triggerSuccess(`Semester tier ${editingSemId ? "updated" : "created"} successfully!`);
     } catch (err: any) {
-      setErrorMsg(formatError(err, "Failed to create semester"));
+      setErrorMsg(formatError(err, "Failed to save semester"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditSemester = (s: any) => {
+    setEditingSemId(s.id);
+    setSemDept(String(s.department));
+    setSemYear(String(s.academic_year));
+    setSemNumber(s.number);
+    setSemTitle(s.title);
+    setSemOrdinance(s.ordinance || "");
+  };
+
+  const handleDeleteSemester = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this semester?")) return;
+    try {
+      await apiFetch(`/semesters/${id}/`, { method: "DELETE" });
+      triggerSuccess("Semester deleted successfully!");
+    } catch (err: any) {
+      setErrorMsg(formatError(err, "Failed to delete semester"));
     }
   };
 
@@ -287,22 +357,37 @@ export default function AdminPage() {
                   ) : (
                     <ul className="space-y-2">
                       {departments.map(d => (
-                        <li key={d.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
-                          <span className="font-medium">{d.code}</span>
-                          <span className="text-foreground/70">{d.name}</span>
+                        <li key={d.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex items-center justify-between">
+                          <div>
+                            <span className="font-medium mr-2">{d.code}</span>
+                            <span className="text-foreground/70">{d.name}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleEditDept(d)} className="text-blue-500 hover:text-blue-400">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={() => handleDeleteDept(d.id)} className="text-rose-500 hover:text-rose-400">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
 
-                <form onSubmit={handleCreateDept} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                  <div className="border-b border-border pb-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Plus className="h-5 w-5 text-primary" />
-                      Add New Department
-                    </h3>
-                    <p className="text-sm text-foreground/60 mt-0.5">Register a new engineering department tier.</p>
+                <form onSubmit={handleSaveDept} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Plus className="h-5 w-5 text-primary" />
+                        {editingDeptId ? "Edit Department" : "Add New Department"}
+                      </h3>
+                      <p className="text-sm text-foreground/60 mt-0.5">{editingDeptId ? "Update department details." : "Register a new engineering department tier."}</p>
+                    </div>
+                    {editingDeptId && (
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingDeptId(null); setDeptCode(""); setDeptName(""); }}>Cancel Edit</Button>
+                    )}
                   </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block space-y-1">
@@ -344,7 +429,7 @@ export default function AdminPage() {
                 </div>
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Department
+                  {editingDeptId ? "Update Department" : "Create Department"}
                 </Button>
                 </form>
               </div>
@@ -364,22 +449,37 @@ export default function AdminPage() {
                   ) : (
                     <ul className="space-y-2">
                       {academicYears.map(y => (
-                        <li key={y.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
-                          <span className="font-medium">{y.name}</span>
-                          <span className="text-foreground/70">{y.is_active ? "Active" : "Inactive"}</span>
+                        <li key={y.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between items-center">
+                          <div>
+                            <span className="font-medium mr-2">{y.name}</span>
+                            <span className="text-foreground/70">{y.is_active ? "Active" : "Inactive"}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleEditYear(y)} className="text-blue-500 hover:text-blue-400">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={() => handleDeleteYear(y.id)} className="text-rose-500 hover:text-rose-400">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
 
-                <form onSubmit={handleCreateYear} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                  <div className="border-b border-border pb-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Plus className="h-5 w-5 text-primary" />
-                      Add Academic Year
-                    </h3>
-                    <p className="text-sm text-foreground/60 mt-0.5">Initialize a new academic calendar session.</p>
+                <form onSubmit={handleSaveYear} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Plus className="h-5 w-5 text-primary" />
+                        {editingYearId ? "Edit Academic Year" : "Add Academic Year"}
+                      </h3>
+                      <p className="text-sm text-foreground/60 mt-0.5">{editingYearId ? "Update academic session details." : "Initialize a new academic calendar session."}</p>
+                    </div>
+                    {editingYearId && (
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingYearId(null); setYearName(""); }}>Cancel Edit</Button>
+                    )}
                   </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <label className="block space-y-1">
@@ -424,7 +524,7 @@ export default function AdminPage() {
                 </label>
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Academic Year
+                  {editingYearId ? "Update Academic Year" : "Create Academic Year"}
                 </Button>
                 </form>
               </div>
@@ -444,22 +544,37 @@ export default function AdminPage() {
                   ) : (
                     <ul className="space-y-2">
                       {semesters.map(s => (
-                        <li key={s.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
-                          <span className="font-medium">Sem {s.number} - {s.department_code}</span>
-                          <span className="text-foreground/70">{s.academic_year_name}</span>
+                        <li key={s.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between items-center">
+                          <div>
+                            <span className="font-medium mr-2">Sem {s.number} - {s.department_code}</span>
+                            <span className="text-foreground/70">{s.academic_year_name}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleEditSemester(s)} className="text-blue-500 hover:text-blue-400">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={() => handleDeleteSemester(s.id)} className="text-rose-500 hover:text-rose-400">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
 
-                <form onSubmit={handleCreateSemester} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                  <div className="border-b border-border pb-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Plus className="h-5 w-5 text-primary" />
-                      Add Semester Tier
-                    </h3>
-                    <p className="text-sm text-foreground/60 mt-0.5">Map a new semester under a department and year.</p>
+                <form onSubmit={handleSaveSemester} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Plus className="h-5 w-5 text-primary" />
+                        {editingSemId ? "Edit Semester Tier" : "Add Semester Tier"}
+                      </h3>
+                      <p className="text-sm text-foreground/60 mt-0.5">{editingSemId ? "Update semester details." : "Map a new semester under a department and year."}</p>
+                    </div>
+                    {editingSemId && (
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingSemId(null); setSemTitle(""); }}>Cancel Edit</Button>
+                    )}
                   </div>
                 {loadingOptions ? (
                   <div className="py-4 text-center text-sm text-foreground/60">Loading configured structures...</div>
@@ -531,7 +646,7 @@ export default function AdminPage() {
                 )}
                 <Button type="submit" disabled={loading || loadingOptions || departments.length === 0 || academicYears.length === 0} className="mt-2">
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Semester Tier
+                  {editingSemId ? "Update Semester Tier" : "Create Semester Tier"}
                 </Button>
               </form>
               </div>

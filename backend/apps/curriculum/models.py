@@ -86,6 +86,7 @@ class Semester(TimestampedModel):
 class CourseType(models.TextChoices):
     THEORY = "THEORY", "Theory"
     LAB = "LAB", "Laboratory"
+    THEORY_LAB = "THEORY_LAB", "Theory and Practical"
     PROJECT = "PROJECT", "Project"
     ELECTIVE = "ELECTIVE", "Elective"
     INTERDISCIPLINARY = "INTERDISCIPLINARY", "Interdisciplinary"

@@ -19,6 +19,7 @@ export function InviteTeacherPanel() {
   const [semesterId, setSemesterId] = useState("");
   const [courseCode, setCourseCode] = useState("");
   const [courseTitle, setCourseTitle] = useState("");
+  const [courseType, setCourseType] = useState("THEORY");
   const [email, setEmail] = useState("");
   
   const [inviteUrl, setInviteUrl] = useState("");
@@ -54,25 +55,39 @@ export function InviteTeacherPanel() {
     setInviteUrl("");
     
     try {
-      // 1. Create the course
-      const newCourse = await apiFetch<any>("/courses/", {
-        method: "POST",
-        body: JSON.stringify({
-          semester: Number(semesterId),
-          code: courseCode,
-          title: courseTitle,
-          course_type: "THEORY",
-          credits: 0,
-          lecture_hours: 0,
-          tutorial_hours: 0,
-          practical_hours: 0,
-          internal_marks: 0,
-          external_marks: 0,
-        }),
-      });
+      // 1. Check if course already exists in this semester
+      const existingRes = await apiFetch<any>(`/courses/?semester=${semesterId}&search=${encodeURIComponent(courseCode)}`);
+      const existingList = Array.isArray(existingRes) ? existingRes : existingRes.results ?? [];
+      
+      // DRF search might return partial matches, so filter exactly by code
+      const existingCourse = existingList.find((c: any) => c.code.toLowerCase() === courseCode.toLowerCase());
+      
+      let targetCourseId;
+      
+      if (existingCourse) {
+        targetCourseId = existingCourse.id;
+      } else {
+        // 2. Create the course if it doesn't exist
+        const newCourse = await apiFetch<any>("/courses/", {
+          method: "POST",
+          body: JSON.stringify({
+            semester: Number(semesterId),
+            code: courseCode,
+            title: courseTitle,
+            course_type: courseType,
+            credits: 0,
+            lecture_hours: 0,
+            tutorial_hours: 0,
+            practical_hours: 0,
+            internal_marks: 0,
+            external_marks: 0,
+          }),
+        });
+        targetCourseId = newCourse.id;
+      }
 
-      // 2. Send the invite
-      const data = await apiFetch<any>(`/courses/${newCourse.id}/invite_teacher/`, {
+      // 3. Send the invite
+      const data = await apiFetch<any>(`/courses/${targetCourseId}/invite_teacher/`, {
         method: "POST",
         body: JSON.stringify({ email }),
       });
@@ -153,6 +168,20 @@ export function InviteTeacherPanel() {
                 onChange={(event) => setCourseTitle(event.target.value)}
                 placeholder="e.g. Data Structures"
               />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium text-foreground/80">Course Type</span>
+              <select
+                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                value={courseType}
+                onChange={(event) => setCourseType(event.target.value)}
+              >
+                <option value="THEORY">Theory</option>
+                <option value="LAB">Practical (Lab)</option>
+                <option value="THEORY_LAB">Theory and Practical</option>
+                <option value="PROJECT">Project</option>
+                <option value="ELECTIVE">Elective</option>
+              </select>
             </label>
             <label className="block space-y-1">
               <span className="text-sm font-medium text-foreground/80">Teacher Email</span>

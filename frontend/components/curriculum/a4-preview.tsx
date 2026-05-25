@@ -11,13 +11,29 @@ type Props = {
 };
 
 export function A4Preview({ course, selectedSection, onSelectSection, reviewMode = false }: Props) {
-  const totalMarks = course.examination.internal_marks + course.examination.external_marks;
-  const ise1 = Math.min(course.examination.internal_marks, 20);
-  const ise2 = Math.max(Math.min(course.examination.internal_marks - ise1, 20), 0);
+  const totalMarks = (course.internal_marks || 0) + (course.external_marks || 0);
+  const ise1 = Math.min(course.internal_marks || 0, 20);
+  const ise2 = Math.max(Math.min((course.internal_marks || 0) - ise1, 20), 0);
+  
+  const formatValue = (val: number | string | undefined | null) => {
+    if (val === 0 || val === "0" || !val) return "--";
+    return val;
+  };
   return (
     <div className="h-full overflow-auto bg-zinc-200 p-4 dark:bg-zinc-950">
       <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4">
-        <Page course={course} pageNumber={1}>
+        <div className="relative w-full bg-white px-[45px] pb-[68px] pt-[57px] text-black shadow-lg">
+          <header className="mb-3 flex items-center justify-center border-b border-black pb-1 font-serif leading-tight">
+            <div className="mr-4 flex h-[60px] w-[60px] items-center justify-center">
+              <img src="/logo.jpeg" alt="Logo" className="max-h-full max-w-full object-contain" />
+            </div>
+            <div className="text-center">
+              <h4 className="mb-0 text-[13px] font-normal">Society of St. Francis Xavier, Pilar&apos;s</h4>
+              <h3 className="mb-0 text-[17px] font-bold">Fr. Conceicao Rodrigues College of Engineering</h3>
+              <p className="m-0 text-[11px]">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai - 400 050<br />(Autonomous College affiliated to University of Mumbai)</p>
+            </div>
+          </header>
+          <main>
           {reviewMode && (
             <div className="review-banner">
               <h4 className="text-left">Reviewer Read-Only Curriculum View</h4>
@@ -50,14 +66,14 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
                 </tr>
                 <tr>
                   <td className="text-center text-bold">{course.code}</td>
-                  <td className="text-bold">{course.title}</td>
-                  <td className="text-center">{course.teaching.lecture_hours}</td>
-                  <td className="text-center">{course.teaching.tutorial_hours}</td>
-                  <td className="text-center">{course.teaching.practical_hours}</td>
-                  <td className="text-center">{course.teaching.lecture_hours}</td>
-                  <td className="text-center">{course.teaching.tutorial_hours}</td>
-                  <td className="text-center">{course.teaching.practical_hours}</td>
-                  <td className="text-center text-bold">{course.teaching.credits}</td>
+                  <td className="text-center text-bold">{course.title}</td>
+                  <td className="text-center">{formatValue(course.lecture_hours)}</td>
+                  <td className="text-center">{formatValue(course.tutorial_hours)}</td>
+                  <td className="text-center">{formatValue(course.practical_hours)}</td>
+                  <td className="text-center">{formatValue(course.lecture_hours)}</td>
+                  <td className="text-center">{formatValue(course.tutorial_hours)}</td>
+                  <td className="text-center">{formatValue(course.practical_hours ? Math.ceil(course.practical_hours / 2) : 0)}</td>
+                  <td className="text-center text-bold">{formatValue(course.credits)}</td>
                 </tr>
               </tbody>
             </table>
@@ -83,11 +99,11 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
                   <th>Total</th>
                 </tr>
                 <tr>
-                  <td className="text-center">{ise1}</td>
-                  <td className="text-center">{ise2}</td>
-                  <td className="text-center">-</td>
-                  <td className="text-center">{course.examination.external_marks}</td>
-                  <td className="text-center text-bold">{totalMarks}</td>
+                  <td className="text-center">{formatValue(ise1)}</td>
+                  <td className="text-center">{formatValue(ise2)}</td>
+                  <td className="text-center">--</td>
+                  <td className="text-center">{formatValue(course.external_marks)}</td>
+                  <td className="text-center text-bold">{formatValue(totalMarks)}</td>
                 </tr>
               </tbody>
             </table>
@@ -102,22 +118,23 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
               </colgroup>
               <tbody>
                 <tr>
-                  <th colSpan={2} className="text-center">Pre-requisite<br />Course Codes</th>
-                  <td>{course.pre_requisites || "Nil"}</td>
+                  <th className="text-left" colSpan={2}>Pre-requisite Course Codes</th>
+                  <td>{course.pre_requisites || "--"}</td>
                 </tr>
                 <tr>
-                  <th rowSpan={course.outcomes.length + 1} className="text-center">Course<br />Outcomes</th>
-                  <td colSpan={2} className="text-bold">At the end of the course learner will be able to:</td>
+                  <td colSpan={3} className="text-bold border-t-0">At the end of the course learner will be able to:</td>
                 </tr>
-                {course.outcomes.map((outcome) => (
-                  <tr key={outcome.code}><td className="text-center text-bold">{outcome.code}</td><td>{outcome.description}</td></tr>
+                {course.outcomes.map((outcome, idx) => (
+                  <tr key={outcome.code}>
+                    {idx === 0 && <td className="text-bold" rowSpan={course.outcomes.length}>Course Outcomes</td>}
+                    <td className="text-bold">{outcome.code}</td>
+                    <td>{outcome.description}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </Selectable>
-        </Page>
 
-        <Page course={course} pageNumber={2}>
           <Selectable id="modules" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <table className="preview-table">
               <colgroup>
@@ -155,9 +172,7 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
               </tfoot>
             </table>
           </Selectable>
-        </Page>
 
-        <Page course={course} pageNumber={3}>
           <Selectable id="experiments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <table className="preview-table">
               <colgroup>
@@ -186,12 +201,13 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
           <Selectable id="references" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <h4 className="preview-subheading text-left">Recommended Books:</h4>
             <ol className="preview-list">
-              {course.references.map((book) => (
+              {(course.reference_books || []).map((book) => (
                 <li key={book.title}>{book.authors}. <em>{book.title}</em>. {book.publisher}, {book.edition}, {book.year}.</li>
               ))}
             </ol>
           </Selectable>
-        </Page>
+          </main>
+        </div>
       </div>
       <style jsx>{`
         .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; break-inside: auto; font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.15; }
@@ -214,24 +230,7 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
   );
 }
 
-function Page({ course, pageNumber, children }: { course: CourseDraft; pageNumber: number; children: React.ReactNode }) {
-  return (
-    <div className="relative min-h-[1123px] w-full bg-white px-[45px] pb-[68px] pt-[57px] text-black shadow-lg">
-      <header className="mb-3 flex items-center justify-center border-b border-black pb-1 font-serif leading-tight">
-        <div className="mr-4 flex h-[60px] w-[60px] items-center justify-center border border-black text-[8px]">LOGO</div>
-        <div className="text-center">
-          <h4 className="mb-0 text-[13px] font-normal">Society of St. Francis Xavier, Pilar&apos;s</h4>
-          <h3 className="mb-0 text-[17px] font-bold">Fr. Conceicao Rodrigues College of Engineering</h3>
-          <p className="m-0 text-[11px]">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai - 400 050<br />(Autonomous College affiliated to University of Mumbai)</p>
-        </div>
-      </header>
-      <main>{children}</main>
-      <footer className="absolute bottom-[18mm] left-0 right-0 text-center font-serif text-[12px]">
-        <span>{pageNumber}</span>
-      </footer>
-    </div>
-  );
-}
+
 
 function Selectable({ id, selected, onSelect, reviewMode, children }: { id: string; selected?: string; onSelect?: (id: string) => void; reviewMode: boolean; children: React.ReactNode }) {
   return (

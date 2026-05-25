@@ -17,19 +17,7 @@ export type Course = {
   modules: CourseModule[];
 };
 
-export type TeachingScheme = {
-  lecture_hours: number;
-  tutorial_hours: number;
-  practical_hours: number;
-  credits: number;
-};
 
-export type ExaminationScheme = {
-  internal_marks: number;
-  external_marks: number;
-  duration_hours: number;
-  passing_marks: number;
-};
 
 export type CourseOutcome = {
   id?: number;
@@ -99,13 +87,18 @@ export type CourseDraft = {
   objectives: string;
   pre_requisites: string;
   syllabus_intro: string;
-  teaching: TeachingScheme;
-  examination: ExaminationScheme;
+  lecture_hours: number;
+  tutorial_hours: number;
+  practical_hours: number;
+  credits: string | number;
+  internal_marks: number;
+  external_marks: number;
+  duration_hours: string | number;
   outcomes: CourseOutcome[];
   modules: CourseModule[];
   experiments: Experiment[];
   assessments: Assessment[];
-  references: ReferenceBook[];
+  reference_books: ReferenceBook[];
   comments: ReviewerComment[];
   online_resources: string[];
 };
