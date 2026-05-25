@@ -18,10 +18,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ActiveTab = "invite" | "department" | "academic-year" | "semester" | "course";
+type ActiveTab = "invite" | "department" | "academic-year" | "semester";
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("invite");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("department");
 
   // Options for selects
   const [departments, setDepartments] = useState<any[]>([]);
@@ -29,7 +29,7 @@ export default function AdminPage() {
   const [semesters, setSemesters] = useState<any[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
 
-  // Form states
+  // State for forms
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -49,21 +49,29 @@ export default function AdminPage() {
   // 3. Semester Form
   const [semDept, setSemDept] = useState("");
   const [semYear, setSemYear] = useState("");
-  const [semNumber, setSemNumber] = useState(3);
-  const [semTitle, setSemTitle] = useState("Second Year Computer Engineering - Semester III");
+  const [semNumber, setSemNumber] = useState(1);
+  const [semTitle, setSemTitle] = useState("");
   const [semOrdinance, setSemOrdinance] = useState("");
 
-  // 4. Course Form
-  const [courseSem, setCourseSem] = useState("");
-  const [courseCode, setCourseCode] = useState("");
-  const [courseTitle, setCourseTitle] = useState("");
-  const [courseType, setCourseType] = useState("THEORY");
-  const [courseCredits, setCourseCredits] = useState(3);
-  const [courseL, setCourseL] = useState(3);
-  const [courseT, setCourseT] = useState(0);
-  const [courseP, setCourseP] = useState(0);
-  const [courseInternal, setCourseInternal] = useState(40);
-  const [courseExternal, setCourseExternal] = useState(60);
+  const getSemesterTitle = (num: number, deptId: string, depts: any[]) => {
+    const dept = depts.find(d => String(d.id) === String(deptId));
+    const deptName = dept ? dept.name : "Engineering";
+    
+    let yearStr = "First Year";
+    if (num === 3 || num === 4) yearStr = "Second Year";
+    if (num === 5 || num === 6) yearStr = "Third Year";
+    if (num === 7 || num === 8) yearStr = "Fourth Year";
+
+    const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][num - 1] || num.toString();
+
+    return `${yearStr} ${deptName} - Semester ${roman}`;
+  };
+
+  useEffect(() => {
+    if (departments.length > 0 && semDept) {
+      setSemTitle(getSemesterTitle(semNumber, semDept, departments));
+    }
+  }, [semNumber, semDept, departments]);
 
   const loadAllOptions = async () => {
     setLoadingOptions(true);
@@ -81,7 +89,6 @@ export default function AdminPage() {
       const sems = await apiFetch<any>("/semesters/");
       const semsList = Array.isArray(sems) ? sems : sems.results ?? [];
       setSemesters(semsList);
-      if (semsList.length > 0) setCourseSem(String(semsList[0].id));
     } catch (err) {
       console.error("Failed to load schema options", err);
     } finally {
@@ -98,6 +105,17 @@ export default function AdminPage() {
     setErrorMsg("");
     void loadAllOptions();
     setTimeout(() => setSuccessMsg(""), 3500);
+  };
+
+  const formatError = (err: any, fallback: string) => {
+    let message = err.message || fallback;
+    try {
+      const parsed = JSON.parse(message);
+      if (typeof parsed === "object") {
+        message = Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(", ");
+      }
+    } catch (e) {}
+    return message;
   };
 
   const handleCreateDept = async (e: React.FormEvent) => {
@@ -118,7 +136,7 @@ export default function AdminPage() {
       setDeptName("");
       triggerSuccess("Department created successfully!");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create department");
+      setErrorMsg(formatError(err, "Failed to create department"));
     } finally {
       setLoading(false);
     }
@@ -140,7 +158,7 @@ export default function AdminPage() {
       });
       triggerSuccess("Academic Year created successfully!");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create academic year");
+      setErrorMsg(formatError(err, "Failed to create academic year"));
     } finally {
       setLoading(false);
     }
@@ -167,45 +185,13 @@ export default function AdminPage() {
       });
       triggerSuccess("Semester tier created successfully!");
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create semester");
+      setErrorMsg(formatError(err, "Failed to create semester"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!courseSem) {
-      setErrorMsg("Semester is required. Set up dynamic semesters first!");
-      return;
-    }
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      await apiFetch("/courses/", {
-        method: "POST",
-        body: JSON.stringify({
-          semester: Number(courseSem),
-          code: courseCode,
-          title: courseTitle,
-          course_type: courseType,
-          credits: Number(courseCredits),
-          lecture_hours: Number(courseL),
-          tutorial_hours: Number(courseT),
-          practical_hours: Number(courseP),
-          internal_marks: Number(courseInternal),
-          external_marks: Number(courseExternal),
-        }),
-      });
-      setCourseCode("");
-      setCourseTitle("");
-      triggerSuccess("Structured course shell created successfully!");
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to create course shell");
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   return (
     <AppShell>
@@ -243,16 +229,6 @@ export default function AdminPage() {
         <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
           <aside className="space-y-1">
             <button
-              onClick={() => setActiveTab("invite")}
-              className={cn(
-                "flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
-                activeTab === "invite" ? "bg-primary text-white" : "hover:bg-muted text-foreground/70"
-              )}
-            >
-              <Plus className="h-4 w-4" />
-              Invite Teachers
-            </button>
-            <button
               onClick={() => setActiveTab("department")}
               className={cn(
                 "flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
@@ -260,7 +236,7 @@ export default function AdminPage() {
               )}
             >
               <Building2 className="h-4 w-4" />
-              Create Department
+              Manage Departments
             </button>
             <button
               onClick={() => setActiveTab("academic-year")}
@@ -270,7 +246,7 @@ export default function AdminPage() {
               )}
             >
               <Calendar className="h-4 w-4" />
-              Create Academic Year
+              Manage Academic Years
             </button>
             <button
               onClick={() => setActiveTab("semester")}
@@ -280,17 +256,17 @@ export default function AdminPage() {
               )}
             >
               <Layers className="h-4 w-4" />
-              Create Semester
+              Manage Semesters
             </button>
             <button
-              onClick={() => setActiveTab("course")}
+              onClick={() => setActiveTab("invite")}
               className={cn(
                 "flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left",
-                activeTab === "course" ? "bg-primary text-white" : "hover:bg-muted text-foreground/70"
+                activeTab === "invite" ? "bg-primary text-white" : "hover:bg-muted text-foreground/70"
               )}
             >
-              <BookOpen className="h-4 w-4" />
-              Create Course Shell
+              <Plus className="h-4 w-4" />
+              Create Subject
             </button>
           </aside>
 
@@ -298,14 +274,36 @@ export default function AdminPage() {
             {activeTab === "invite" && <InviteTeacherPanel />}
 
             {activeTab === "department" && (
-              <form onSubmit={handleCreateDept} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                <div className="border-b border-border pb-3">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="space-y-6">
+                <div className="rounded-md border border-border bg-zinc-900/10 p-5">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
                     <Building2 className="h-5 w-5 text-primary" />
-                    Create Department Metadata
+                    Existing Departments
                   </h3>
-                  <p className="text-sm text-foreground/60 mt-0.5">Register new engineering department tiers.</p>
+                  {loadingOptions ? (
+                    <div className="text-sm text-foreground/60">Loading...</div>
+                  ) : departments.length === 0 ? (
+                    <div className="text-sm text-foreground/60">No departments configured yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {departments.map(d => (
+                        <li key={d.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
+                          <span className="font-medium">{d.code}</span>
+                          <span className="text-foreground/70">{d.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
+
+                <form onSubmit={handleCreateDept} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Plus className="h-5 w-5 text-primary" />
+                      Add New Department
+                    </h3>
+                    <p className="text-sm text-foreground/60 mt-0.5">Register a new engineering department tier.</p>
+                  </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="block space-y-1">
                     <span className="text-sm font-medium text-foreground/85">Dept Code (e.g. COMP, MECH)</span>
@@ -348,18 +346,41 @@ export default function AdminPage() {
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Department
                 </Button>
-              </form>
+                </form>
+              </div>
             )}
 
             {activeTab === "academic-year" && (
-              <form onSubmit={handleCreateYear} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                <div className="border-b border-border pb-3">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="space-y-6">
+                <div className="rounded-md border border-border bg-zinc-900/10 p-5">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
                     <Calendar className="h-5 w-5 text-primary" />
-                    Create Academic Year Range
+                    Existing Academic Years
                   </h3>
-                  <p className="text-sm text-foreground/60 mt-0.5">Initialize a new academic calendar session.</p>
+                  {loadingOptions ? (
+                    <div className="text-sm text-foreground/60">Loading...</div>
+                  ) : academicYears.length === 0 ? (
+                    <div className="text-sm text-foreground/60">No academic years configured yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {academicYears.map(y => (
+                        <li key={y.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
+                          <span className="font-medium">{y.name}</span>
+                          <span className="text-foreground/70">{y.is_active ? "Active" : "Inactive"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
+
+                <form onSubmit={handleCreateYear} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Plus className="h-5 w-5 text-primary" />
+                      Add Academic Year
+                    </h3>
+                    <p className="text-sm text-foreground/60 mt-0.5">Initialize a new academic calendar session.</p>
+                  </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <label className="block space-y-1">
                     <span className="text-sm font-medium text-foreground/85">Academic Session Label</span>
@@ -405,18 +426,41 @@ export default function AdminPage() {
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Academic Year
                 </Button>
-              </form>
+                </form>
+              </div>
             )}
 
             {activeTab === "semester" && (
-              <form onSubmit={handleCreateSemester} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                <div className="border-b border-border pb-3">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
+              <div className="space-y-6">
+                <div className="rounded-md border border-border bg-zinc-900/10 p-5">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
                     <Layers className="h-5 w-5 text-primary" />
-                    Create Semester Tier
+                    Existing Semesters
                   </h3>
-                  <p className="text-sm text-foreground/60 mt-0.5">Map semesters under configured departments & years.</p>
+                  {loadingOptions ? (
+                    <div className="text-sm text-foreground/60">Loading...</div>
+                  ) : semesters.length === 0 ? (
+                    <div className="text-sm text-foreground/60">No semesters configured yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {semesters.map(s => (
+                        <li key={s.id} className="text-sm px-3 py-2 bg-background rounded border border-border flex justify-between">
+                          <span className="font-medium">Sem {s.number} - {s.department_code}</span>
+                          <span className="text-foreground/70">{s.academic_year_name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
+
+                <form onSubmit={handleCreateSemester} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
+                  <div className="border-b border-border pb-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Plus className="h-5 w-5 text-primary" />
+                      Add Semester Tier
+                    </h3>
+                    <p className="text-sm text-foreground/60 mt-0.5">Map a new semester under a department and year.</p>
+                  </div>
                 {loadingOptions ? (
                   <div className="py-4 text-center text-sm text-foreground/60">Loading configured structures...</div>
                 ) : departments.length === 0 || academicYears.length === 0 ? (
@@ -490,156 +534,9 @@ export default function AdminPage() {
                   Create Semester Tier
                 </Button>
               </form>
+              </div>
             )}
 
-            {activeTab === "course" && (
-              <form onSubmit={handleCreateCourse} className="rounded-md border border-border p-5 space-y-4 bg-zinc-900/10">
-                <div className="border-b border-border pb-3">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-primary" />
-                    Create Course Syllabus Shell
-                  </h3>
-                  <p className="text-sm text-foreground/60 mt-0.5">Initialize a structured syllabus subject shell.</p>
-                </div>
-                {loadingOptions ? (
-                  <div className="py-4 text-center text-sm text-foreground/60">Loading configured structures...</div>
-                ) : semesters.length === 0 ? (
-                  <div className="p-4 rounded bg-amber-500/5 border border-amber-500/10 text-sm text-amber-500 text-center">
-                    Please set up at least one Semester tier in the previous tab before creating courses.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <label className="block space-y-1">
-                        <span className="text-sm font-medium text-foreground/85">Select Semester Class</span>
-                        <select
-                          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                          value={courseSem}
-                          onChange={(e) => setCourseSem(e.target.value)}
-                        >
-                          {semesters.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.department_code || "COMP"} - Sem {s.number} ({s.academic_year_name})
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-sm font-medium text-foreground/85">Course Subject Code</span>
-                        <input
-                          required
-                          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                          value={courseCode}
-                          onChange={(e) => setCourseCode(e.target.value)}
-                          placeholder="CS301"
-                        />
-                      </label>
-                      <label className="block space-y-1 md:col-span-2">
-                        <span className="text-sm font-medium text-foreground/85">Subject Syllabus Title</span>
-                        <input
-                          required
-                          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                          value={courseTitle}
-                          onChange={(e) => setCourseTitle(e.target.value)}
-                          placeholder="Data Structures and Algorithms"
-                        />
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-sm font-medium text-foreground/85">Course Type</span>
-                        <select
-                          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                          value={courseType}
-                          onChange={(e) => setCourseType(e.target.value)}
-                        >
-                          <option value="THEORY">Theory</option>
-                          <option value="LAB">Laboratory / Practical</option>
-                          <option value="PROJECT">Project</option>
-                          <option value="ELECTIVE">Elective</option>
-                          <option value="INTERDISCIPLINARY">Interdisciplinary</option>
-                        </select>
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-sm font-medium text-foreground/85">Assigned Credits</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          required
-                          className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                          value={courseCredits}
-                          onChange={(e) => setCourseCredits(Number(e.target.value))}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="border-t border-border/60 pt-4">
-                      <div className="text-sm font-semibold text-foreground/80 mb-3">Teaching Scheme (Hrs/Week)</div>
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <label className="block space-y-1">
-                          <span className="text-sm font-medium text-foreground/85">Lecture Hrs</span>
-                          <input
-                            type="number"
-                            required
-                            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                            value={courseL}
-                            onChange={(e) => setCourseL(Number(e.target.value))}
-                          />
-                        </label>
-                        <label className="block space-y-1">
-                          <span className="text-sm font-medium text-foreground/85">Tutorial Hrs</span>
-                          <input
-                            type="number"
-                            required
-                            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                            value={courseT}
-                            onChange={(e) => setCourseT(Number(e.target.value))}
-                          />
-                        </label>
-                        <label className="block space-y-1">
-                          <span className="text-sm font-medium text-foreground/85">Practical / Lab Hrs</span>
-                          <input
-                            type="number"
-                            required
-                            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                            value={courseP}
-                            onChange={(e) => setCourseP(Number(e.target.value))}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-border/60 pt-4">
-                      <div className="text-sm font-semibold text-foreground/80 mb-3">Syllabus Evaluation Scheme Marks</div>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <label className="block space-y-1">
-                          <span className="text-sm font-medium text-foreground/85">Internal / Term Work Marks</span>
-                          <input
-                            type="number"
-                            required
-                            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                            value={courseInternal}
-                            onChange={(e) => setCourseInternal(Number(e.target.value))}
-                          />
-                        </label>
-                        <label className="block space-y-1">
-                          <span className="text-sm font-medium text-foreground/85">External Theory Exam Marks</span>
-                          <input
-                            type="number"
-                            required
-                            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                            value={courseExternal}
-                            onChange={(e) => setCourseExternal(Number(e.target.value))}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <Button type="submit" disabled={loading || semesters.length === 0} className="mt-2">
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Course Shell
-                </Button>
-              </form>
-            )}
           </main>
         </div>
       </div>

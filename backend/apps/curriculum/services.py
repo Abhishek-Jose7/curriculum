@@ -1,3 +1,5 @@
+import json
+from django.core.serializers.json import DjangoJSONEncoder
 from django.forms.models import model_to_dict
 
 from apps.curriculum.models import Course, CourseVersion
@@ -9,7 +11,7 @@ def serialize_course_snapshot(course: Course) -> dict:
         .prefetch_related("outcomes", "modules__topics", "experiments", "assessments", "reference_books")
         .get(pk=course.pk)
     )
-    return {
+    raw_dict = {
         "course": model_to_dict(course, exclude=["faculty", "approved_by"]),
         "faculty_id": course.faculty_id,
         "approved_by_id": course.approved_by_id,
@@ -25,6 +27,7 @@ def serialize_course_snapshot(course: Course) -> dict:
         "assessments": [model_to_dict(item, exclude=["course"]) for item in course.assessments.all()],
         "reference_books": [model_to_dict(item, exclude=["course"]) for item in course.reference_books.all()],
     }
+    return json.loads(json.dumps(raw_dict, cls=DjangoJSONEncoder))
 
 
 def create_course_version(course: Course, user, change_summary: str = "") -> CourseVersion:
