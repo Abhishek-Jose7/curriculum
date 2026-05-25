@@ -27,6 +27,7 @@ from apps.curriculum.serializers import (
     AssessmentSchemeSerializer,
     CourseOutcomeSerializer,
     CourseSerializer,
+    CourseListSerializer,
     CourseInvitationSerializer,
     CourseVersionSerializer,
     DepartmentSerializer,
@@ -67,12 +68,20 @@ class SemesterViewSet(AdminWriteMixin, viewsets.ModelViewSet):
 
 
 class CourseViewSet(viewsets.ModelViewSet):
-    queryset = course_with_document_parts()
-    serializer_class = CourseSerializer
     permission_classes = [permissions.IsAuthenticated, CourseObjectPermission]
     filterset_fields = ["semester", "faculty", "course_type", "status"]
     search_fields = ["code", "title", "objectives"]
     ordering_fields = ["code", "title", "status", "updated_at"]
+
+    def get_queryset(self):
+        if self.action == "list":
+            return Course.objects.select_related("semester", "semester__department", "semester__academic_year", "faculty", "approved_by").all()
+        return course_with_document_parts()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return CourseListSerializer
+        return CourseSerializer
 
     def perform_create(self, serializer):
         course = serializer.save()

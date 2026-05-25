@@ -136,3 +136,19 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_semester_label(self, obj):
         return str(obj.semester)
+
+class CourseListSerializer(serializers.ModelSerializer):
+    semester_label = serializers.SerializerMethodField()
+    faculty_name = serializers.CharField(source="faculty.get_full_name", read_only=True)
+
+    class Meta:
+        model = Course
+        fields = [
+            "id", "code", "title", "course_type", "credits", "status", 
+            "semester", "semester_label", "faculty", "faculty_name", 
+            "created_at", "updated_at", "approved_at", "approved_by"
+        ]
+        read_only_fields = ["approved_by", "approved_at"]
+
+    def get_semester_label(self, obj):
+        return str(obj.semester)

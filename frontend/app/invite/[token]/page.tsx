@@ -37,7 +37,7 @@ export default function InvitePage() {
           email: data.email,
           course_code: data.course_code || data.course?.code || "Syllabus Subject",
           course_title: data.course_title || data.course?.title || "Assigned Course",
-          course_id: data.course_id || data.course?.id || 1,
+          course_id: typeof data.course === 'number' ? data.course : (data.course_id || data.course?.id || 1),
           is_accepted: data.is_accepted,
           is_expired: data.is_expired,
         });
