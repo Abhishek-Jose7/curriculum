@@ -130,6 +130,125 @@
     .center { text-align: center; }
     .right { text-align: right; }
     .no-break { page-break-inside: avoid; }
+
+    /* --- NEW TEMPLATE CSS IMPORTS --- */
+    /* Page wrapper */
+    .page { width: 175mm; margin: 0 auto; }
+
+    /* INSTITUTIONAL HEADER */
+    .inst-header {
+      display: table;
+      width: 100%;
+      border-bottom: 1.5pt solid #000;
+      padding-bottom: 5pt;
+      margin-bottom: 7pt;
+    }
+    .inst-header__logo {
+      display: table-cell;
+      width: 21mm;
+      vertical-align: middle;
+      padding-right: 5pt;
+    }
+    .inst-header__logo img {
+      width: 19mm; height: 19mm;
+      object-fit: contain;
+      display: block;
+    }
+    .inst-header__text {
+      display: table-cell;
+      vertical-align: middle;
+      text-align: center;
+      line-height: 1.38;
+    }
+    .inst-header__text .h-italic  { font-size: 8.5pt;  font-style: italic; }
+    .inst-header__text .h-bold    { font-size: 11pt;   font-weight: bold; }
+    .inst-header__text .h-addr    { font-size: 8.5pt; }
+    .inst-header__text .h-affil   { font-size: 8pt;    font-style: italic; }
+
+    /* DOCUMENT TITLE */
+    .doc-title {
+      text-align: center;
+      font-size: 11pt;
+      font-weight: bold;
+      text-decoration: underline;
+      margin: 5pt 0 7pt;
+      letter-spacing: 0.015em;
+      line-height: 1.2;
+    }
+
+    /* EXAMINATION SCHEME */
+    .exam-wrap {
+      padding: 0;          /* outer td has no inner padding */
+    }
+    .exam-tbl {
+      border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
+      margin: 0;
+      font-size: 9pt;
+      line-height: 1.1;
+    }
+    .exam-tbl td {
+      border: 0.75pt solid #000;
+      padding: 1.5pt 3pt 1.5pt 4pt;
+      vertical-align: middle;
+    }
+    .exam-tbl .exam-section-hdr {
+      font-weight: bold;
+      text-align: center;
+      border-bottom: 1pt solid #000;
+      padding-bottom: 2pt;
+    }
+    .exam-tbl .col-hdr {
+      font-weight: bold;
+      text-align: center;
+      border-top: 0.75pt solid #000;
+    }
+
+    /* UTILITY CLASSES */
+    .bold      { font-weight: bold; }
+    .italic    { font-style: italic; }
+    .underline { text-decoration: underline; }
+    .small     { font-size: 8.5pt; }
+    .cb        { font-size: 10.5pt; }
+
+    /* SECTION / BLOCK LABELS */
+    .sec-label {
+      font-weight: bold;
+      margin: 5pt 0 2.5pt;
+      font-size: 10pt;
+      line-height: 1.15;
+    }
+    .sub-label {
+      font-weight: bold;
+      margin-bottom: 1pt;
+      font-size: 9.5pt;
+      line-height: 1.12;
+    }
+
+    /* PAGE-BREAK CONTROL */
+    .break-before    { page-break-before: always; }
+    .module-block    { page-break-inside: avoid; }
+    .lab-block       { page-break-inside: avoid; }
+    orphans: 3; widows: 3;
+
+    /* OPEN-ANSWER LINES (Feedback form) */
+    .open-ans {
+      display: block;
+      border-bottom: 0.75pt solid #000;
+      min-height: 18pt;
+      margin: 2pt 0 9pt;
+    }
+    .sig-line {
+      display: inline-block;
+      border-bottom: 0.75pt solid #000;
+      min-width: 110pt;
+    }
+    .sig-row { margin-top: 14pt; }
+    .sig-row p { margin-bottom: 10pt; font-size: 9.5pt; }
+    .rec-opt { margin-bottom: 4pt; font-size: 9.5pt; }
+    .fb-field { margin-bottom:3pt; font-size:9.5pt; line-height:1.18; }
+    .fb-field b { min-width:88pt; display:inline-block; }
   </style>
   {# DB-stored template CSS (override layer — kept minimal) #}
   {% if template_css %}<style>{{ template_css }}</style>{% endif %}

@@ -235,13 +235,11 @@
     <table style="margin-bottom: 0;">
         <colgroup>
             <col style="width: 12%;">
-            <col style="width: 73%;">
-            <col style="width: 15%;">
-        </colgroup>
-        <thead>
-            <tr>
-                <th>Module</th>
-                <th>Interdisciplinary Subject Theme &amp; Discussion Topics</th>
+            <col style="width: {% if course.course_type == "LAB" %}
+  {% include "pdf/partials/course_body_prac.html" %}
+{% else %}
+  {% include "pdf/partials/course_body_theoryprac.html" %}
+{% endif %}terdisciplinary Subject Theme &amp; Discussion Topics</th>
                 <th>Duration</th>
             </tr>
         </thead>

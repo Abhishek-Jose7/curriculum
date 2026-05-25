@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
@@ -23,7 +23,7 @@ const sectionLabels: Record<string, string> = {
   references: "References",
 };
 
-export default function ReviewPage() {
+function ReviewContent() {
   const searchParams = useSearchParams();
   const courseId = searchParams.get("course") ?? "1";
 
@@ -258,5 +258,20 @@ export default function ReviewPage() {
         </aside>
       </div>
     </AppShell>
+  );
+}
+
+export default function ReviewPage() {
+  return (
+    <Suspense fallback={
+      <AppShell>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-foreground/60" />
+          <span className="ml-2 text-foreground/60">Loading...</span>
+        </div>
+      </AppShell>
+    }>
+      <ReviewContent />
+    </Suspense>
   );
 }

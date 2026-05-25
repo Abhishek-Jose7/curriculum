@@ -74,7 +74,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
     return <div className="flex h-full items-center justify-center p-8">Loading curriculum data...</div>;
   }
 
-  const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => ({ ...current, [key]: value }));
+  const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => current ? ({ ...current, [key]: value } as CourseDraft) : null);
 
   return (
     <div className="grid min-h-[calc(100vh-104px)] gap-0 overflow-hidden rounded-md border border-border xl:grid-cols-[minmax(560px,1fr)_minmax(460px,0.9fr)]">
@@ -471,7 +471,7 @@ function Field({ label, value, onChange, error }: { label: string; value: string
   );
 }
 
-function NumberField({ label, value, onChange, step = "1" }: { label: string; value: number; onChange: (value: number) => void; step?: string }) {
+function NumberField({ label, value, onChange, step = "1" }: { label: string; value: number | string; onChange: (value: number) => void; step?: string }) {
   return (
     <label>
       <span className="text-sm font-medium">{label}</span>

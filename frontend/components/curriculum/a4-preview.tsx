@@ -11,226 +11,280 @@ type Props = {
 };
 
 export function A4Preview({ course, selectedSection, onSelectSection, reviewMode = false }: Props) {
+  const isLab = course.course_type === "LAB";
+  const hasLab = (course.practical_hours || 0) > 0 || isLab;
+  
   const totalMarks = (course.internal_marks || 0) + (course.external_marks || 0);
   const ise1 = Math.min(course.internal_marks || 0, 20);
   const ise2 = Math.max(Math.min((course.internal_marks || 0) - ise1, 20), 0);
-  
   const formatValue = (val: number | string | undefined | null) => {
     if (val === 0 || val === "0" || !val) return "--";
     return val;
   };
+
+  const totalModuleHours = course.modules.reduce((sum, module) => sum + (module.contact_hours || 0), 0);
+
   return (
     <div className="h-full overflow-auto bg-zinc-200 p-4 dark:bg-zinc-950">
       <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4">
-        <div className="relative w-full bg-white px-[45px] pb-[68px] pt-[57px] text-black shadow-lg">
-          <header className="mb-3 flex items-center justify-center border-b border-black pb-1 font-serif leading-tight">
-            <div className="mr-4 flex h-[60px] w-[60px] items-center justify-center">
-              <img src="/logo.jpeg" alt="Logo" className="max-h-full max-w-full object-contain" />
+        <div className="relative w-full bg-white px-[45px] pb-[68px] pt-[57px] text-black shadow-lg" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '10pt', lineHeight: '1.2' }}>
+          
+          <header className="mb-2 flex w-full items-center border-b-[1.5pt] border-black pb-[5pt]">
+            <div className="pr-[5pt] w-[21mm]">
+              <img src="/logo.jpeg" alt="Institutional Logo" className="h-[19mm] w-[19mm] object-contain block" />
             </div>
-            <div className="text-center">
-              <h4 className="mb-0 text-[13px] font-normal">Society of St. Francis Xavier, Pilar&apos;s</h4>
-              <h3 className="mb-0 text-[17px] font-bold">Fr. Conceicao Rodrigues College of Engineering</h3>
-              <p className="m-0 text-[11px]">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai - 400 050<br />(Autonomous College affiliated to University of Mumbai)</p>
+            <div className="text-center flex-1" style={{ lineHeight: 1.38 }}>
+              <p className="m-0 text-[8.5pt] italic">Society of St.&nbsp;Francis Xavier, Pilar&rsquo;s</p>
+              <p className="m-0 text-[11pt] font-bold">Fr. Conceicao Rodrigues College of Engineering</p>
+              <p className="m-0 text-[8.5pt]">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai &ndash; 400&nbsp;050</p>
+              <p className="m-0 text-[8pt] italic">(Autonomous College affiliated to University of Mumbai)</p>
             </div>
           </header>
+          
+          <div className="text-center font-bold underline mt-[5pt] mb-[7pt] text-[11pt]" style={{ letterSpacing: '0.015em' }}>
+            Course Content{hasLab && !isLab ? " (includes Practical's)" : isLab ? " (Practical Only)" : ""}
+          </div>
+
           <main>
           {reviewMode && (
-            <div className="review-banner">
-              <h4 className="text-left">Reviewer Read-Only Curriculum View</h4>
-              <p>Reviewers comment on selected sections only. The official admin/faculty publishing template is not editable here.</p>
+            <div className="mb-2 border-[0.5pt] border-black p-2 text-[8.5pt]">
+              <h4 className="m-0 mb-1 font-bold text-[11pt]">Reviewer Read-Only Curriculum View</h4>
+              <p className="m-0">Reviewers comment on selected sections only. The official admin/faculty publishing template is not editable here.</p>
             </div>
           )}
+
           <Selectable id="basic" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <table className="preview-table">
               <colgroup>
-                <col style={{ width: "16%" }} />
-                <col style={{ width: "44%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "10%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "17%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
+                <col style={{ width: "8.75%" }} />
               </colgroup>
               <tbody>
                 <tr>
-                  <th rowSpan={2}>Course Code</th>
-                  <th rowSpan={2}>Course Name</th>
-                  <th colSpan={3}>Teaching Scheme (Hrs/week)</th>
-                  <th colSpan={4}>Credits Assigned</th>
+                  <td rowSpan={4} className="font-bold text-center">Course Code<br /><br />{course.code}</td>
+                  <td rowSpan={4} className="font-bold text-center">Course Name<br /><br /><span className="font-bold">{course.title}</span></td>
+                  <td colSpan={4} className="font-bold text-center">Teaching Scheme (Hrs/week)</td>
+                  <td colSpan={4} className="font-bold text-center">Credits Assigned</td>
                 </tr>
                 <tr>
-                  <th>L</th><th>T</th><th>P</th>
-                  <th>L</th><th>T</th><th>P</th><th>Total</th>
+                  <td className="font-bold text-center">L</td><td className="font-bold text-center">T</td>
+                  <td className="font-bold text-center">P</td><td className="font-bold text-center">SL</td>
+                  <td className="font-bold text-center">L</td><td className="font-bold text-center">T</td>
+                  <td className="font-bold text-center">P</td><td className="font-bold text-center">Total</td>
                 </tr>
                 <tr>
-                  <td className="text-center text-bold">{course.code}</td>
-                  <td className="text-center text-bold">{course.title}</td>
-                  <td className="text-center">{formatValue(course.lecture_hours)}</td>
-                  <td className="text-center">{formatValue(course.tutorial_hours)}</td>
+                  <td className="text-center">{!isLab ? formatValue(course.lecture_hours) : "--"}</td>
+                  <td className="text-center">{!isLab ? formatValue(course.tutorial_hours) : "--"}</td>
                   <td className="text-center">{formatValue(course.practical_hours)}</td>
-                  <td className="text-center">{formatValue(course.lecture_hours)}</td>
-                  <td className="text-center">{formatValue(course.tutorial_hours)}</td>
-                  <td className="text-center">{formatValue(course.practical_hours ? Math.ceil(course.practical_hours / 2) : 0)}</td>
-                  <td className="text-center text-bold">{formatValue(course.credits)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </Selectable>
-
-          <Selectable id="examination" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <table className="preview-table">
-              <colgroup>
-                <col style={{ width: "25%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "15%" }} />
-              </colgroup>
-              <tbody>
-                <tr>
-                  <th rowSpan={2}>Examination Scheme</th>
-                  <th>ISE 1</th>
-                  <th>ISE 2</th>
-                  <th>MSE</th>
-                  <th>ESE</th>
-                  <th>Total</th>
-                </tr>
-                <tr>
-                  <td className="text-center">{formatValue(ise1)}</td>
-                  <td className="text-center">{formatValue(ise2)}</td>
                   <td className="text-center">--</td>
-                  <td className="text-center">{formatValue(course.external_marks)}</td>
-                  <td className="text-center text-bold">{formatValue(totalMarks)}</td>
+                  <td className="text-center">{!isLab ? formatValue(course.lecture_hours) : "--"}</td>
+                  <td className="text-center">{!isLab ? formatValue(course.tutorial_hours) : "--"}</td>
+                  <td className="text-center">{formatValue(course.practical_hours ? Math.ceil(course.practical_hours / 2) : 0)}</td>
+                  <td className="text-center">{formatValue(course.credits)}</td>
+                </tr>
+                <tr>
+                  <td colSpan={8} style={{ padding: 0, border: 0 }}>
+                    <Selectable id="examination" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
+                      <table className="w-full border-collapse m-0 exam-tbl" style={{ tableLayout: "fixed", fontSize: "9pt", lineHeight: 1.1 }}>
+                        <colgroup>
+                          <col style={{ width: "18%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "14%" }} />
+                          <col style={{ width: "12%" }} />
+                        </colgroup>
+                        <tbody>
+                          <tr>
+                            <td colSpan={7} className="font-bold text-center border-b-[1pt] border-black pb-[2pt]">Examination Scheme</td>
+                          </tr>
+                          <tr>
+                            <td style={{ borderTop: "0.75pt solid #000" }}></td>
+                            <td className="col-hdr">ISE1</td>
+                            <td className="col-hdr">MSE</td>
+                            <td className="col-hdr">ISE2</td>
+                            <td className="col-hdr">ESE</td>
+                            <td className="col-hdr">Total</td>
+                            <td style={{ borderTop: "0.75pt solid #000" }}></td>
+                          </tr>
+                          <tr>
+                            <td>Theory</td>
+                            <td className="text-center">{!isLab ? formatValue(ise1) : "--"}</td>
+                            <td className="text-center">{!isLab ? "--" : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(ise2) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(course.external_marks) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(totalMarks) : "--"}</td>
+                            <td></td>
+                          </tr>
+                          {hasLab && (
+                            <tr>
+                              <td>Lab</td>
+                              <td className="text-center">25</td>
+                              <td className="text-center">--</td>
+                              <td className="text-center">25</td>
+                              <td className="text-center">--</td>
+                              <td className="text-center">50</td>
+                              <td></td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </Selectable>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </Selectable>
 
           <Selectable id="outcomes" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <table className="preview-table avoid-break mt-10">
-              <colgroup>
-                <col style={{ width: "16%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "74%" }} />
-              </colgroup>
+            <table className="preview-table">
+              <colgroup><col style={{ width: "28%" }} /><col style={{ width: "72%" }} /></colgroup>
               <tbody>
                 <tr>
-                  <th className="text-left" colSpan={2}>Pre-requisite Course Codes</th>
+                  <td className="font-bold">Pre-requisite Course Codes</td>
                   <td>{course.pre_requisites || "--"}</td>
                 </tr>
-                <tr>
-                  <td colSpan={3} className="text-bold border-t-0">At the end of the course learner will be able to:</td>
-                </tr>
+                <tr><td colSpan={2}>After the successful completion students should be able to:</td></tr>
                 {course.outcomes.map((outcome, idx) => (
                   <tr key={outcome.code}>
-                    {idx === 0 && <td className="text-bold" rowSpan={course.outcomes.length}>Course Outcomes</td>}
-                    <td className="text-bold">{outcome.code}</td>
-                    <td>{outcome.description}</td>
+                    {idx === 0 && <td className="font-bold" rowSpan={course.outcomes.length || 1}>Course Outcomes</td>}
+                    <td><span className="font-bold">{outcome.code}</span>&ensp;{outcome.description}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </Selectable>
 
-          <Selectable id="modules" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <table className="preview-table">
-              <colgroup>
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "66%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "8%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Module<br />No.</th>
-                  <th>Unit<br />No.</th>
-                  <th>Topics</th>
-                  <th>Ref.</th>
-                  <th>Hrs.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {course.modules.flatMap((module) => {
-                  const units = module.topics?.length ? module.topics : [{ title: module.title, description: module.content }];
-                  return units.map((unit, index) => (
-                    <tr key={`${module.number}-${index}`}>
-                      {index === 0 && <td className="text-center text-bold" rowSpan={units.length}>{module.number}</td>}
-                      <td className="text-center">{index + 1}</td>
-                      <td>{unit.title}: {unit.description}</td>
-                      <td className="text-center"></td>
-                      {index === 0 && <td className="text-center text-bold" rowSpan={units.length}>{module.contact_hours}</td>}
-                    </tr>
-                  ));
-                })}
-              </tbody>
-              <tfoot>
-                <tr><th colSpan={4} className="text-right">Total Hours</th><th className="text-center">{course.modules.reduce((sum, module) => sum + module.contact_hours, 0)}</th></tr>
-              </tfoot>
-            </table>
-          </Selectable>
-
-          <Selectable id="experiments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <table className="preview-table">
-              <colgroup>
-                <col style={{ width: "15%" }} />
-                <col style={{ width: "70%" }} />
-                <col style={{ width: "15%" }} />
-              </colgroup>
-              <tbody>
-                <tr><th>Exp. No.</th><th>Suggested List of Experiments / Tutorials</th><th>CO</th></tr>
-                {course.experiments.map((experiment) => (
-                  <tr key={experiment.number}><td className="text-center">{experiment.number}</td><td>{experiment.title}: {experiment.description}</td><td className="text-center"></td></tr>
-                ))}
-              </tbody>
-            </table>
-          </Selectable>
+          {!isLab && (
+            <Selectable id="modules" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
+              <table className="preview-table">
+                <colgroup>
+                  <col style={{ width: "10%" }} /><col style={{ width: "9%" }} />
+                  <col style={{ width: "67%" }} /><col style={{ width: "7%" }} /><col style={{ width: "7%" }} />
+                </colgroup>
+                <tbody>
+                  <tr>
+                    <th className="text-center font-bold">Module No.</th><th className="text-center font-bold">Unit No.</th>
+                    <th style={{ textAlign: "left" }} className="font-bold">Topics</th>
+                    <th className="text-center font-bold">Ref.</th><th className="text-center font-bold">Hrs.</th>
+                  </tr>
+                  {course.modules.flatMap((module) => {
+                    const units = module.topics?.length ? module.topics : [{ title: module.title, description: module.content }];
+                    return units.map((unit, index) => (
+                      <tr key={`${module.number}-${index}`}>
+                        {index === 0 && <td className="font-bold text-center" rowSpan={units.length}>{module.number}</td>}
+                        <td className="font-bold text-center">{module.number}.{index + 1}</td>
+                        <td>{unit.title}: {unit.description}</td>
+                        <td className="text-center">--</td>
+                        {index === 0 && <td className="text-center" rowSpan={units.length}>{module.contact_hours}</td>}
+                      </tr>
+                    ));
+                  })}
+                  <tr>
+                    <td colSpan={3} className="font-bold">Total</td>
+                    <td colSpan={2} className="font-bold text-center">{totalModuleHours}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </Selectable>
+          )}
 
           <Selectable id="assessments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <h4 className="preview-subheading text-left">Course Assessment:</h4>
-            <ol className="preview-list">
-              {course.assessments.map((assessment) => (
-                <li key={assessment.component}><strong>{assessment.component} ({assessment.marks} marks):</strong> {assessment.description}</li>
-              ))}
-            </ol>
+            <div className="mb-2">
+              <p className="font-bold mt-[5pt] mb-[2.5pt] text-[10pt]" style={{ lineHeight: 1.15 }}>Course Assessment:{isLab ? " \u2013 (Lab)" : ""}</p>
+              {!isLab && <p className="font-bold m-0">Theory:</p>}
+              {course.assessments?.length > 0 ? (
+                <ol className="m-0 pl-5">
+                  {course.assessments.map((a, i) => (
+                    <li key={i}><strong>{a.component} ({a.marks} marks):</strong> {a.description}</li>
+                  ))}
+                </ol>
+              ) : !isLab ? (
+                <>
+                  <p className="m-0"><b>ISE-1:</b> should be based on self-learning and Formative assessment.</p>
+                  <p className="m-0"><b>ISE-2:</b> should be based on self-learning and Formative assessment.</p>
+                  <p className="m-0"><b>MSE:</b> Written examination based on 50% syllabus</p>
+                  <p className="m-0"><b>ESE:</b> Written examination based on remaining 50% syllabus</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-bold m-0 mt-1">Practical:</p>
+                  <p className="font-bold m-0 mt-1">ISE-I:</p>
+                  <ul className="m-0 pl-5">
+                    <li>Based on predefined rubrics carrying 10 Marks.</li>
+                    <li>Mini-project / Activity carrying&ndash;10 Marks</li>
+                  </ul>
+                  <p className="font-bold m-0 mt-1">ISE-II:</p>
+                  <ul className="m-0 pl-5">
+                    <li>Based on predefined rubrics carrying 10 Marks</li>
+                    <li>Oral and/or Practical Examination&ndash;20 Marks</li>
+                  </ul>
+                </>
+              )}
+            </div>
           </Selectable>
 
+          {hasLab && (
+            <Selectable id="experiments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
+              <table className="preview-table mt-2">
+                <colgroup>
+                  <col style={{ width: isLab ? "7%" : "6%" }} />
+                  <col style={{ width: "78%" }} />
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "8%" }} />
+                </colgroup>
+                <tbody>
+                  <tr><td colSpan={4} className="font-bold">To be Taught in laboratory</td></tr>
+                  <tr>
+                    <th>&nbsp;</th>
+                    <th style={{ textAlign: "left" }} className="font-bold">{isLab ? "Topics wise List of Experiments with relevant topic" : "Topics"}</th>
+                    <th className="text-center font-bold">Ref.</th><th className="text-center font-bold">CO{isLab ? "s" : ""}</th>
+                  </tr>
+                  {course.experiments.map((exp) => (
+                    <tr key={exp.number}>
+                      <td className="font-bold text-center">{exp.number}</td>
+                      <td>{exp.title}: {exp.description}</td>
+                      <td className="text-center">--</td>
+                      <td className="text-center">--</td>
+                    </tr>
+                  ))}
+                  <tr><td>&nbsp;</td><td className="font-bold">Total</td><td></td><td className="font-bold text-center">--</td></tr>
+                </tbody>
+              </table>
+            </Selectable>
+          )}
+
           <Selectable id="references" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-            <h4 className="preview-subheading text-left">Recommended Books:</h4>
-            <ol className="preview-list">
-              {(course.reference_books || []).map((book) => (
-                <li key={book.title}>{book.authors}. <em>{book.title}</em>. {book.publisher}, {book.edition}, {book.year}.</li>
-              ))}
-            </ol>
+            <div>
+              <p className="font-bold mt-[5pt] mb-[2.5pt] text-[10pt]" style={{ lineHeight: 1.15 }}>Recommended Books:</p>
+              <ul className="m-0 pl-5">
+                {(course.reference_books || []).length > 0 ? (course.reference_books || []).map((book) => (
+                  <li key={book.title}>{book.authors}. {book.title}. {book.publisher}, {book.edition}, {book.year}.</li>
+                )) : <li>--</li>}
+              </ul>
+            </div>
           </Selectable>
           </main>
         </div>
       </div>
       <style jsx>{`
-        .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; break-inside: auto; font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.15; }
-        .preview-table tr { break-inside: avoid; }
-        .preview-table th, .preview-table td { border: 0.5pt solid #000; padding: 1.5mm 1mm; text-align: left; vertical-align: middle; overflow-wrap: break-word; word-wrap: break-word; hyphens: auto; }
-        .preview-table th { font-weight: bold; text-align: center; }
-        .preview-subheading { font-family: "Times New Roman", Times, serif; font-size: 11pt; font-weight: bold; margin: 10pt 0 4pt; }
-        .preview-list { margin-top: 2pt; padding-left: 5mm; font-family: "Times New Roman", Times, serif; font-size: 9.5pt; line-height: 1.15; }
-        .avoid-break { break-inside: avoid; }
-        .mt-10 { margin-top: 10pt; }
-        .text-center { text-align: center !important; }
-        .text-left { text-align: left !important; }
-        .text-right { text-align: right !important; }
-        .text-bold { font-weight: bold; }
-        .review-banner { border: 0.5pt solid #000; padding: 2mm; margin-bottom: 8pt; font-family: "Times New Roman", Times, serif; font-size: 8.5pt; line-height: 1.15; }
-        .review-banner h4 { font-size: 11pt; font-weight: bold; margin: 0 0 2pt; }
-        .review-banner p { margin: 0; }
+        .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
+        .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
+        .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
+        .col-hdr { font-weight: bold; text-align: center; border-top: 0.75pt solid #000; }
       `}</style>
     </div>
   );
 }
-
-
 
 function Selectable({ id, selected, onSelect, reviewMode, children }: { id: string; selected?: string; onSelect?: (id: string) => void; reviewMode: boolean; children: React.ReactNode }) {
   return (
