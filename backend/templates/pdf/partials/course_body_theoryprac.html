@@ -79,37 +79,44 @@
         <td class="center">{% if course.exam_theory_total %}{{ course.exam_theory_total }}{% else %}--{% endif %}</td>
         <td></td>
       </tr>
-      {% if course.has_lab %}
       <tr>
         <td>Lab</td>
-        <td class="center">{% if course.exam_lab_ise1 %}{{ course.exam_lab_ise1 }}{% else %}--{% endif %}</td>
+        <td class="center">{% if course.has_lab and course.exam_lab_ise1 %}{{ course.exam_lab_ise1 }}{% else %}--{% endif %}</td>
         <td class="center">--</td>
-        <td class="center">{% if course.exam_lab_ise2 %}{{ course.exam_lab_ise2 }}{% else %}--{% endif %}</td>
+        <td class="center">{% if course.has_lab and course.exam_lab_ise2 %}{{ course.exam_lab_ise2 }}{% else %}--{% endif %}</td>
         <td class="center">--</td>
-        <td class="center">{% if course.exam_lab_total %}{{ course.exam_lab_total }}{% else %}--{% endif %}</td>
+        <td class="center">{% if course.has_lab and course.exam_lab_total %}{{ course.exam_lab_total }}{% else %}--{% endif %}</td>
         <td></td>
       </tr>
-      {% endif %}
     </table></td>
     </tr>
   </table>
   </div>
   <div class="no-break">
   <table>
-    <colgroup><col style="width:28%"><col style="width:72%"></colgroup>
+    <colgroup><col style="width:18%"><col style="width:10%"><col style="width:72%"></colgroup>
     <tr>
-      <td class="bold">Pre-requisite Course Codes</td>
+      <td colspan="2" class="bold">Pre-requisite Course Codes</td>
       <td>{{ course.prerequisites|default:"--" }}</td>
     </tr>
-    <tr><td colspan="2">After the successful completion students should be able to:</td></tr>
+    {% if course.outcomes %}
+    <tr>
+      <th rowspan="{{ course.outcomes|length|add:'1' }}" class="bold center">Course<br>Outcomes</th>
+      <td colspan="2" class="bold" style="border-bottom: 0.5pt solid #000;">At the end of the course learner will be able to:</td>
+    </tr>
     {% for outcome in course.outcomes %}
     <tr>
-      {% if forloop.first %}
-      <td class="bold" rowspan="{{ course.outcomes|length }}">Course Outcomes</td>
-      {% endif %}
-      <td><span class="bold">{{ outcome.id }}</span>&ensp;{{ outcome.description }}</td>
+      <td class="bold center">{{ outcome.id }}</td>
+      <td>{{ outcome.description }}</td>
     </tr>
     {% endfor %}
+    {% else %}
+    <tr>
+      <td class="bold center">Course<br>Outcomes</td>
+      <td class="bold center">--</td>
+      <td>--</td>
+    </tr>
+    {% endif %}
   </table>
   </div>
 

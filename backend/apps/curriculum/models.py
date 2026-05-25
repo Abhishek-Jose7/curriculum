@@ -112,6 +112,9 @@ class Course(TimestampedModel):
     lecture_hours = models.PositiveSmallIntegerField(default=0)
     tutorial_hours = models.PositiveSmallIntegerField(default=0)
     practical_hours = models.PositiveSmallIntegerField(default=0)
+    lecture_credits = models.DecimalField(max_digits=4, decimal_places=1, default=0)
+    tutorial_credits = models.DecimalField(max_digits=4, decimal_places=1, default=0)
+    practical_credits = models.DecimalField(max_digits=4, decimal_places=1, default=0)
     credits = models.DecimalField(max_digits=4, decimal_places=1, default=0)
     internal_marks = models.PositiveSmallIntegerField(default=0)
     external_marks = models.PositiveSmallIntegerField(default=0)
@@ -140,16 +143,8 @@ class Course(TimestampedModel):
         return self.internal_marks + self.external_marks
 
     @property
-    def lecture_credits(self) -> int:
-        return self.lecture_hours
-
-    @property
-    def tutorial_credits(self) -> int:
-        return self.tutorial_hours
-
-    @property
-    def practical_credits(self) -> int:
-        return self.practical_hours
+    def total_marks(self) -> int:
+        return self.internal_marks + self.external_marks
 
     @property
     def exam_theory_ise1(self) -> int:

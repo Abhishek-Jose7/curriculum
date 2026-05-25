@@ -126,7 +126,11 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
                 <NumberField label="Lecture Hours" value={course.lecture_hours} onChange={(value) => updateCourse("lecture_hours", value)} />
                 <NumberField label="Tutorial Hours" value={course.tutorial_hours} onChange={(value) => updateCourse("tutorial_hours", value)} />
                 <NumberField label="Practical Hours" value={course.practical_hours} onChange={(value) => updateCourse("practical_hours", value)} />
-                <NumberField label="Credits" value={course.credits} step="0.5" onChange={(value) => updateCourse("credits", value)} />
+                <div className="hidden md:block"></div>
+                <NumberField label="Lecture Credits" value={course.lecture_credits} step="0.5" onChange={(value) => updateCourse("lecture_credits", value)} />
+                <NumberField label="Tutorial Credits" value={course.tutorial_credits} step="0.5" onChange={(value) => updateCourse("tutorial_credits", value)} />
+                <NumberField label="Practical Credits" value={course.practical_credits} step="0.5" onChange={(value) => updateCourse("practical_credits", value)} />
+                <NumberField label="Total Credits" value={course.credits} step="0.5" onChange={(value) => updateCourse("credits", value)} />
               </div>
             </Panel>
           )}

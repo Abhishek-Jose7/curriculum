@@ -276,12 +276,12 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
           </main>
         </div>
       </div>
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
         .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
         .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
         .col-hdr { font-weight: bold; text-align: center; border-top: 0.75pt solid #000; }
-      `}</style>
+      ` }} />
     </div>
   );
 }

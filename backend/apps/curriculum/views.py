@@ -68,6 +68,7 @@ class SemesterViewSet(AdminWriteMixin, viewsets.ModelViewSet):
 
 
 class CourseViewSet(viewsets.ModelViewSet):
+    queryset = Course.objects.none()  # Base queryset required by DRF router for basename
     permission_classes = [permissions.IsAuthenticated, CourseObjectPermission]
     filterset_fields = ["semester", "faculty", "course_type", "status"]
     search_fields = ["code", "title", "objectives"]

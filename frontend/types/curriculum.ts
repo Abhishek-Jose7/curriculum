@@ -9,7 +9,10 @@ export type Course = {
   lecture_hours: number;
   tutorial_hours: number;
   practical_hours: number;
-  credits: string;
+  lecture_credits: number;
+  tutorial_credits: number;
+  practical_credits: number;
+  credits: string | number;
   internal_marks: number;
   external_marks: number;
   objectives: string;
@@ -90,6 +93,9 @@ export type CourseDraft = {
   lecture_hours: number;
   tutorial_hours: number;
   practical_hours: number;
+  lecture_credits: number;
+  tutorial_credits: number;
+  practical_credits: number;
   credits: string | number;
   internal_marks: number;
   external_marks: number;
