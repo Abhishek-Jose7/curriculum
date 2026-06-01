@@ -1,15 +1,56 @@
 import { cn } from "@/lib/utils";
 
-const tones: Record<string, string> = {
-  DRAFT: "bg-zinc-100 text-zinc-700",
-  SUBMITTED: "bg-sky-100 text-sky-800",
-  UNDER_REVIEW: "bg-amber-100 text-amber-800",
-  CHANGES_REQUESTED: "bg-rose-100 text-rose-800",
-  APPROVED: "bg-emerald-100 text-emerald-800",
-  PUBLISHED: "bg-teal-100 text-teal-800",
-  LOCKED: "bg-zinc-800 text-white"
+const tones: Record<string, { bg: string; text: string; border: string }> = {
+  DRAFT: {
+    bg: "bg-zinc-500/5",
+    text: "text-zinc-600 dark:text-zinc-400",
+    border: "border-zinc-500/20"
+  },
+  SUBMITTED: {
+    bg: "bg-blue-500/5",
+    text: "text-blue-600 dark:text-blue-400",
+    border: "border-blue-500/20"
+  },
+  UNDER_REVIEW: {
+    bg: "bg-amber-500/5",
+    text: "text-amber-600 dark:text-amber-400",
+    border: "border-amber-500/20"
+  },
+  CHANGES_REQUESTED: {
+    bg: "bg-rose-500/5",
+    text: "text-rose-600 dark:text-rose-400",
+    border: "border-rose-500/20"
+  },
+  APPROVED: {
+    bg: "bg-emerald-500/5",
+    text: "text-emerald-600 dark:text-emerald-400",
+    border: "border-emerald-500/20"
+  },
+  PUBLISHED: {
+    bg: "bg-teal-500/5",
+    text: "text-teal-600 dark:text-teal-400",
+    border: "border-teal-500/20"
+  },
+  LOCKED: {
+    bg: "bg-purple-500/5",
+    text: "text-purple-600 dark:text-purple-400",
+    border: "border-purple-500/20"
+  }
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
-  return <span className={cn("rounded px-2 py-1 text-xs font-semibold", tones[status] ?? tones.DRAFT, className)}>{status.replaceAll("_", " ")}</span>;
+  const cfg = tones[status] ?? tones.DRAFT;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider transition-all",
+        cfg.bg,
+        cfg.text,
+        cfg.border,
+        className
+      )}
+    >
+      {status.replaceAll("_", " ")}
+    </span>
+  );
 }

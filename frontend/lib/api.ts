@@ -16,7 +16,9 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem("accessToken");
-      window.location.href = "/login";
+      if (window.location.pathname !== "/") {
+        window.location.href = "/";
+      }
     }
     throw new Error(await response.text());
   }

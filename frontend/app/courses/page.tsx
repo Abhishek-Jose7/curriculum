@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Eye, FileSearch, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Eye, FileSearch, Loader2, Plus, RefreshCw, AlertCircle, CheckCircle2, HelpCircle } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import type { Course, CourseStatus } from "@/types/curriculum";
+import { cn } from "@/lib/utils";
 
 type CourseListItem = {
   id: number;
@@ -35,6 +36,7 @@ function computeValidation(course: CourseListItem): { label: string; missing: st
     missing,
   };
 }
+
 export default function CoursesPage() {
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,81 +61,123 @@ export default function CoursesPage() {
 
   return (
     <AppShell>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Curriculum Workflow Queue</h2>
-          <p className="text-sm text-foreground/60">Track authoring completeness, validation, preview, and review readiness.</p>
+      <div className="space-y-8 animate-fade-in text-left">
+        {/* Title Bar Action area */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-5">
+          <div className="space-y-1">
+            <h2 className="text-xl font-serif font-bold text-foreground">Curriculum Register Queue</h2>
+            <p className="text-xs text-muted-foreground font-semibold">Catalogue listing of active course shells, validation completeness, and active reviewer approvals.</p>
+          </div>
+          <div className="flex gap-2.5 self-start sm:self-center">
+            <Button variant="secondary" onClick={() => void fetchCourses()} className="h-9 border-border">
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin text-primary")} /> Refresh ledger
+            </Button>
+            <Button asChild className="h-9">
+              <Link href="/admin">
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Initialize subject
+              </Link>
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => void fetchCourses()}>
-            <RefreshCw className="h-4 w-4" />Refresh
-          </Button>
-          <Button asChild>
-            <Link href="/admin">
-              <Plus className="h-4 w-4" />Create Structured Course
-            </Link>
-          </Button>
-        </div>
-      </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-foreground/60" />
-          <span className="ml-2 text-foreground/60">Loading courses...</span>
-        </div>
-      )}
+        {/* Loading Ledger Shell state */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16 bg-card rounded border border-border shadow-sm space-y-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-xs font-bold text-muted-foreground/60">Fetching curriculum registers...</span>
+          </div>
+        )}
 
-      {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-          <Button variant="secondary" className="ml-4" onClick={() => void fetchCourses()}>Retry</Button>
-        </div>
-      )}
+        {/* Error notification block */}
+        {error && (
+          <div className="rounded border border-destructive/20 bg-destructive/5 p-4 text-xs font-semibold text-foreground flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-4.5 w-4.5 text-destructive" />
+              <div>
+                <div className="font-extrabold text-destructive">Registry Fetch Error</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{error}</div>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => void fetchCourses()} className="h-8 border-border">Retry</Button>
+          </div>
+        )}
 
-      {!loading && !error && (
-        <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[1040px] border-collapse text-sm">
-            <thead className="bg-muted/60 text-left">
-              <tr>
-                <th className="px-3 py-3">Course Code</th>
-                <th className="px-3 py-3">Course Name</th>
-                <th className="px-3 py-3">Faculty Assigned</th>
-                <th className="px-3 py-3">Workflow Status</th>
-                <th className="px-3 py-3">Last Modified</th>
-                <th className="px-3 py-3">Validation Status</th>
-                <th className="px-3 py-3">Missing Sections</th>
-                <th className="px-3 py-3">Preview Action</th>
-                <th className="px-3 py-3">Review Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {courses.length === 0 && (
-                <tr><td colSpan={9} className="px-3 py-8 text-center text-foreground/60">No courses found. Create a structured course to begin.</td></tr>
-              )}
-              {courses.map((course) => {
-                const validation = computeValidation(course);
-                return (
-                  <tr key={course.id} className="hover:bg-muted/45">
-                    <td className="px-3 py-3 font-mono">{course.code}</td>
-                    <td className="px-3 py-3 font-medium"><Link href={`/courses/${course.id}`}>{course.title}</Link></td>
-                    <td className="px-3 py-3">{course.faculty_name ?? "—"}</td>
-                    <td className="px-3 py-3"><StatusBadge status={course.status} /></td>
-                    <td className="px-3 py-3">{course.updated_at ? new Date(course.updated_at).toLocaleString() : "—"}</td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded px-2 py-1 text-xs font-semibold ${validation.label === "Clear" ? "bg-emerald-100 text-emerald-800" : validation.label === "Warnings" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                        {validation.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-xs">{validation.missing.length ? validation.missing.join(", ") : "None"}</td>
-                    <td className="px-3 py-3"><Button variant="secondary" asChild><Link href={`/courses/${course.id}`}><Eye className="h-4 w-4" />Preview</Link></Button></td>
-                    <td className="px-3 py-3"><Button variant="secondary" asChild><Link href={`/review?course=${course.id}`}><FileSearch className="h-4 w-4" />Review</Link></Button></td>
+        {/* Main Administrative Register Grid */}
+        {!loading && !error && (
+          <div className="overflow-hidden border border-border bg-card shadow-sm rounded-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1040px] border-collapse text-xs">
+                <thead>
+                  <tr className="bg-secondary/40 border-b border-border/80 text-foreground/75 text-[10px] font-bold uppercase tracking-wider text-left">
+                    <th className="px-4 py-3.5 font-mono">Code</th>
+                    <th className="px-4 py-3.5 font-serif font-bold text-sm lowercase first-letter:uppercase">Subject Title</th>
+                    <th className="px-4 py-3.5">Coordinator Assigned</th>
+                    <th className="px-4 py-3.5">Workflow Status</th>
+                    <th className="px-4 py-3.5">Last Modification</th>
+                    <th className="px-4 py-3.5 text-center">Validation</th>
+                    <th className="px-4 py-3.5">Missing Block</th>
+                    <th className="px-4 py-3.5 text-center">Actions</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {courses.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground/50 font-semibold font-serif italic">
+                        No curriculum subjects configured in this semester catalog registry.
+                      </td>
+                    </tr>
+                  )}
+                  {courses.map((course) => {
+                    const validation = computeValidation(course);
+                    return (
+                      <tr key={course.id} className="hover:bg-muted/40 transition-colors group">
+                        <td className="px-4 py-4 font-mono font-bold text-primary hover:underline">
+                          <Link href={`/courses/${course.id}`}>{course.code}</Link>
+                        </td>
+                        <td className="px-4 py-4 font-serif font-bold text-[13px] text-foreground/95">
+                          <Link href={`/courses/${course.id}`} className="hover:text-primary transition-colors">
+                            {course.title}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-4 font-semibold text-foreground/70">{course.faculty_name ?? "—"}</td>
+                        <td className="px-4 py-4"><StatusBadge status={course.status} /></td>
+                        <td className="px-4 py-4 font-medium text-muted-foreground/80">
+                          {course.updated_at ? new Date(course.updated_at).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider",
+                              validation.label === "Clear" && "bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                              validation.label === "Warnings" && "bg-amber-500/5 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                              validation.label === "Incomplete" && "bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                            )}
+                          >
+                            {validation.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 font-medium text-muted-foreground/70 max-w-[180px] truncate" title={validation.missing.join(", ")}>
+                          {validation.missing.length ? validation.missing.join(", ") : "None"}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex items-center justify-center gap-3">
+                            <Link href={`/courses/${course.id}`} className="text-primary hover:underline font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                              <Eye className="h-3 w-3" /> Draft
+                            </Link>
+                            <Link href={`/review?course=${course.id}`} className="text-foreground/60 hover:text-primary hover:underline font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                              <FileSearch className="h-3 w-3" /> Review
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }

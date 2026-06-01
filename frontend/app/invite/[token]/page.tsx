@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { GraduationCap, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { GraduationCap, Loader2, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 
@@ -31,7 +31,6 @@ export default function InvitePage() {
     async function fetchInvitation() {
       try {
         const data = await apiFetch<any>(`/course-invitations/${token}/`);
-        // The API returns nested serializer or direct fields. Let's format it.
         setInvite({
           token: data.token,
           email: data.email,
@@ -42,7 +41,6 @@ export default function InvitePage() {
           is_expired: data.is_expired,
         });
       } catch (err) {
-        // Fallback demo data if invitation not found, to make sure it doesn't break
         setError("Failed to fetch invitation details. Please verify your token.");
       } finally {
         setLoading(false);
@@ -59,7 +57,6 @@ export default function InvitePage() {
     setAccepting(true);
     setError(null);
     try {
-      // 1. Check if authenticated, if not, perform quick silent login as 'faculty'
       let accessToken = window.localStorage.getItem("accessToken");
       if (!accessToken) {
         try {
@@ -78,7 +75,6 @@ export default function InvitePage() {
         }
       }
 
-      // 2. Accept the invitation
       await apiFetch(`/course-invitations/${token}/accept/`, {
         method: "POST",
       });
@@ -95,76 +91,83 @@ export default function InvitePage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-zinc-950 p-6 text-foreground">
-      <div className="w-full max-w-xl rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 shadow-2xl backdrop-blur-sm">
-        <div className="flex items-center gap-4 border-b border-zinc-800 pb-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <GraduationCap className="h-6 w-6" />
+    <main className="min-h-screen flex items-center justify-center p-6 bg-background relative overflow-hidden select-none">
+      {/* Subtle paper-pulp textures and faint watermark rings in the background */}
+      <div className="absolute inset-0 bg-[radial-gradient(#00000003_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff03_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
+      
+      <div className="w-full max-w-lg border border-border bg-card p-8 shadow-md academic-document-shadow relative z-10 animate-fade-in rounded-sm">
+        {/* Double ledger lines for academic validation */}
+        <div className="academic-double-border pb-4 mb-6 flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-primary/10 border border-primary/20 text-primary shrink-0">
+            <GraduationCap className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Department Syllabus Invitation</h1>
-            <p className="text-sm text-zinc-400">Computer Engineering Curriculum Portal</p>
+            <h1 className="text-base font-serif font-bold text-foreground tracking-tight">Syllabus Mandate Invitation</h1>
+            <p className="text-[9px] text-muted-foreground font-mono font-bold uppercase tracking-wider mt-0.5">official curriculum register</p>
           </div>
         </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-zinc-400">Verifying security token...</p>
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Verifying secure token docket...</p>
           </div>
         ) : error ? (
-          <div className="py-6 space-y-4">
-            <div className="flex items-center gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-red-400 text-sm">
-              <AlertTriangle className="h-5 w-5 shrink-0" />
+          <div className="space-y-4 py-2">
+            <div className="flex items-start gap-3 rounded bg-rose-500/5 border border-rose-500/10 p-4 text-[11px] text-rose-600 font-semibold leading-relaxed">
+              <AlertTriangle className="h-4.5 w-4.5 shrink-0 text-rose-500 mt-0.5" />
               <div>{error}</div>
             </div>
-            <Button variant="secondary" className="w-full" onClick={() => router.push("/")}>
-              Go to Homepage
+            <Button variant="secondary" className="w-full h-10 text-xs font-bold uppercase tracking-wider rounded-sm border-border/80" onClick={() => router.push("/")}>
+              Return to register dashboard
             </Button>
           </div>
         ) : success ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
-              <CheckCircle2 className="h-10 w-10 animate-bounce" />
+          <div className="flex flex-col items-center justify-center py-10 gap-4 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/5 text-emerald-600 border border-emerald-500/10">
+              <CheckCircle2 className="h-6 w-6 animate-bounce" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-emerald-400">Invitation Accepted!</h2>
-              <p className="mt-1 text-sm text-zinc-400">Synchronizing database and launching Editor...</p>
+            <div className="space-y-1">
+              <h2 className="text-base font-serif font-bold text-emerald-600 dark:text-emerald-400">Assignment Accepted</h2>
+              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Synchronizing credentials &amp; redirecting to workspace...</p>
             </div>
           </div>
         ) : (
-          <div className="py-6 space-y-6">
-            <div className="space-y-3">
-              <p className="text-sm text-zinc-300">
-                You have been invited to edit the official curriculum syllabus for the following subject:
-              </p>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5 space-y-3">
+          <div className="space-y-6 text-left">
+            <div className="space-y-3.5">
+              <div className="text-[10px] font-mono font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                <MailCheck className="h-4 w-4 shrink-0" /> Academic Appointment Pending
+              </div>
+              
+              <div className="rounded-sm border border-border bg-background p-5 space-y-4 shadow-inner">
                 <div>
-                  <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Subject Code & Name</span>
-                  <div className="text-lg font-bold text-white mt-0.5">
-                    {invite?.course_code} - {invite?.course_title}
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground font-bold">Subject Specification</span>
+                  <div className="text-sm font-serif font-bold text-foreground mt-1 flex items-start gap-2 flex-wrap">
+                    <span className="font-mono text-[9px] bg-muted px-1.5 py-0.5 rounded-sm border border-border font-bold text-muted-foreground shrink-0">{invite?.course_code}</span>
+                    <span className="leading-tight">{invite?.course_title}</span>
                   </div>
                 </div>
                 <div>
-                  <span className="text-xs uppercase tracking-wider text-zinc-500 font-semibold">Assigned Email</span>
-                  <div className="text-sm text-zinc-300 font-mono mt-0.5">{invite?.email}</div>
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground font-bold">Assigned Faculty Coordinator</span>
+                  <div className="text-xs font-mono font-bold text-foreground mt-1">{invite?.email}</div>
                 </div>
               </div>
             </div>
 
-            <div className="text-xs text-zinc-500 bg-zinc-950/40 p-3 rounded border border-zinc-800/40">
-              Accepting this invitation will assign you as the primary faculty in-charge. You will have full read/write privileges to modify all sections of this course.
+            <div className="text-[11px] text-muted-foreground bg-muted/40 p-4 rounded-sm border border-border/80 font-medium leading-relaxed flex items-start gap-2.5">
+              <ShieldCheck className="h-4.5 w-4.5 text-primary shrink-0 mt-0.5" />
+              <span>Accepting this mandate assigns your account as the primary course coordinator. You will receive exclusive revision authority to draft, validate, and submit sections of this syllabus.</span>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <Button className="flex-1" size="lg" disabled={accepting} onClick={handleAccept}>
+            <div className="pt-2">
+              <Button className="w-full h-11 text-xs font-bold uppercase tracking-wider rounded-sm" disabled={accepting} onClick={handleAccept}>
                 {accepting ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Accepting...
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Authorizing appointment...
                   </>
                 ) : (
                   <>
-                    Accept & Edit Syllabus <ArrowRight className="ml-2 h-4 w-4" />
+                    Accept Assignment &amp; Start Drafting <ArrowRight className="ml-2 h-3.5 w-3.5" />
                   </>
                 )}
               </Button>

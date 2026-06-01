@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, BookPlus, Loader2 } from "lucide-react";
+import { Copy, BookPlus, Loader2, Link2, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
@@ -55,11 +55,8 @@ export function InviteTeacherPanel() {
     setInviteUrl("");
     
     try {
-      // 1. Check if course already exists in this semester
       const existingRes = await apiFetch<any>(`/courses/?semester=${semesterId}&search=${encodeURIComponent(courseCode)}`);
       const existingList = Array.isArray(existingRes) ? existingRes : existingRes.results ?? [];
-      
-      // DRF search might return partial matches, so filter exactly by code
       const existingCourse = existingList.find((c: any) => c.code.toLowerCase() === courseCode.toLowerCase());
       
       let targetCourseId;
@@ -67,7 +64,6 @@ export function InviteTeacherPanel() {
       if (existingCourse) {
         targetCourseId = existingCourse.id;
       } else {
-        // 2. Create the course if it doesn't exist
         const newCourse = await apiFetch<any>("/courses/", {
           method: "POST",
           body: JSON.stringify({
@@ -86,7 +82,6 @@ export function InviteTeacherPanel() {
         targetCourseId = newCourse.id;
       }
 
-      // 3. Send the invite
       const data = await apiFetch<any>(`/courses/${targetCourseId}/invite_teacher/`, {
         method: "POST",
         body: JSON.stringify({ email }),
@@ -101,7 +96,6 @@ export function InviteTeacherPanel() {
       setStatus("error");
       let message = err.message || "Failed to create subject or send invite.";
       try {
-        // Attempt to parse DRF error messages if it's JSON
         const parsed = JSON.parse(message);
         if (typeof parsed === "object") {
           message = Object.entries(parsed).map(([k, v]) => `${k}: ${v}`).join(", ");
@@ -114,79 +108,81 @@ export function InviteTeacherPanel() {
   }
 
   return (
-    <section className="rounded-md border border-border bg-zinc-900/10 backdrop-blur-sm p-5 space-y-4">
-      <div className="border-b border-border pb-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <BookPlus className="h-5 w-5 text-primary" />
-          Create Subject & Assign Teacher
-        </h2>
-        <p className="mt-1 text-sm text-foreground/60">
-          Create a new subject and instantly send a syllabus-writing invite link to the assigned teacher.
-        </p>
+    <section className="rounded border border-border bg-card p-6 shadow-sm space-y-6">
+      <div className="border-b border-border/80 pb-4 flex items-center gap-3">
+        <div className="h-9 w-9 rounded bg-primary/10 flex items-center justify-center text-primary">
+          <BookPlus className="h-4.5 w-4.5" />
+        </div>
+        <div>
+          <h2 className="text-base font-serif font-bold text-foreground">Draft Subject &amp; Assign Coordinator</h2>
+          <p className="text-xs text-muted-foreground font-semibold mt-0.5">
+            Register a new curriculum catalog entry and generate a secure syllabus drafting token.
+          </p>
+        </div>
       </div>
 
       {loadingSemesters ? (
-        <div className="flex items-center justify-center py-6 gap-2 text-sm text-foreground/55">
+        <div className="flex items-center justify-center py-6 gap-2 text-xs font-bold text-muted-foreground/60">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          Loading semesters...
+          Validating semester structure registers...
         </div>
       ) : semesters.length === 0 ? (
-        <div className="p-4 rounded bg-amber-500/5 border border-amber-500/10 text-sm text-amber-500 text-center">
-          No semesters found. Please create semesters first.
+        <div className="p-4 rounded bg-amber-500/5 border border-amber-500/10 text-xs font-bold text-amber-600 text-center leading-relaxed">
+          No semesters configured. Please initialize academic semester tiers in the left sidebar tab.
         </div>
       ) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground/80">Select Semester</span>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">Select Semester Tier</span>
               <select
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs font-bold transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary cursor-pointer"
                 value={semesterId}
                 onChange={(event) => setSemesterId(event.target.value)}
               >
                 {semesters.map((sem) => (
-                  <option key={sem.id} value={sem.id}>
+                  <option key={sem.id} value={sem.id} className="bg-card text-foreground">
                     {sem.department_code || "COMP"} - Sem {sem.number} ({sem.academic_year_name})
                   </option>
                 ))}
               </select>
             </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground/80">Subject Code</span>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">Subject Code</span>
               <input
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 value={courseCode}
                 onChange={(event) => setCourseCode(event.target.value)}
                 placeholder="e.g. CS301"
               />
             </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground/80">Subject Title</span>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">Subject Title</span>
               <input
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 value={courseTitle}
                 onChange={(event) => setCourseTitle(event.target.value)}
-                placeholder="e.g. Data Structures"
+                placeholder="e.g. Data Structures &amp; Algorithms"
               />
             </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground/80">Course Type</span>
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">Syllabus Type</span>
               <select
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs font-bold transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary cursor-pointer"
                 value={courseType}
                 onChange={(event) => setCourseType(event.target.value)}
               >
-                <option value="THEORY">Theory</option>
-                <option value="LAB">Practical (Lab)</option>
-                <option value="THEORY_LAB">Theory and Practical</option>
-                <option value="PROJECT">Project</option>
-                <option value="ELECTIVE">Elective</option>
+                <option value="THEORY" className="bg-card text-foreground">Theory Coursework</option>
+                <option value="LAB" className="bg-card text-foreground">Practical (Lab Work)</option>
+                <option value="THEORY_LAB" className="bg-card text-foreground">Integrated Theory &amp; Practical</option>
+                <option value="PROJECT" className="bg-card text-foreground">Project Shell</option>
+                <option value="ELECTIVE" className="bg-card text-foreground">Elective Shell</option>
               </select>
             </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-foreground/80">Teacher Email</span>
+            <label className="block space-y-1.5 md:col-span-2">
+              <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">Coordinator Email Address</span>
               <input
-                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
+                className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -196,48 +192,50 @@ export function InviteTeacherPanel() {
           </div>
           
           <Button
-            className="w-full md:w-auto"
+            className="w-full md:w-auto h-10 mt-2"
             onClick={() => void createSubjectAndInvite()}
             disabled={status === "sending"}
           >
             {status === "sending" ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Generating credentials...
               </>
             ) : (
-              "Create Subject & Invite"
+              "Initialize Subject & Generate Token"
             )}
           </Button>
         </div>
       )}
 
       {inviteUrl && (
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2 mt-4">
-          <div className="text-sm font-medium text-primary">Success! Generated Subject Link</div>
+        <div className="rounded border border-primary/20 bg-primary/5 p-4 space-y-3.5 mt-4 animate-fade-in">
+          <div className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-1.5">
+            <CheckCircle2 className="h-4 w-4 text-primary" /> Subject entry added successfully
+          </div>
           <div className="flex gap-2">
-            <input
-              className="h-10 min-w-0 flex-1 rounded-md border border-border bg-zinc-950 px-3 text-sm font-mono text-zinc-300"
-              readOnly
-              value={inviteUrl}
-            />
+            <div className="h-10 flex-1 rounded border border-border bg-zinc-950 px-3.5 flex items-center min-w-0 font-mono text-xs">
+              <span className="text-zinc-300 truncate w-full">{inviteUrl}</span>
+            </div>
             <Button
               variant="secondary"
+              className="h-10 px-4 font-bold text-[10px]"
               onClick={() => {
                 void navigator.clipboard.writeText(inviteUrl);
-                alert("Link copied to clipboard!");
+                alert("Subject invitation link copied to clipboard!");
               }}
             >
-              <Copy className="h-4 w-4" /> Copy
+              <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
             </Button>
           </div>
-          <p className="text-xs text-foreground/60">
-            Send this link to the teacher. Opening it accepts their subject assignment.
+          <p className="text-[10px] font-semibold text-muted-foreground/60 leading-relaxed flex items-center gap-1">
+            <Link2 className="h-3 w-3 text-primary shrink-0" />
+            Distribute this link. Accepting coordination locks writing credentials for the coordinate teacher.
           </p>
         </div>
       )}
 
       {errorMsg && (
-        <p className="text-sm text-rose-500 font-medium mt-2">
+        <p className="text-xs text-rose-600 font-bold mt-2 leading-relaxed bg-rose-500/5 p-3 rounded border border-rose-500/10">
           {errorMsg}
         </p>
       )}
