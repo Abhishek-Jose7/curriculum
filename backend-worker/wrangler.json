@@ -2,12 +2,14 @@
   "name": "curriculum-backend",
   "main": "src/index.ts",
   "compatibility_date": "2024-04-03",
-  "compatibility_flags": [ "nodejs_compat" ],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "d1_databases": [
     {
-      "binding": "DB",
+      "binding": "curriculum_db",
       "database_name": "curriculum-db",
-      "database_id": "8f8682a2-8924-4f05-8968-3e4bcf54b1f6"
+      "database_id": "3a696de6-d975-45cc-8a2b-c59a290bfedc"
     }
   ],
   "r2_buckets": [
