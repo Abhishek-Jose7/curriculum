@@ -17,7 +17,7 @@ app.use(
   cors({
     origin: (origin, c) => {
       const allowed = c.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:3000";
-      const origins = allowed.split(",").map((o) => o.trim());
+      const origins = allowed.split(",").map((o: string) => o.trim());
       if (origins.includes(origin)) {
         return origin;
       }
@@ -346,6 +346,65 @@ api.post("/courses/:id/compare_versions/", async (c) => {
   const right = JSON.parse(b.snapshot);
   return c.json({ version_a: { id: a.id, number: a.version_number, summary: a.change_summary }, version_b: { id: b.id, number: b.version_number, summary: b.change_summary }, changes: diffSnapshots(left, right), left, right });
 });
+
+api.get("/courses/:id/compare_previous_year/", async (c) => {
+  const courseId = c.req.param("id");
+  const db = c.env.DB;
+  
+  // 1. Get the current course details
+  const courseRepo = new CoursesRepository(db);
+  const currentCourse = await courseRepo.detail(courseId) as any;
+  if (!currentCourse) {
+    return c.json({ detail: "Course not found." }, 404);
+  }
+  
+  // 2. Fetch the semester details for the current course
+  const currentSemester = await db.prepare("SELECT * FROM semesters WHERE id = ?").bind(currentCourse.semester_id).first<any>();
+  if (!currentSemester) {
+    return c.json({ detail: "Current semester not found." }, 404);
+  }
+  
+  // 3. Fetch current academic year
+  const currentAy = await db.prepare("SELECT * FROM academic_years WHERE id = ?").bind(currentSemester.academic_year_id).first<any>();
+  if (!currentAy) {
+    return c.json({ detail: "Current academic year not found." }, 404);
+  }
+  
+  // 4. Find the most recent prior academic year that has a course with the same code and same department
+  const priorCourses = await db.prepare(`
+    SELECT c.id, ay.name as academic_year_name, ay.starts_on
+    FROM courses c
+    JOIN semesters s ON s.id = c.semester_id
+    JOIN academic_years ay ON ay.id = s.academic_year_id
+    WHERE c.code = ?
+      AND s.department_id = ?
+      AND ay.starts_on < ?
+    ORDER BY ay.starts_on DESC
+  `).bind(currentCourse.code, currentSemester.department_id, currentAy.starts_on).all<any>();
+  
+  const results = priorCourses.results ?? [];
+  if (results.length === 0) {
+    return c.json({ detail: "No previous year's syllabus found for this course code." }, 404);
+  }
+  
+  // Pick the most recent one
+  const prevCourseRow = results[0];
+  const prevCourse = await courseRepo.detail(prevCourseRow.id) as any;
+  if (!prevCourse) {
+    return c.json({ detail: "Failed to load previous year's course details." }, 500);
+  }
+  
+  // 5. Compare current course details with the previous year's course details
+  const changes = diffSnapshots(prevCourse, currentCourse);
+  
+  return c.json({
+    current: currentCourse,
+    previous: prevCourse,
+    previous_academic_year_name: prevCourseRow.academic_year_name,
+    changes
+  });
+});
+
 
 api.post("/courses/:id/rollback/", async (c) => {
   if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);

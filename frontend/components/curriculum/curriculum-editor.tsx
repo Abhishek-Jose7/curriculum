@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ClipboardList, Eye, FlaskConical, Library, MessageSquare, Plus, Save, ScrollText, Trash2, Calendar, AlertTriangle, FileCode, CheckCircle2, Loader2 } from "lucide-react";
+import { BookOpen, Check, ClipboardList, Eye, FlaskConical, Library, MessageSquare, Plus, Save, ScrollText, Trash2, Calendar, AlertTriangle, FileCode, CheckCircle2, Loader2, FileSearch } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ const tabs = [
   { key: "references", label: "References", icon: Library },
   { key: "comments", label: "Comments", icon: MessageSquare },
   { key: "versions", label: "History", icon: ClipboardList },
+  { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch },
   { key: "preview", label: "Live Preview", icon: Eye }
 ] as const;
 
@@ -189,6 +190,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "references" && <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} />}
           {active === "comments" && <CommentsPanel course={course} />}
           {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
+          {active === "compare_previous" && <ComparePreviousPanel course={course} />}
           {active === "preview" && (
             <div className="h-full w-full overflow-hidden rounded border border-border shadow-sm">
               <A4Preview course={course} />
@@ -616,4 +618,84 @@ function validateCourse(course: CourseDraft) {
     (course.reference_books?.length || 0) === 0 && "References"
   ].filter(Boolean) as string[];
   return { missing };
+}
+
+function ComparePreviousPanel({ course }: { course: CourseDraft }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    apiFetch<any>(`/courses/${course.id}/compare_previous_year/`)
+      .then((res) => {
+        setData(res);
+      })
+      .catch((err) => {
+        let msg = "Failed to load comparison.";
+        if (err instanceof Error) {
+          try {
+            const parsed = JSON.parse(err.message);
+            msg = parsed.detail ?? msg;
+          } catch {
+            msg = err.message;
+          }
+        }
+        setError(msg);
+      })
+      .finally(() => setLoading(false));
+  }, [course.id]);
+
+  if (loading) {
+    return (
+      <div className="py-8 text-center text-xs font-bold text-muted-foreground/50">
+        Fetching previous year's syllabus and generating comparison ledger...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded border border-amber-500/20 bg-amber-500/5 p-5 text-xs font-semibold text-foreground flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+          <div>
+            <div className="font-extrabold text-amber-600 dark:text-amber-400">No Historical Reference Found</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{error}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Panel title="Compare Previous Year's Syllabus" description={`Comparing current syllabus with the reference syllabus from academic year ${data.previous_academic_year_name || "previous year"}.`}>
+      {data.changes?.length === 0 ? (
+        <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-6 text-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
+          No differences discovered between the current syllabus and the previous year's syllabus.
+        </div>
+      ) : (
+        <div className="space-y-3.5 mt-4">
+          {data.changes?.map((change: any, i: number) => (
+            <div key={i} className="rounded border border-border overflow-hidden bg-card shadow-sm">
+              <div className="bg-muted/80 px-4 py-2 text-[9px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40 font-mono">
+                {change.section} &gt; {change.field}
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-border/60 text-xs">
+                <div className="bg-rose-500/5 p-4">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-rose-500 font-mono">Previous Year ({data.previous_academic_year_name})</div>
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-medium text-foreground/75 leading-relaxed font-mono">{typeof change.old === "string" ? change.old : JSON.stringify(change.old, null, 2)}</pre>
+                </div>
+                <div className="bg-emerald-500/5 p-4">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-emerald-500 font-mono">Current Year (Draft)</div>
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-medium text-foreground/75 leading-relaxed font-mono">{typeof change.new === "string" ? change.new : JSON.stringify(change.new, null, 2)}</pre>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
 }
