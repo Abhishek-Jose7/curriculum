@@ -1,287 +1,142 @@
 # Curriculum Management and Publishing System
 
-Production-grade monorepo for a college engineering department to author, review, approve, version, and publish official curriculum documents from structured database content.
+Production-grade edge-native monorepo for a college engineering department to author, review, approve, version, and publish official curriculum documents from structured database content.
 
-## Architecture Plan
+## Architecture
 
-The system follows this publishing pipeline:
+The system is fully edge-native and runs entirely on serverless architectures:
 
-```mermaid
-flowchart LR
-  Faculty["Faculty modular editor"] --> API["Django REST API"]
-  Reviewer["Reviewer comments and decisions"] --> API
-  Admin["Admin/HOD workflow control"] --> API
-  API --> DB[("PostgreSQL normalized curriculum schema")]
-  DB --> Versioning["CourseVersion JSON snapshots"]
-  DB --> Renderer["Django templates + paged CSS + WeasyPrint"]
-  Renderer --> PDF["Official curriculum PDF"]
-  PDF --> Public["Public published curriculum access"]
-```
+- **Frontend**: Next.js App Router (deployed on Vercel or Cloudflare Pages) which queries the database API.
+- **Backend**: Cloudflare Workers + Hono API framework (deployed on Cloudflare Workers) which handles authentication, curriculum details, review workflows, and version snapshots.
+- **Database**: Cloudflare D1 (relational SQLite database hosted natively on Cloudflare's edge).
+- **Object Storage**: Cloudflare R2 bucket storing fonts, media assets, and compiled PDF handbook artifacts.
+- **Queue**: Cloudflare Queues for asynchronous browser-based PDF compilation using Headless Chromium rendering (`@cloudflare/puppeteer`).
 
-Key decisions:
-
-- Structured relational content is the source of truth. Raw PDFs are outputs only.
-- Course editing is modular, section based, and workflow-aware.
-- Versions are immutable snapshots with editor, timestamp, previous version, and rollback support.
-- PDF generation uses HTML/CSS paged media templates and WeasyPrint.
-- The official uploaded PDF template belongs in `CurriculumTemplate.template_pdf`; matching CSS and page partials live under `backend/templates/pdf`.
-- JWT handles API authentication; role and object permissions enforce Admin/HOD, Faculty, Reviewer, and Public access.
-
-## Database Schema
-
-Core entities:
-
-- `User`: custom Django user with `role`, `department`, designation, contact fields.
-- `Department`: institution metadata, branding, logo.
-- `AcademicYear`: active academic year range.
-- `Semester`: department/year/semester structure.
-- `Course`: structured course shell with status, type, teaching scheme, exam scheme, faculty assignment.
-- `CourseOutcome`, `Module`, `Topic`, `Experiment`, `AssessmentScheme`, `ReferenceBook`: normalized syllabus sections.
-- `CourseVersion`: immutable JSON snapshot, editor, timestamp, previous version.
-- `ReviewerComment`: section-keyed review comments, resolution tracking.
-- `ApprovalWorkflow`: workflow state transitions and decisions.
-- `CurriculumTemplate`: official template metadata, source PDF, HTML/CSS configuration.
-- `PublishedCurriculum`: generated public PDF/DOCX records.
-- `Notification`, `AuditLog`: user notifications and protected route audit trail.
-
-Supabase/PostgreSQL schema:
-
-- Full SQL schema with enums, normalized tables, indexes, triggers, and RLS policies is available at [supabase/schema.sql](</C:/comps/supabase/schema.sql>).
-
-Course states:
-
-`DRAFT -> SUBMITTED -> UNDER_REVIEW -> CHANGES_REQUESTED -> APPROVED -> PUBLISHED -> LOCKED`
-
-Faculty can edit draft/submitted/review/change-request states. Approved and published records require admin/HOD reopening.
+---
 
 ## Folder Structure
 
 ```text
-backend/
-  apps/
-    accounts/       custom user, roles, JWT-facing profile APIs
-    curriculum/     normalized curriculum data, versions, editor APIs
-    workflow/       reviewer comments and approval decisions
-    publishing/     templates, WeasyPrint rendering, published PDFs
-    notifications/  user notification feed
-    audit/          API mutation audit logs
-  config/           Django settings, URL router, ASGI/WSGI
-  templates/pdf/    official PDF page templates and paged media CSS
-  tests/            pytest model/API tests
+backend-worker/
+  src/              Hono API routes, repositories, and services
+  migrations/       D1 SQLite schema migrations
+  schema.sql        canonical database schema
+  seed.sql          seeding script for development
+  tsconfig.json     TypeScript worker configuration
+  wrangler.json     Cloudflare Worker and bindings configuration
 
 frontend/
-  app/              Next.js app routes
-  components/       shell, UI primitives, modular curriculum editor
+  app/              Next.js app pages (basic, teacher editing, review, print preview)
+  components/       layout, UI primitives, and the curriculum editor
   hooks/            autosave hooks
-  lib/              API client, validation, utilities
+  lib/              API fetch utilities
   types/            TypeScript domain types
-  tests/            frontend validation tests
-
-nginx/              reverse proxy for API, static/media, frontend
-docker-compose.yml  PostgreSQL, backend, frontend, nginx
+  tests/            frontend unit tests
 ```
 
-## API Design
-
-Swagger/OpenAPI is available at `/api/docs/`.
-
-Important routes:
-
-- `POST /api/auth/token/`, `POST /api/auth/token/refresh/`
-- `GET /api/auth/me/`
-- `/api/departments/`, `/api/academic-years/`, `/api/semesters/`
-- `/api/courses/`
-- `POST /api/courses/{id}/submit/`
-- `POST /api/courses/{id}/autosave/`
-- `GET /api/courses/{id}/versions/`
-- `POST /api/courses/{id}/rollback/`
-- `POST /api/courses/{id}/reopen/`
-- `GET /api/courses/{id}/preview_pdf/`
-- `/api/course-outcomes/`, `/api/modules/`, `/api/topics/`, `/api/experiments/`
-- `/api/assessment-schemes/`, `/api/reference-books/`
-- `/api/reviewer-comments/`
-- `POST /api/reviewer-comments/{id}/resolve/`
-- `/api/approval-workflows/`
-- `/api/curriculum-templates/`
-- `POST /api/published-curricula/publish/`
-- `GET /api/published-curricula/`
-
-## Implementation Phases
-
-Phase 1: project setup, auth, roles, database schema.
-
-Phase 2: course management, semesters, faculty assignment.
-
-Phase 3: modular curriculum editor with tabs and validation.
-
-Phase 4: review/comment workflow.
-
-Phase 5: versioning snapshots, comparison-ready history, rollback.
-
-Phase 6: exact PDF rendering engine using reusable templates and `@page` CSS.
-
-Phase 7: final curriculum assembly and public publishing.
-
-Phase 8: Docker, nginx, environment structure, seed data, tests.
+---
 
 ## Running Locally
 
-1. Copy environment values:
+### 1. Start the Backend Worker
 
-```powershell
-Copy-Item .env.example .env
+Navigate to the `backend-worker` directory, install dependencies, and run wrangler dev:
+
+```bash
+cd backend-worker
+npm install
+npm run dev
 ```
 
-2. Start the stack:
+This starts the local Cloudflare Worker development server (typically on `http://localhost:8787`).
+To run migrations and seed data locally:
 
-```powershell
-docker compose up --build
+```bash
+# Apply schema to local dev database
+npx wrangler d1 execute curriculum-db --local --file=./schema.sql
+
+# Seed local dev database
+npx wrangler d1 execute curriculum-db --local --file=./seed.sql
 ```
 
-3. Run migrations and seed data:
+### 2. Start the Frontend Application
 
-```powershell
-docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py seed_curriculum
-```
+Navigate to the `frontend` directory, install dependencies, and start Next.js:
 
-4. Open:
-
-- Frontend: `http://localhost`
-- API docs: `http://localhost/api/docs/`
-- Django admin: `http://localhost/admin/`
-
-Seed users:
-
-- `admin` / `ChangeMe123!`
-- `faculty` / `ChangeMe123!`
-- `reviewer` / `ChangeMe123!`
-
-## Admin Workflow
-
-As an admin/HOD:
-
-1. Sign in and create the academic structure:
-   - Department
-   - Academic year
-   - Semester
-   - Course shell
-2. Open `/admin`.
-3. In **Invite Teacher to Subject**, select the course and enter the teacher email.
-4. The frontend calls:
-
-```http
-POST /api/courses/{course_id}/invite_teacher/
-Authorization: Bearer <admin-access-token>
-Content-Type: application/json
-
-{ "email": "teacher@college.edu" }
-```
-
-5. The backend creates a `CourseInvitation`, sends the teacher a subject-specific link, and returns:
-
-```json
-{
-  "course_code": "CS301",
-  "course_title": "Data Structures and Algorithms",
-  "email": "teacher@college.edu",
-  "invitation_url": "http://localhost:3000/invite/<token>"
-}
-```
-
-6. The teacher opens the link, signs in, accepts the invitation, and is assigned only to that subject.
-7. The teacher lands in the Course Editor and edits structured sections with live PDF preview.
-
-Development email uses Django's console backend by default, so invitation emails appear in the backend logs. Configure `EMAIL_BACKEND`, SMTP credentials, and `DEFAULT_FROM_EMAIL` for production.
-
-Teacher accept API:
-
-```http
-POST /api/course-invitations/{token}/accept/
-Authorization: Bearer <teacher-access-token>
-```
-
-## Development Without Docker
-
-Backend:
-
-```powershell
-cd backend
-python -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py seed_curriculum
-python manage.py runserver
-```
-
-Frontend:
-
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## PDF Template Matching
+Create/check the `.env` file in the `frontend` folder to ensure it points to the backend worker port (e.g. `http://localhost:8787/api` or `http://localhost:8787`):
 
-The official PDF template is the source of truth. The FRCRCE-style print implementation now lives in:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8787/api
+```
 
-- [backend/static/css/print.css](</C:/comps/backend/static/css/print.css>)
-- [backend/templates/base.html](</C:/comps/backend/templates/base.html>)
-- [backend/templates/cover_page.html](</C:/comps/backend/templates/cover_page.html>)
-- [backend/templates/preamble.html](</C:/comps/backend/templates/preamble.html>)
-- [backend/templates/semester_structure.html](</C:/comps/backend/templates/semester_structure.html>)
-- [backend/templates/course_detail.html](</C:/comps/backend/templates/course_detail.html>)
-- [backend/templates/annexure.html](</C:/comps/backend/templates/annexure.html>)
-- [backend/templates/reviewer_readonly.html](</C:/comps/backend/templates/reviewer_readonly.html>)
+Open `http://localhost:3000` in your browser.
 
-Admin/faculty PDF preview uses the official publishing template. Reviewers receive the separate read-only reviewer template and attach comments against sections; they do not edit the admin/faculty template or source form.
+---
 
-To tune exact output:
+## Deployment Guide
 
-1. Upload/store the official PDF in `CurriculumTemplate.template_pdf`.
-2. Put logos and seals under `backend/static/branding` or department media.
-3. Adjust `backend/templates/pdf/base.html` for margins, typography, headers, footers, page numbers.
-4. Place the institutional logo at `backend/static/img/frcrce_logo.png`.
-5. Place deterministic Times font files at:
-   - `backend/static/fonts/times.ttf`
-   - `backend/static/fonts/timesbd.ttf`
-6. Use `GET /api/courses/{id}/preview_pdf/` for admin/faculty preview.
-7. Use `GET /api/courses/{id}/reviewer_readonly_pdf/` for reviewer read-only links.
-8. Use `POST /api/published-curricula/publish/` for final assembly.
+### Deploying the Backend on Cloudflare Workers
 
-Pagination controls now include:
+1. Make sure you are authenticated with wrangler:
+   ```bash
+   npx wrangler login
+   ```
 
-- `tbody.module-group { page-break-inside: avoid; }`
-- WeasyPrint running institutional headers via `element(running-header)`
-- embedded font-face hooks for deterministic text metrics
-- `course-section` and `annexure-section` forced page starts
-- backend hard limits for high-risk text fields and a two-pass WeasyPrint page-count validation before PDF write
+2. If the D1 database does not exist, create it:
+   ```bash
+   npx wrangler d1 create curriculum-db
+   ```
+   Take the `database_id` returned and update the `d1_databases` block in `backend-worker/wrangler.json`.
 
-The current implementation provides the exact rendering mechanism and a formal academic layout. Pixel-perfect matching requires the actual university PDF asset, logo files, fonts, and measured spacing from the uploaded source document.
+3. Initialize the D1 schema and seed data on the remote production database:
+   ```bash
+   # Create tables
+   npx wrangler d1 execute curriculum-db --remote --file=./schema.sql --yes
+
+   # Seed initial datasets
+   npx wrangler d1 execute curriculum-db --remote --file=./seed.sql --yes
+   ```
+
+4. Create the R2 bucket for file storage:
+   ```bash
+   npx wrangler r2 bucket create curriculum-files
+   ```
+
+5. Deploy the Worker API:
+   ```bash
+   cd backend-worker
+   npx wrangler deploy
+   ```
+
+Note the deployed worker endpoint (e.g., `https://curriculum-backend.<your-subdomain>.workers.dev`).
+
+---
+
+### Deploying the Frontend on Vercel
+
+The frontend Next.js application is configured to deploy directly to Vercel:
+
+1. Import your repository into Vercel.
+2. In the project settings, set:
+   - **Framework Preset**: `Next.js`
+   - **Root Directory**: `frontend`
+3. Add the following **Environment Variable**:
+   - `NEXT_PUBLIC_API_URL`: The HTTP endpoint of your deployed Cloudflare Worker API followed by `/api` (e.g. `https://curriculum-backend.<your-subdomain>.workers.dev/api`).
+4. Click **Deploy**. Vercel will build the Next.js app and serve it edge-cached globally!
+
+---
 
 ## Testing
 
-Backend:
+Run unit tests in the frontend workspace:
 
-```powershell
-cd backend
-pytest
-```
-
-Frontend:
-
-```powershell
+```bash
 cd frontend
 npm test
 ```
-
-## Production Notes
-
-- Set a strong `DJANGO_SECRET_KEY`.
-- Set `DJANGO_DEBUG=False`.
-- Restrict `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS`.
-- Place nginx behind TLS or terminate TLS at the platform load balancer.
-- Persist PostgreSQL, media, and static volumes.
-- Review file upload scanning requirements for official templates and generated artifacts.
