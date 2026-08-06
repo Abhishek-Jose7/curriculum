@@ -4,6 +4,11 @@ import type { AuthUser, Env, Variables } from "../types";
 const encoder = new TextEncoder();
 
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
+  const path = c.req.path;
+  if (path.includes("/auth/token")) {
+    await next();
+    return;
+  }
   const header = c.req.header("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   if (!token) return c.json({ detail: "Authentication credentials were not provided." }, 401);

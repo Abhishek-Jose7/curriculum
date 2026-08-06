@@ -2,15 +2,26 @@
 
 import type { CourseDraft } from "@/types/curriculum";
 import { cn } from "@/lib/utils";
+import { useRef, useState, useEffect } from "react";
+import { FileDown, Printer, Maximize2, Minimize2 } from "lucide-react";
 
 type Props = {
   course: CourseDraft;
   selectedSection?: string;
   onSelectSection?: (section: string) => void;
   reviewMode?: boolean;
+  isFullScreen?: boolean;
+  onToggleFullScreen?: () => void;
 };
 
-export function A4Preview({ course, selectedSection, onSelectSection, reviewMode = false }: Props) {
+export function A4Preview({ 
+  course, 
+  selectedSection, 
+  onSelectSection, 
+  reviewMode = false,
+  isFullScreen = false,
+  onToggleFullScreen
+}: Props) {
   const isLab = course.course_type === "LAB";
   const hasLab = (course.practical_hours || 0) > 0 || isLab;
   
@@ -24,10 +35,108 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
 
   const totalModuleHours = course.modules.reduce((sum, module) => sum + (module.contact_hours || 0), 0);
 
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  const downloadAsDoc = () => {
+    if (!pageRef.current) return;
+    
+    const css = `
+      body { font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.2; padding: 20px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
+      td, th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; }
+      .text-center { text-align: center; }
+      .font-bold { font-weight: bold; }
+      h1, h2, h3, h4 { margin: 10px 0; }
+      .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
+      .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
+      .exam-tbl { width: 100%; border-collapse: collapse; margin: 0; }
+      .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
+      .col-hdr { font-weight: bold; text-align: center; }
+    `;
+
+    const docContent = pageRef.current.innerHTML;
+
+    const html = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <title>${course.code} - ${course.title}</title>
+        <!--[if gte mso 9]>
+        <xml>
+          <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>100</w:Zoom>
+          </w:WordDocument>
+        </xml>
+        <![endif]-->
+        <style>${css}</style>
+      </head>
+      <body>
+        ${docContent}
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${course.code}_Syllabus.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const printSyllabus = () => {
+    window.open(`/print/course/${course.id}/`, "_blank");
+  };
+
   return (
-    <div className="h-full overflow-auto bg-zinc-200 p-4 dark:bg-zinc-950">
-      <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4">
-        <div className="relative w-full bg-white px-[45px] pb-[68px] pt-[57px] text-black shadow-lg" style={{ fontFamily: '"Times New Roman", Times, serif', fontSize: '10pt', lineHeight: '1.2' }}>
+    <div className="h-full w-full overflow-auto bg-zinc-200 p-4 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
+      
+      {/* Document Control Toolbar */}
+      <div className="mx-auto mb-4 flex w-full items-center justify-between gap-3 rounded-md bg-white p-2.5 shadow-sm border border-border dark:bg-zinc-900 shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Syllabus controls</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadAsDoc}
+            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm hover:bg-primary/95 transition-all cursor-pointer"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            Download Word
+          </button>
+          
+          <button
+            onClick={printSyllabus}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/50 transition-all cursor-pointer"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print Syllabus
+          </button>
+
+          {onToggleFullScreen && (
+            <button
+              onClick={onToggleFullScreen}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/50 transition-all cursor-pointer"
+            >
+              {isFullScreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {isFullScreen ? "Exit Fullscreen" : "Fullscreen"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full">
+        <div 
+          ref={pageRef}
+          className="bg-white px-[20px] sm:px-[45px] pb-[68px] pt-[57px] text-black shadow-lg w-full font-serif" 
+          style={{ 
+            fontSize: '10pt', 
+            lineHeight: '1.2' 
+          }}
+        >
           
           <header className="mb-2 flex w-full items-center border-b-[1.5pt] border-black pb-[5pt]">
             <div className="pr-[5pt] w-[21mm]">
@@ -93,16 +202,7 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
                 <tr>
                   <td colSpan={8} style={{ padding: 0, border: 0 }}>
                     <Selectable id="examination" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
-                      <table className="w-full border-collapse m-0 exam-tbl" style={{ tableLayout: "fixed", fontSize: "9pt", lineHeight: 1.1 }}>
-                        <colgroup>
-                          <col style={{ width: "18%" }} />
-                          <col style={{ width: "14%" }} />
-                          <col style={{ width: "14%" }} />
-                          <col style={{ width: "14%" }} />
-                          <col style={{ width: "14%" }} />
-                          <col style={{ width: "14%" }} />
-                          <col style={{ width: "12%" }} />
-                        </colgroup>
+                      <table className="w-full border-collapse m-0 exam-tbl" style={{ fontSize: "9pt", lineHeight: 1.1 }}>
                         <tbody>
                           <tr>
                             <td colSpan={7} className="font-bold text-center border-b-[1pt] border-black pb-[2pt]">Examination Scheme</td>
@@ -278,8 +378,8 @@ export function A4Preview({ course, selectedSection, onSelectSection, reviewMode
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
         .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
-        .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
-        .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; }
+        .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
+        .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
         .col-hdr { font-weight: bold; text-align: center; border-top: 0.75pt solid #000; }
       ` }} />
     </div>

@@ -31,6 +31,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [active, setActive] = useState<TabKey>("basic");
   const [course, setCourse] = useState<CourseDraft | null>(null);
   const [version, setVersion] = useState(1);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -83,9 +84,12 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => current ? ({ ...current, [key]: value } as CourseDraft) : null);
 
   return (
-    <div className="grid min-h-[calc(100vh-140px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm xl:grid-cols-[1.1fr_0.9fr] animate-fade-in text-left">
+    <div className={cn(
+      "grid min-h-[calc(100vh-80px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
+      isExpanded ? "grid-cols-1" : "xl:grid-cols-2"
+    )}>
       {/* Left Column Form Manuscript Editor */}
-      <section className="min-w-0 overflow-hidden bg-card flex flex-col">
+      <section className={cn("min-w-0 overflow-hidden bg-card", isExpanded ? "hidden" : "flex flex-col")}>
         {/* Course identity header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 p-5 bg-background/10">
           <div className="space-y-1">
@@ -124,19 +128,19 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
         </div>
 
         {/* Dynamic Nav Chapters list */}
-        <div className="flex border-b border-border/60 overflow-x-auto bg-secondary/15 px-3 scrollbar-thin">
+        <div className="flex flex-wrap gap-1.5 bg-secondary/10 p-2 border-b border-border/60">
           {tabs.map(tab => (
             <button 
               key={tab.key} 
               onClick={() => setActive(tab.key)} 
               className={cn(
-                "flex items-center gap-1.5 px-3.5 py-3 text-[11px] font-bold border-b border-transparent transition-all uppercase tracking-wider whitespace-nowrap", 
+                "flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-bold rounded transition-all uppercase tracking-wider whitespace-nowrap border border-transparent", 
                 active === tab.key 
-                  ? "border-primary text-primary bg-background" 
-                  : "text-foreground/50 hover:text-foreground hover:bg-muted/40"
+                  ? "bg-background text-primary shadow-sm border-border/60" 
+                  : "text-foreground/60 hover:text-foreground hover:bg-muted/40"
               )}
             >
-              <tab.icon className={cn("h-3 w-3 shrink-0", active === tab.key ? "text-primary" : "text-foreground/35")} />
+              <tab.icon className={cn("h-3 w-3 shrink-0", active === tab.key ? "text-primary" : "text-foreground/45")} />
               {tab.label}
             </button>
           ))}
@@ -193,15 +197,22 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "compare_previous" && <ComparePreviousPanel course={course} />}
           {active === "preview" && (
             <div className="h-full w-full overflow-hidden rounded border border-border shadow-sm">
-              <A4Preview course={course} />
+              <A4Preview 
+                course={course} 
+                isFullScreen={isExpanded}
+                onToggleFullScreen={() => setIsExpanded(prev => !prev)}
+              />
             </div>
           )}
         </div>
       </section>
-
+ 
       {/* Right Column Realistic Print Desk Preview */}
-      <aside className="hidden min-w-0 border-l border-border bg-zinc-200 dark:bg-zinc-950/60 xl:flex flex-col">
-        <div className="flex h-20 items-center justify-between border-b border-border px-5 bg-card">
+      <aside className={cn(
+        "min-w-0 border-l border-border bg-zinc-200 dark:bg-zinc-950/60",
+        isExpanded ? "flex flex-col w-full h-full" : "hidden xl:flex xl:flex-col"
+      )}>
+        <div className="flex h-20 items-center justify-between border-b border-border px-5 bg-card shrink-0">
           <div className="flex items-center gap-1.5">
             <FileCode className="h-4 w-4 text-primary shrink-0" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-foreground/80">Compliant Print Desk (A4)</span>
@@ -210,10 +221,12 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
             Pre-rendering
           </span>
         </div>
-        <div className="flex-1 overflow-hidden p-6 flex justify-center academic-desk-bg relative">
-          <div className="w-full h-full rounded shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-black/5 bg-white overflow-hidden">
-            <A4Preview course={course} />
-          </div>
+        <div className="flex-1 overflow-hidden relative">
+          <A4Preview 
+            course={course} 
+            isFullScreen={isExpanded}
+            onToggleFullScreen={() => setIsExpanded(prev => !prev)}
+          />
         </div>
       </aside>
     </div>

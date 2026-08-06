@@ -7,7 +7,7 @@
   ],
   "d1_databases": [
     {
-      "binding": "curriculum_db",
+      "binding": "DB",
       "database_name": "curriculum-db",
       "database_id": "3a696de6-d975-45cc-8a2b-c59a290bfedc"
     }
@@ -19,7 +19,8 @@
     }
   ],
   "browser": {
-    "binding": "BROWSER"
+    "binding": "BROWSER",
+    "remote": true
   },
   "queues": {
     "producers": [

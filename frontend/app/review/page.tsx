@@ -34,6 +34,7 @@ function ReviewContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deciding, setDeciding] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCourse = useCallback(async () => {
@@ -152,9 +153,12 @@ function ReviewContent() {
 
   return (
     <AppShell>
-      <div className="grid min-h-[calc(100vh-140px)] overflow-hidden border border-border bg-card shadow-sm xl:grid-cols-[1fr_380px] animate-fade-in rounded-sm">
+      <div className={cn(
+        "grid min-h-[calc(100vh-80px)] overflow-hidden border border-border bg-card shadow-sm animate-fade-in rounded-sm",
+        isExpanded ? "grid-cols-1" : "xl:grid-cols-[1fr_380px]"
+      )}>
         {/* Left Hand Document Review Workspace Pane */}
-        <section className="min-w-0 flex flex-col bg-background/30">
+        <section className={cn("min-w-0 bg-background/30", isExpanded ? "w-full h-full flex flex-col" : "flex flex-col")}>
           {/* Header Action Row */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border p-6 bg-card/60">
             <div className="space-y-2">
@@ -206,17 +210,22 @@ function ReviewContent() {
                   <span className="h-1.5 w-1.5 rounded-full bg-primary/60" /> COMPLIANT PRINT SPECIFICATION (A4)
                 </span>
               </div>
-              <div className="flex-1 overflow-y-auto bg-slate-100/50 dark:bg-zinc-950/20 p-4 sm:p-6 md:p-8 flex justify-center scrollbar-thin">
-                <div className="w-full max-w-[210mm] bg-white text-black shadow-md academic-hairline shrink-0 min-h-[297mm]">
-                  <A4Preview course={course} reviewMode selectedSection={selected} onSelectSection={setSelected} />
-                </div>
+              <div className="flex-1 overflow-hidden relative w-full h-full">
+                <A4Preview 
+                  course={course} 
+                  reviewMode 
+                  selectedSection={selected} 
+                  onSelectSection={setSelected} 
+                  isFullScreen={isExpanded}
+                  onToggleFullScreen={() => setIsExpanded(prev => !prev)}
+                />
               </div>
             </div>
           </div>
         </section>
 
         {/* Right Hand Commentary Stream Thread Feed (Textbook Margin style) */}
-        <aside className="flex flex-col border-t xl:border-t-0 xl:border-l border-border bg-card">
+        <aside className={cn("border-t xl:border-t-0 xl:border-l border-border bg-card", isExpanded ? "hidden" : "flex flex-col")}>
           <div className="border-b border-border p-6 bg-card/60 space-y-1">
             <div className="text-[10px] font-mono uppercase tracking-widest text-primary font-bold">MARGINALIA &amp; NOTES</div>
             <h3 className="font-serif font-bold text-sm text-foreground flex items-center gap-2">

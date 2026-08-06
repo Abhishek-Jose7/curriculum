@@ -28,6 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const role = window.localStorage.getItem("userRole") ?? "ADMIN";
     setActiveRole(role);
+    const token = window.localStorage.getItem("accessToken");
+    if (!token) {
+      void switchRole(role as any);
+    }
   }, []);
 
   const switchRole = async (role: "ADMIN" | "FACULTY" | "REVIEWER") => {
@@ -36,9 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem("userRole", role);
     
     const credentials: Record<string, string> = {
-      ADMIN: "admin",
-      FACULTY: "faculty",
-      REVIEWER: "reviewer",
+      ADMIN: "admin@example.edu",
+      FACULTY: "faculty@example.edu",
+      REVIEWER: "reviewer@example.edu",
     };
     
     try {
@@ -53,9 +57,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       window.localStorage.setItem("refreshToken", authData.refresh);
       setSwitching(false);
       window.location.reload(); // Reload current view under new credentials
-    } catch {
+    } catch (err) {
+      console.error("Failed to switch role:", err);
       setSwitching(false);
-      window.location.reload();
     }
   };
 
@@ -100,10 +104,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main Column Framework */}
       <main className="md:pl-60">
         {/* High-End Title Bar Header */}
-        <header className="sticky top-0 z-10 flex h-20 items-center justify-between border-b border-border/80 bg-background/95 px-6 md:px-8">
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/60">college syllabus publishing engine</div>
-            <h1 className="text-sm font-serif font-bold text-foreground">Curriculum Document Office</h1>
+        <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border/80 bg-background/95 px-4 md:px-6">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xs font-serif font-bold text-foreground">Curriculum Document Office</h1>
           </div>
           
           <div className="flex items-center gap-4">
@@ -136,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         
         {/* Content Wrapper */}
-        <div className="p-6 md:p-8 max-w-5xl mx-auto">{children}</div>
+        <div className="p-3 md:p-4 w-full max-w-full">{children}</div>
       </main>
     </div>
   );

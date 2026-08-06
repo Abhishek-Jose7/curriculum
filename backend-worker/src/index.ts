@@ -213,10 +213,21 @@ api.use("*", requireAuth);
 
 api.get("/auth/me/", (c) => c.json(c.get("user")));
 
-api.route("/departments", crudRoute("departments", ["code", "name", "college_name", "university_name", "logo_url"], ["code"], true));
-api.route("/academic-years", crudRoute("academic_years", ["name", "starts_on", "ends_on", "is_active"], ["is_active"], true));
-api.route("/semesters", crudRoute("semesters", ["department_id", "academic_year_id", "number", "title", "ordinance"], ["department_id", "academic_year_id", "number"], true));
-api.route("/curriculum-templates", crudRoute("curriculum_templates", ["department_id", "name", "html_template", "css", "template_pdf_url", "is_active"], ["department_id", "is_active"], true));
+const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "university_name", "logo_url"], ["code"], true);
+api.route("/departments", deptsRoute);
+api.route("/departments/", deptsRoute);
+
+const ayRoute = crudRoute("academic_years", ["name", "starts_on", "ends_on", "is_active"], ["is_active"], true);
+api.route("/academic-years", ayRoute);
+api.route("/academic-years/", ayRoute);
+
+const semestersRoute = crudRoute("semesters", ["department_id", "academic_year_id", "number", "title", "ordinance"], ["department_id", "academic_year_id", "number"], true);
+api.route("/semesters", semestersRoute);
+api.route("/semesters/", semestersRoute);
+
+const templatesRoute = crudRoute("curriculum_templates", ["department_id", "name", "html_template", "css", "template_pdf_url", "is_active"], ["department_id", "is_active"], true);
+api.route("/curriculum-templates", templatesRoute);
+api.route("/curriculum-templates/", templatesRoute);
 
 api.get("/notifications/", async (c) => {
   const user = c.get("user");
@@ -511,7 +522,6 @@ api.post("/published-curricula/publish/", async (c) => {
 });
 
 app.route("/api", api);
-app.route("/", api);
 
 async function updateCourse(c: any) {
   const body = await c.req.json();

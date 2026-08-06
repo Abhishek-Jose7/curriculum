@@ -21,7 +21,7 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     const [outcomes, modules, experiments, assessments, referenceBooks, comments] = await Promise.all([
       this.db.prepare("SELECT *, sort_order AS `order` FROM course_outcomes WHERE course_id = ? ORDER BY sort_order, code").bind(id).all(),
       new ModulesRepository(this.db).forCourse(id),
-      this.db.prepare("SELECT *, sort_order AS `order` FROM experiments WHERE course_id = ? ORDER BY number").bind(id).all(),
+      this.db.prepare("SELECT *, number AS `order` FROM experiments WHERE course_id = ? ORDER BY number").bind(id).all(),
       this.db.prepare("SELECT *, sort_order AS `order` FROM assessment_schemes WHERE course_id = ? ORDER BY sort_order").bind(id).all(),
       this.db.prepare("SELECT *, sort_order AS `order` FROM reference_books WHERE course_id = ? ORDER BY is_textbook, sort_order").bind(id).all(),
       this.db.prepare("SELECT rc.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS reviewer_name FROM reviewer_comments rc LEFT JOIN profiles p ON p.id = rc.reviewer_user_id WHERE rc.course_id = ? ORDER BY rc.section_key, rc.created_at DESC").bind(id).all(),
