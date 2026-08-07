@@ -1,92 +1,96 @@
 "use client";
 
-import { BookOpen, CheckCircle2, FileText, GraduationCap, LayoutDashboard, Moon, Sun, Users, ShieldAlert, ArrowRight } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Sun,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/context";
 import { cn } from "@/lib/utils";
+import type { AuthUser } from "@/context";
 
-const nav = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/courses", label: "Manuscripts", icon: BookOpen },
-  { href: "/review", label: "Review Board", icon: CheckCircle2 },
-  { href: "/publishing", label: "Catalogue Press", icon: FileText },
-  { href: "/admin", label: "Office Controls", icon: Users }
-];
+type NavItem = { href: string; label: string; icon: React.ElementType };
+
+function getNavForRole(role: AuthUser["role"]): NavItem[] {
+  const base: NavItem[] = [{ href: "/", label: "Overview", icon: LayoutDashboard }];
+
+  if (role === "FACULTY") return [
+    ...base,
+    { href: "/courses", label: "My Courses", icon: BookOpen },
+  ];
+
+  if (role === "HOD") return [
+    ...base,
+    { href: "/courses", label: "All Courses", icon: BookOpen },
+    { href: "/review", label: "Review Board", icon: CheckCircle2 },
+    { href: "/publishing", label: "Catalogue Press", icon: FileText },
+  ];
+
+  if (role === "ADMIN") return [
+    ...base,
+    { href: "/courses", label: "All Courses", icon: BookOpen },
+    { href: "/review", label: "Review Board", icon: CheckCircle2 },
+    { href: "/publishing", label: "Catalogue Press", icon: FileText },
+    { href: "/admin", label: "Office Controls", icon: Users },
+  ];
+
+  return base;
+}
+
+const ROLE_LABELS: Record<AuthUser["role"], string> = {
+  ADMIN: "Administrator",
+  HOD: "Head of Dept.",
+  FACULTY: "Teacher",
+};
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
-  // Integrated workspace switcher states
-  const [activeRole, setActiveRole] = useState("ADMIN");
-  const [switching, setSwitching] = useState(false);
-
-  useEffect(() => {
-    const role = window.localStorage.getItem("userRole") ?? "ADMIN";
-    setActiveRole(role);
-    const token = window.localStorage.getItem("accessToken");
-    if (!token) {
-      void switchRole(role as any);
-    }
-  }, []);
-
-  const switchRole = async (role: "ADMIN" | "FACULTY" | "REVIEWER") => {
-    setSwitching(true);
-    setActiveRole(role);
-    window.localStorage.setItem("userRole", role);
-    
-    const credentials: Record<string, string> = {
-      ADMIN: "admin@example.edu",
-      FACULTY: "faculty@example.edu",
-      REVIEWER: "reviewer@example.edu",
-    };
-    
-    try {
-      const authData = await apiFetch<any>("/auth/token/", {
-        method: "POST",
-        body: JSON.stringify({
-          username: credentials[role],
-          password: "ChangeMe123!",
-        }),
-      });
-      window.localStorage.setItem("accessToken", authData.access);
-      window.localStorage.setItem("refreshToken", authData.refresh);
-      setSwitching(false);
-      window.location.reload(); // Reload current view under new credentials
-    } catch (err) {
-      console.error("Failed to switch role:", err);
-      setSwitching(false);
-    }
-  };
+  const nav = user ? getNavForRole(user.role) : [];
+  const displayName =
+    user ? `${user.first_name} ${user.last_name}`.trim() || user.email : "";
 
   return (
     <div className="min-h-screen bg-background relative selection:bg-primary/20">
-      {/* Editorial Minimalist Sidebar */}
-      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:block z-20">
-        <div className="flex h-20 items-center gap-2.5 px-6 border-b border-border/60">
+      {/* Sidebar */}
+      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:flex flex-col z-20">
+        {/* Brand */}
+        <div className="flex h-20 items-center gap-2.5 px-6 border-b border-border/60 shrink-0">
           <GraduationCap className="h-5 w-5 text-primary shrink-0" />
           <div>
             <div className="text-xs font-serif font-bold uppercase tracking-widest text-foreground">Syllabus press</div>
             <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Fr. CRCE Autonomous</div>
           </div>
         </div>
-        
-        <nav className="p-4 space-y-1 mt-4">
-          <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">Manuscript Ledger</div>
+
+        {/* Nav */}
+        <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
+          <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
+            Manuscript Ledger
+          </div>
           {nav.map((item) => {
-            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const isActive =
+              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
                   "relative flex items-center gap-3 rounded-sm px-3.5 py-2.5 text-xs font-bold transition-all border border-transparent",
-                  isActive 
-                    ? "text-primary bg-secondary/40 font-serif-editorial text-[13px]" 
+                  isActive
+                    ? "text-primary bg-secondary/40"
                     : "text-foreground/55 hover:text-foreground hover:bg-secondary/20"
                 )}
               >
@@ -99,46 +103,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+
+        {/* User footer */}
+        {user && (
+          <div className="border-t border-border/60 p-4 shrink-0 space-y-0.5">
+            <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">
+              {ROLE_LABELS[user.role]}
+            </div>
+            <div className="text-xs font-semibold text-foreground truncate px-1">{displayName}</div>
+            <button
+              onClick={() => void logout()}
+              className="flex items-center gap-2 text-[11px] font-bold text-muted-foreground hover:text-red-500 transition-colors mt-2 px-1"
+            >
+              <LogOut className="h-3 w-3" />
+              Sign out
+            </button>
+          </div>
+        )}
       </aside>
 
-      {/* Main Column Framework */}
+      {/* Main */}
       <main className="md:pl-60">
-        {/* High-End Title Bar Header */}
         <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border/80 bg-background/95 px-4 md:px-6">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xs font-serif font-bold text-foreground">Curriculum Document Office</h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {/* Custom Workspace switcher selector */}
-            <div className="flex items-center gap-1.5 p-1 rounded border border-border bg-card">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1.5 hidden sm:inline-block">Authority Access:</span>
-              <select
-                disabled={switching}
-                value={activeRole}
-                onChange={(e) => void switchRole(e.target.value as any)}
-                className="h-7 rounded border border-transparent bg-transparent text-[11px] font-bold text-primary uppercase px-1.5 focus:outline-none focus:border-border cursor-pointer disabled:opacity-50"
-              >
-                <option value="ADMIN">HOD Office (Admin)</option>
-                <option value="FACULTY">Faculty Coordinator</option>
-                <option value="REVIEWER">External Reviewer</option>
-              </select>
-            </div>
-
-            {/* Simple Light/Dark Theme Switcher */}
-            <Button 
-              variant="secondary" 
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="h-8 w-8 p-0 rounded"
-              aria-label="Toggle theme"
-            >
-              <Sun className="hidden h-3.5 w-3.5 dark:block text-amber-500" />
-              <Moon className="h-3.5 w-3.5 dark:hidden text-primary" />
-            </Button>
-          </div>
+          <h1 className="text-xs font-serif font-bold text-foreground">Curriculum Document Office</h1>
+          <Button
+            variant="secondary"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="h-8 w-8 p-0 rounded"
+            aria-label="Toggle theme"
+          >
+            <Sun className="hidden h-3.5 w-3.5 dark:block text-amber-500" />
+            <Moon className="h-3.5 w-3.5 dark:hidden text-primary" />
+          </Button>
         </header>
-        
-        {/* Content Wrapper */}
         <div className="p-3 md:p-4 w-full max-w-full">{children}</div>
       </main>
     </div>
