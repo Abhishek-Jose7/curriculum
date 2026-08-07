@@ -77,7 +77,7 @@ export default function HomePage() {
                 Browse Active Register <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Link>
             </Button>
-            {(user?.role === "ADMIN" || user?.role === "HOD") && (
+            {user?.role === "ADMIN" && (
               <Button variant="secondary" asChild className="border-border">
                 <Link href="/admin">Administrative Office</Link>
               </Button>
