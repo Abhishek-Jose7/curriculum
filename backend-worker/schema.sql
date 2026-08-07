@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS courses (
   lecture_hours INTEGER NOT NULL DEFAULT 0 CHECK (lecture_hours >= 0),
   tutorial_hours INTEGER NOT NULL DEFAULT 0 CHECK (tutorial_hours >= 0),
   practical_hours INTEGER NOT NULL DEFAULT 0 CHECK (practical_hours >= 0),
+  self_learning_hours INTEGER NOT NULL DEFAULT 0 CHECK (self_learning_hours >= 0),
   lecture_credits REAL NOT NULL DEFAULT 0,
   tutorial_credits REAL NOT NULL DEFAULT 0,
   practical_credits REAL NOT NULL DEFAULT 0,
@@ -109,6 +110,7 @@ CREATE TABLE IF NOT EXISTS modules (
   title TEXT NOT NULL,
   contact_hours INTEGER NOT NULL DEFAULT 0 CHECK (contact_hours >= 0),
   content TEXT NOT NULL,
+  references TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (course_id, number)

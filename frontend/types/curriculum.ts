@@ -9,12 +9,14 @@ export type Course = {
   lecture_hours: number;
   tutorial_hours: number;
   practical_hours: number;
+  self_learning_hours: number;
   lecture_credits: number;
   tutorial_credits: number;
   practical_credits: number;
   credits: string | number;
   internal_marks: number;
   external_marks: number;
+  passing_marks?: number;
   objectives: string;
   outcomes: CourseOutcome[];
   modules: CourseModule[];
@@ -36,6 +38,7 @@ export type CourseModule = {
   title: string;
   contact_hours: number;
   content: string;
+  references?: string;
   topics?: CourseTopic[];
 };
 
@@ -83,7 +86,7 @@ export type CourseDraft = {
   id: number;
   code: string;
   title: string;
-  course_type: "THEORY" | "LAB" | "PROJECT" | "ELECTIVE" | "INTERDISCIPLINARY";
+  course_type: "THEORY" | "LAB" | "THEORY_LAB" | "PROJECT" | "ELECTIVE" | "INTERDISCIPLINARY";
   status: CourseStatus;
   faculty_name: string;
   last_modified: string;
@@ -93,12 +96,14 @@ export type CourseDraft = {
   lecture_hours: number;
   tutorial_hours: number;
   practical_hours: number;
+  self_learning_hours: number;
   lecture_credits: number;
   tutorial_credits: number;
   practical_credits: number;
   credits: string | number;
   internal_marks: number;
   external_marks: number;
+  passing_marks?: number;
   duration_hours: string | number;
   outcomes: CourseOutcome[];
   modules: CourseModule[];

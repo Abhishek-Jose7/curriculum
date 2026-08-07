@@ -3,7 +3,7 @@ import type { CourseRow } from "../types";
 
 const courseFields = [
   "semester_id", "faculty_user_id", "code", "title", "course_type", "status",
-  "lecture_hours", "tutorial_hours", "practical_hours", "lecture_credits",
+  "lecture_hours", "tutorial_hours", "practical_hours", "self_learning_hours", "lecture_credits",
   "tutorial_credits", "practical_credits", "credits", "internal_marks",
   "external_marks", "duration_hours", "passing_marks", "pre_requisites",
   "objectives", "syllabus_intro", "online_resources", "section_order",
@@ -40,7 +40,7 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
 
 export class ModulesRepository extends BaseRepository<Record<string, unknown>> {
   constructor(db: D1Database) {
-    super(db, "modules", ["course_id", "number", "title", "contact_hours", "content"], ["course_id"]);
+    super(db, "modules", ["course_id", "number", "title", "contact_hours", "content", "references"], ["course_id"]);
   }
 
   async forCourse(courseId: string) {

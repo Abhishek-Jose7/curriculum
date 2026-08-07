@@ -38,6 +38,7 @@ export type CourseRow = {
   lecture_hours: number;
   tutorial_hours: number;
   practical_hours: number;
+  self_learning_hours: number;
   lecture_credits: number;
   tutorial_credits: number;
   practical_credits: number;

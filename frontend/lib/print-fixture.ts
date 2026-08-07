@@ -83,6 +83,7 @@ export const printCourses: CourseDraft[] = catalog.map((row, index) => {
     lecture_hours: lecture,
     tutorial_hours: tutorial,
     practical_hours: practical,
+    self_learning_hours: isLab ? 0 : 2,
     lecture_credits: lecture,
     tutorial_credits: tutorial,
     practical_credits: practical ? Math.max(1, Math.ceil(practical / 2)) : 0,

@@ -537,7 +537,7 @@ async function syncCourse(db: D1Database, courseId: string, data: any) {
   await syncChildren(db, "assessment_schemes", "course_id", courseId, data.assessments, ["component", "marks", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
   await syncChildren(db, "reference_books", "course_id", courseId, data.reference_books ?? data.references, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
   if (data.modules) {
-    await syncChildren(db, "modules", "course_id", courseId, data.modules, ["number", "title", "contact_hours", "content"], undefined, async (module, row) => {
+    await syncChildren(db, "modules", "course_id", courseId, data.modules, ["number", "title", "contact_hours", "content", "references"], undefined, async (module, row) => {
       await syncChildren(db, "topics", "module_id", String(row.id), module.topics, ["title", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
     });
   }

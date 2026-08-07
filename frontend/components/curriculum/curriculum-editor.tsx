@@ -45,7 +45,58 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
         method: "POST",
         body: JSON.stringify(dataToSave),
       });
-      setCourse(res.course);
+      
+      setCourse((current) => {
+        if (!current) return res.course;
+        // Merge saved IDs from res.course into current state to prevent overwriting newer items/inputs
+        const merged = { ...current };
+        merged.outcomes = current.outcomes.map((co, idx) => {
+          const savedCo = res.course.outcomes[idx];
+          if (savedCo && co.code === savedCo.code && !co.id && savedCo.id) {
+            return { ...co, id: savedCo.id };
+          }
+          return co;
+        });
+        merged.modules = current.modules.map((mod, idx) => {
+          const savedMod = res.course.modules[idx];
+          if (savedMod && mod.number === savedMod.number && !mod.id && savedMod.id) {
+            const mergedMod = { ...mod, id: savedMod.id };
+            if (mod.topics && savedMod.topics) {
+              mergedMod.topics = mod.topics.map((top, tIdx) => {
+                const savedTop = savedMod.topics?.[tIdx];
+                if (savedTop && top.title === savedTop.title && !top.id && savedTop.id) {
+                  return { ...top, id: savedTop.id };
+                }
+                return top;
+              });
+            }
+            return mergedMod;
+          }
+          return mod;
+        });
+        merged.experiments = current.experiments.map((exp, idx) => {
+          const savedExp = res.course.experiments[idx];
+          if (savedExp && exp.number === savedExp.number && !exp.id && savedExp.id) {
+            return { ...exp, id: savedExp.id };
+          }
+          return exp;
+        });
+        merged.assessments = current.assessments.map((ass, idx) => {
+          const savedAss = res.course.assessments[idx];
+          if (savedAss && ass.component === savedAss.component && !ass.id && savedAss.id) {
+            return { ...ass, id: savedAss.id };
+          }
+          return ass;
+        });
+        merged.reference_books = (current.reference_books || []).map((ref, idx) => {
+          const savedRef = res.course.reference_books?.[idx];
+          if (savedRef && ref.title === savedRef.title && !ref.id && savedRef.id) {
+            return { ...ref, id: savedRef.id };
+          }
+          return ref;
+        });
+        return merged;
+      });
       setVersion((current) => current + 1);
     } catch (err) {
       console.error("Autosave failed", err);
@@ -168,7 +219,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
                 <NumberField label="Lecture Hours/Week" value={course.lecture_hours} onChange={(value) => updateCourse("lecture_hours", value)} />
                 <NumberField label="Tutorial Hours/Week" value={course.tutorial_hours} onChange={(value) => updateCourse("tutorial_hours", value)} />
                 <NumberField label="Practical Hours/Week" value={course.practical_hours} onChange={(value) => updateCourse("practical_hours", value)} />
-                <div className="hidden md:block"></div>
+                <NumberField label="Self Learning Hours/Week" value={course.self_learning_hours || 0} onChange={(value) => updateCourse("self_learning_hours", value)} />
                 <NumberField label="Lecture Credits" value={course.lecture_credits} step="0.5" onChange={(value) => updateCourse("lecture_credits", value)} />
                 <NumberField label="Tutorial Credits" value={course.tutorial_credits} step="0.5" onChange={(value) => updateCourse("tutorial_credits", value)} />
                 <NumberField label="Practical Credits" value={course.practical_credits} step="0.5" onChange={(value) => updateCourse("practical_credits", value)} />
@@ -191,7 +242,12 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           {active === "modules" && <ModuleEditor modules={course.modules} onChange={(modules) => updateCourse("modules", modules)} />}
           {active === "experiments" && <ExperimentEditor experiments={course.experiments} onChange={(experiments) => updateCourse("experiments", experiments)} />}
           {active === "assessments" && <AssessmentEditor assessments={course.assessments} onChange={(assessments) => updateCourse("assessments", assessments)} />}
-          {active === "references" && <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} />}
+          {active === "references" && (
+            <div className="space-y-6">
+              <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} />
+              <OnlineResourcesEditor resources={course.online_resources || []} onChange={(resources) => updateCourse("online_resources", resources)} />
+            </div>
+          )}
           {active === "comments" && <CommentsPanel course={course} />}
           {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
           {active === "compare_previous" && <ComparePreviousPanel course={course} />}
@@ -255,9 +311,10 @@ function ModuleEditor({ modules, onChange }: { modules: CourseModule[]; onChange
       <div className="space-y-4">
         {modules.map((module, index) => (
           <div key={index} className="rounded border border-border bg-card p-5 space-y-4 shadow-sm hover:border-primary/20 transition-all duration-150">
-            <div className="grid gap-4 md:grid-cols-[90px_1fr_130px_auto] items-end">
+            <div className="grid gap-4 md:grid-cols-[90px_1fr_120px_120px_auto] items-end">
               <NumberField label="§ Module No." value={module.number} onChange={(value) => updateModule(index, { number: value })} />
               <Field label="Module Heading Title" value={module.title} onChange={(value) => updateModule(index, { title: value })} />
+              <Field label="References (e.g. 1,2)" value={module.references || ""} onChange={(value) => updateModule(index, { references: value })} />
               <NumberField label="L-T Hours" value={module.contact_hours} onChange={(value) => updateModule(index, { contact_hours: value })} />
               <RemoveButton onClick={() => onChange(modules.filter((_, i) => i !== index))} />
             </div>
@@ -562,6 +619,37 @@ function Field({ label, value, onChange, error }: { label: string; value: string
 
 // Fixed Loader2 type dependency inside editor layout
 function NumberField({ label, value, onChange, step = "1" }: { label: string; value: number | string; onChange: (value: number) => void; step?: string }) {
+  const [localVal, setLocalVal] = useState<string>(value !== undefined && value !== null ? String(value) : "");
+
+  useEffect(() => {
+    if (value !== undefined && value !== null) {
+      setLocalVal(String(value));
+    } else {
+      setLocalVal("");
+    }
+  }, [value]);
+
+  const handleChange = (val: string) => {
+    setLocalVal(val);
+    const num = Number(val);
+    if (val !== "" && !isNaN(num) && num !== Number(value)) {
+      onChange(num);
+    }
+  };
+
+  const handleBlur = () => {
+    if (localVal === "") {
+      onChange(0);
+    } else {
+      const num = Number(localVal);
+      if (isNaN(num)) {
+        setLocalVal(value !== undefined && value !== null ? String(value) : "");
+      } else {
+        onChange(num);
+      }
+    }
+  };
+
   return (
     <label className="block space-y-1.5 w-full">
       <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">{label}</span>
@@ -569,8 +657,9 @@ function NumberField({ label, value, onChange, step = "1" }: { label: string; va
         className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5" 
         type="number" 
         step={step} 
-        value={value} 
-        onChange={(event) => onChange(Number(event.target.value))} 
+        value={localVal} 
+        onChange={(event) => handleChange(event.target.value)} 
+        onBlur={handleBlur}
       />
     </label>
   );
@@ -709,6 +798,24 @@ function ComparePreviousPanel({ course }: { course: CourseDraft }) {
           ))}
         </div>
       )}
+    </Panel>
+  );
+}
+
+function OnlineResourcesEditor({ resources, onChange }: { resources: string[]; onChange: (items: string[]) => void }) {
+  return (
+    <Panel title="Video Lectures / Online Resources" description="Links to external video lectures (NPTEL, YouTube, etc.) or study materials.">
+      <div className="space-y-3">
+        {resources.map((resource, index) => (
+          <div key={index} className="flex items-end gap-3">
+            <Field label={`Resource Link #${index + 1}`} value={resource} onChange={(value) => onChange(resources.map((r, i) => i === index ? value : r))} />
+            <RemoveButton onClick={() => onChange(resources.filter((_, i) => i !== index))} />
+          </div>
+        ))}
+        <Button variant="secondary" onClick={() => onChange([...resources, ""])} className="w-full h-10 border-border">
+          <Plus className="h-3.5 w-3.5 mr-1.5" />Add Resource Link
+        </Button>
+      </div>
     </Panel>
   );
 }

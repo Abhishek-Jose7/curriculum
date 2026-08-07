@@ -367,6 +367,22 @@ ol {
   margin: 0;
 }
 
+.exam-table {
+  border: none !important;
+}
+.exam-table tr:first-child td, .exam-table tr:first-child th {
+  border-top: none !important;
+}
+.exam-table tr:last-child td {
+  border-bottom: none !important;
+}
+.exam-table tr td:first-child, .exam-table tr th:first-child {
+  border-left: none !important;
+}
+.exam-table tr td:last-child, .exam-table tr th:last-child {
+  border-right: none !important;
+}
+
 .module-table tbody,
 .module-group,
 .assessment-block,

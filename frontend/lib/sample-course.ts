@@ -14,6 +14,7 @@ export const sampleCourse: CourseDraft = {
   lecture_hours: 3,
   tutorial_hours: 1,
   practical_hours: 0,
+  self_learning_hours: 2,
   lecture_credits: 3,
   tutorial_credits: 1,
   practical_credits: 0,
