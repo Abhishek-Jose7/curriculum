@@ -80,6 +80,10 @@ export default function AdminPage() {
   const [yearEnd, setYearEnd] = useState("2027-05-31");
   const [yearActive, setYearActive] = useState(true);
 
+  const [rolloverTarget, setRolloverTarget] = useState<{id: string; name: string} | null>(null);
+  const [rolloverLoading, setRolloverLoading] = useState(false);
+  const [rolloverResult, setRolloverResult] = useState<string | null>(null);
+
   // 3. Semester Form
   const [semDept, setSemDept] = useState("");
   const [semYear, setSemYear] = useState("");
@@ -208,7 +212,7 @@ export default function AdminPage() {
     try {
       const url = editingYearId ? `/academic-years/${editingYearId}/` : "/academic-years/";
       const method = editingYearId ? "PUT" : "POST";
-      await apiFetch(url, {
+      const newYear = await apiFetch<any>(url, {
         method,
         body: JSON.stringify({
           name: yearName,
@@ -217,6 +221,10 @@ export default function AdminPage() {
           is_active: yearActive,
         }),
       });
+      if (!editingYearId && newYear?.id) {
+        setRolloverTarget({ id: String(newYear.id), name: newYear.name || yearName });
+        setRolloverResult(null);
+      }
       setEditingYearId(null);
       triggerSuccess(`Academic Year ${editingYearId ? "updated" : "created"} successfully!`);
     } catch (err: any) {
@@ -225,6 +233,25 @@ export default function AdminPage() {
       setLoading(false);
     }
   };
+
+  async function handleRollover() {
+    if (!rolloverTarget) return;
+    setRolloverLoading(true);
+    try {
+      const result = await apiFetch<any>(`/academic-years/${rolloverTarget.id}/rollover/`, {
+        method: 'POST',
+      });
+      setRolloverResult(
+        result.semesters_cloned > 0
+          ? `Rolled over ${result.semesters_cloned} semesters and ${result.courses_cloned} courses from ${result.source_academic_year}.`
+          : result.message ?? 'No prior year found to clone from.'
+      );
+    } catch (e: any) {
+      setRolloverResult('Rollover failed: ' + (e?.message ?? 'Unknown error'));
+    } finally {
+      setRolloverLoading(false);
+    }
+  }
 
   const handleEditYear = (y: any) => {
     setEditingYearId(y.id);
@@ -576,6 +603,46 @@ export default function AdminPage() {
                       {editingYearId ? "Update Academic Year" : "Create Academic Year"}
                     </Button>
                   </form>
+
+                  {rolloverTarget && (
+                    <div className="rounded border border-primary/30 bg-primary/5 p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-foreground">
+                            Rollover courses into {rolloverTarget.name}?
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            This will copy all semesters and course shells from the most recent prior academic year. Courses will reset to DRAFT and faculty will be cleared.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setRolloverTarget(null); setRolloverResult(null); }}
+                          className="text-muted-foreground hover:text-foreground transition-colors text-xs shrink-0"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                      {rolloverResult ? (
+                        <p className="text-[11px] font-semibold text-primary">{rolloverResult}</p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleRollover}
+                            disabled={rolloverLoading}
+                            className="flex items-center gap-1.5 text-[11px] font-bold bg-primary text-primary-foreground rounded px-3 py-1.5 hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            {rolloverLoading ? 'Rolling over…' : 'Yes, rollover courses'}
+                          </button>
+                          <button
+                            onClick={() => { setRolloverTarget(null); }}
+                            className="text-[11px] font-bold border border-border rounded px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
