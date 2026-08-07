@@ -30,17 +30,7 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = window.localStorage.getItem(USER_STORAGE_KEY);
-        return stored ? (JSON.parse(stored) as AuthUser) : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMe = useCallback(async () => {
@@ -63,7 +53,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { void fetchMe(); }, [fetchMe]);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem(USER_STORAGE_KEY);
+        if (stored) {
+          setUser(JSON.parse(stored) as AuthUser);
+        }
+      } catch { /* ignore */ }
+    }
+    void fetchMe();
+  }, [fetchMe]);
 
   const logout = useCallback(async () => {
     try {

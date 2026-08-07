@@ -12,7 +12,12 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     headers.set("Authorization", `Bearer ${resolvedToken}`);
   }
   
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers, cache: "no-store" });
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    ...options,
+    headers,
+    cache: "no-store"
+  });
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem("accessToken");
