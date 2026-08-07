@@ -495,6 +495,14 @@ api.post("/courses/:id/reopen/", async (c) => {
   return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
 });
 
+api.post("/courses/:id/share/", async (c) => {
+  if (!isReviewerOrAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
+  const token = crypto.randomUUID();
+  const course = await c.env.DB.prepare("UPDATE courses SET share_token = ? WHERE id = ? RETURNING *").bind(token, c.req.param("id")).first<any>();
+  if (!course) return c.json({ detail: "Not found." }, 404);
+  return c.json({ share_token: course.share_token });
+});
+
 api.get("/courses/:id/versions/", async (c) => {
   const rows = await c.env.DB.prepare("SELECT cv.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS edited_by_name FROM course_versions cv LEFT JOIN profiles p ON p.id = cv.edited_by_user_id WHERE cv.course_id = ? ORDER BY cv.version_number DESC").bind(c.req.param("id")).all();
   return c.json(rows.results ?? []);
@@ -733,6 +741,46 @@ api.post('/published-curricula/:id/hod-approve/', requireRole('HOD', 'ADMIN'), a
   ).bind(new Date().toISOString(), user.id, id).run();
   
   return c.json({ status: 'approved' });
+});
+
+app.get("/public/review/:token/", async (c) => {
+  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
+  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
+  if (row.status === "DRAFT") return c.json({ detail: "This syllabus is not yet ready for review.", code: "SYLLABUS_DRAFT" }, 400);
+  const course = await new CoursesRepository(c.env.DB).detail(row.id);
+  return c.json(course);
+});
+
+app.get("/public/review/:token/comments/", async (c) => {
+  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
+  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
+  const comments = await c.env.DB.prepare("SELECT * FROM reviewer_comments WHERE course_id = ? ORDER BY created_at DESC").bind(row.id).all();
+  return c.json(comments.results ?? []);
+});
+
+app.post("/public/review/:token/comments/", async (c) => {
+  const body = await c.req.json<{ section_key: string, section_label: string, body: string, reviewer_name: string, reviewer_email?: string }>();
+  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
+  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
+  if (row.status === "DRAFT") return c.json({ detail: "This syllabus is not yet ready for review.", code: "SYLLABUS_DRAFT" }, 400);
+  if (!body.reviewer_name || !body.body) return c.json({ detail: "Name and comments are required.", code: "FEEDBACK_INVALID" }, 400);
+  
+  const comment = await c.env.DB.prepare(`
+    INSERT INTO reviewer_comments (id, course_id, section_key, section_label, body, is_external, reviewer_name, reviewer_email)
+    VALUES (?, ?, ?, ?, ?, 1, ?, ?) RETURNING *
+  `).bind(
+    crypto.randomUUID(), row.id, body.section_key || "General", body.section_label || "General", body.body, body.reviewer_name, body.reviewer_email ?? null
+  ).first();
+  return c.json(comment, 201);
+});
+
+app.onError((err, c) => {
+  console.error("Backend error:", err);
+  const message = err.message || "An unexpected server error occurred.";
+  if (message.includes("UNIQUE constraint failed") || message.includes("SQLITE_CONSTRAINT")) {
+    return c.json({ detail: "A record with this number/code already exists for this selection." }, 400);
+  }
+  return c.json({ detail: message }, 400);
 });
 
 app.route("/api", api);
