@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS modules (
   title TEXT NOT NULL,
   contact_hours INTEGER NOT NULL DEFAULT 0 CHECK (contact_hours >= 0),
   content TEXT NOT NULL,
-  references TEXT NOT NULL DEFAULT '',
+  "references" TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (course_id, number)

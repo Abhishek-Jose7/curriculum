@@ -1,0 +1,18 @@
+{
+  "name": "curriculum-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix backend-worker && npm install --prefix frontend",
+    "dev": "concurrently --names \"WORKER,FRONTEND\" --prefix-colors \"cyan,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --prefix backend-worker",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "db:schema": "npx --prefix backend-worker wrangler d1 execute curriculum-db --local --file=./schema.sql",
+    "db:seed": "npx --prefix backend-worker wrangler d1 execute curriculum-db --local --file=./seed.sql",
+    "db:init": "npm run db:schema && npm run db:seed",
+    "build": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

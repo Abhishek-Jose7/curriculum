@@ -18,10 +18,7 @@
       "bucket_name": "curriculum-files"
     }
   ],
-  "browser": {
-    "binding": "BROWSER",
-    "remote": true
-  },
+
   "queues": {
     "producers": [
       {
@@ -42,5 +39,15 @@
   "vars": {
     "CORS_ALLOWED_ORIGINS": "http://localhost:3000",
     "ENVIRONMENT": "development"
+  },
+  "env": {
+    "production": {
+      "browser": {
+        "binding": "BROWSER"
+      },
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    }
   }
 }

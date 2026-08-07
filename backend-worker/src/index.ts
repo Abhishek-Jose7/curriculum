@@ -588,10 +588,11 @@ async function syncChildren(db: D1Database, table: string, parentColumn: string,
     const values = columns.map((field) => field === parentColumn ? parentId : normalizeValue(item[field]));
     let row: any;
     if (item.id) {
-      const assignments = columns.filter((field) => field !== parentColumn).map((field) => `${field} = ?`).join(", ");
+      const assignments = columns.filter((field) => field !== parentColumn).map((field) => `"${field}" = ?`).join(", ");
       row = await db.prepare(`UPDATE ${table} SET ${assignments} WHERE id = ? RETURNING *`).bind(...values.slice(1), item.id).first();
     } else {
-      row = await db.prepare(`INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`).bind(...values).first();
+      const quotedCols = columns.map((c) => `"${c}"`).join(", ");
+      row = await db.prepare(`INSERT INTO ${table} (${quotedCols}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`).bind(...values).first();
     }
     if (row?.id) seen.add(String(row.id));
     if (afterUpsert && row) await afterUpsert(item, row);
@@ -619,6 +620,9 @@ export default {
 
         let browser;
         try {
+          if (!env.BROWSER) {
+            throw new Error("Cloudflare Browser Rendering (BROWSER binding) not available in current environment");
+          }
           browser = await puppeteer.launch(env.BROWSER);
         } catch (launchErr: any) {
           console.error("Puppeteer launch failed:", launchErr);

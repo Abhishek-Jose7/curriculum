@@ -31,8 +31,9 @@ export class BaseRepository<T extends Record<string, unknown>> {
     const columns = this.writableColumns.filter((column) => data[column] !== undefined);
     const placeholders = columns.map(() => "?").join(", ");
     const values = columns.map((column) => normalizeValue(data[column]));
+    const quotedCols = columns.map((c) => `"${c}"`).join(", ");
     const row = await this.db
-      .prepare(`INSERT INTO ${this.table} (${columns.join(", ")}) VALUES (${placeholders}) RETURNING *`)
+      .prepare(`INSERT INTO ${this.table} (${quotedCols}) VALUES (${placeholders}) RETURNING *`)
       .bind(...values)
       .first<T>();
     if (!row) throw new Error(`Failed to create ${this.table} row`);
@@ -46,7 +47,7 @@ export class BaseRepository<T extends Record<string, unknown>> {
       if (!existing) throw new Error(`${this.table} row not found`);
       return existing;
     }
-    const assignments = columns.map((column) => `${column} = ?`).join(", ");
+    const assignments = columns.map((column) => `"${column}" = ?`).join(", ");
     const values = columns.map((column) => normalizeValue(data[column]));
     const row = await this.db
       .prepare(`UPDATE ${this.table} SET ${assignments} WHERE id = ? RETURNING *`)
