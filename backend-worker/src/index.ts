@@ -248,9 +248,81 @@ api.use("*", requireAuth);
 
 api.get("/auth/me/", (c) => c.json(c.get("user")));
 
+api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
+  ).all();
+  return c.json(rows.results ?? []);
+});
+api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
+  ).all();
+  return c.json(rows.results ?? []);
+});
+
 const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "university_name", "logo_url"], ["code"], true);
 api.route("/departments", deptsRoute);
 api.route("/departments/", deptsRoute);
+
+const handleCreateAcademicYear = async (c: any) => {
+  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
+  try {
+    const body = await c.req.json();
+    const newAy = await new BaseRepository(
+      c.env.DB,
+      "academic_years",
+      ["name", "starts_on", "ends_on", "is_active"],
+      ["is_active"]
+    ).create(body);
+
+    const countRes = (await c.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM academic_years WHERE id != ?"
+    ).bind((newAy as any).id).first()) as any;
+    const count = countRes?.count ?? 0;
+
+    if (count === 0) {
+      const depts = await c.env.DB.prepare("SELECT id FROM departments").all();
+      for (const dept of (depts.results ?? []) as any[]) {
+        const stmts: any[] = [];
+        for (let semNumber = 1; semNumber <= 8; semNumber++) {
+          const semId = crypto.randomUUID();
+          stmts.push(
+            c.env.DB.prepare(
+              "INSERT INTO semesters (id, department_id, academic_year_id, number, title, ordinance) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(semId, dept.id, (newAy as any).id, semNumber, `Semester ${semNumber}`, "")
+          );
+          const c1Id = crypto.randomUUID();
+          stmts.push(
+            c.env.DB.prepare(
+              `INSERT INTO courses (id, semester_id, code, title, course_type, credits, lecture_hours, tutorial_hours, status)
+               VALUES (?, ?, ?, ?, 'THEORY', 4, 3, 1, 'DRAFT')`
+            ).bind(c1Id, semId, `SUB${semNumber}01`, `Subject ${semNumber}.1`)
+          );
+          const c2Id = crypto.randomUUID();
+          stmts.push(
+            c.env.DB.prepare(
+              `INSERT INTO courses (id, semester_id, code, title, course_type, credits, practical_hours, status)
+               VALUES (?, ?, ?, ?, 'LAB', 2, 4, 'DRAFT')`
+            ).bind(c2Id, semId, `SUB${semNumber}02`, `Subject ${semNumber}.2 Lab`)
+          );
+        }
+        await c.env.DB.batch(stmts);
+      }
+    }
+
+    return c.json(newAy, 201);
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes("UNIQUE constraint failed") || msg.includes("SQLITE_CONSTRAINT")) {
+      return c.json({ detail: "A record with this identifier or semester number already exists for this selection." }, 400);
+    }
+    return c.json({ detail: msg }, 400);
+  }
+};
+
+api.post("/academic-years", handleCreateAcademicYear);
+api.post("/academic-years/", handleCreateAcademicYear);
 
 const ayRoute = crudRoute("academic_years", ["name", "starts_on", "ends_on", "is_active"], ["is_active"], true);
 api.route("/academic-years", ayRoute);
