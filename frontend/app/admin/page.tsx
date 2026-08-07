@@ -18,6 +18,7 @@ import {
   Trash2,
   Wrench,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +96,74 @@ export default function AdminPage() {
   const [editingYearId, setEditingYearId] = useState<string | null>(null);
   const [editingSemId, setEditingSemId] = useState<string | null>(null);
 
+  // Faculty users list
+  const [facultyUsers, setFacultyUsers] = useState<any[]>([]);
+
+  // Inline Subject Configuration Drawer state
+  const [expandedSemId, setExpandedSemId] = useState<string | null>(null);
+  const [semCourses, setSemCourses] = useState<Record<string, any[]>>({});
+  const [loadingSemCourses, setLoadingSemCourses] = useState<string | null>(null);
+
+  // Quick add subject form state
+  const [newSubjectCode, setNewSubjectCode] = useState("");
+  const [newSubjectTitle, setNewSubjectTitle] = useState("");
+  const [newSubjectType, setNewSubjectType] = useState("THEORY");
+  const [newSubjectCredits, setNewSubjectCredits] = useState("4");
+  const [newSubjectFaculty, setNewSubjectFaculty] = useState("");
+  const [addingSubject, setAddingSubject] = useState(false);
+
+  async function loadSemesterCourses(semId: string) {
+    setLoadingSemCourses(semId);
+    try {
+      const res = await apiFetch<any[]>(`/courses/?semester=${semId}`);
+      const list = Array.isArray(res) ? res : (res as any).results ?? [];
+      setSemCourses((prev) => ({ ...prev, [semId]: list }));
+    } catch (err) {
+      console.error("Failed to load semester courses", err);
+    } finally {
+      setLoadingSemCourses(null);
+    }
+  }
+
+  async function handleAddSubject(semId: string) {
+    if (!newSubjectCode.trim() || !newSubjectTitle.trim()) return;
+    setAddingSubject(true);
+    try {
+      await apiFetch("/courses/", {
+        method: "POST",
+        body: JSON.stringify({
+          semester: semId,
+          code: newSubjectCode.trim(),
+          title: newSubjectTitle.trim(),
+          course_type: newSubjectType,
+          credits: Number(newSubjectCredits) || 4,
+          faculty_user_id: newSubjectFaculty || null,
+          status: "DRAFT",
+        }),
+      });
+      setNewSubjectCode("");
+      setNewSubjectTitle("");
+      setNewSubjectFaculty("");
+      await loadSemesterCourses(semId);
+    } catch (err: any) {
+      alert("Failed to add subject: " + (err?.message ?? "Error"));
+    } finally {
+      setAddingSubject(false);
+    }
+  }
+
+  async function handleAssignFaculty(courseId: string, facultyId: string | null, semId: string) {
+    try {
+      await apiFetch(`/courses/${courseId}/assign-faculty/`, {
+        method: "PATCH",
+        body: JSON.stringify({ faculty_user_id: facultyId || null }),
+      });
+      await loadSemesterCourses(semId);
+    } catch (err: any) {
+      alert("Failed to assign faculty: " + (err?.message ?? "Error"));
+    }
+  }
+
   const getSemesterTitle = (num: number, deptId: string, depts: any[]) => {
     const dept = depts.find(d => String(d.id) === String(deptId));
     const deptName = dept ? dept.name : "Engineering";
@@ -131,6 +200,17 @@ export default function AdminPage() {
       const sems = await apiFetch<any>("/semesters/");
       const semsList = Array.isArray(sems) ? sems : sems.results ?? [];
       setSemesters(semsList);
+      for (const sem of semsList) {
+        void loadSemesterCourses(String(sem.id));
+      }
+
+      try {
+        const faculty = await apiFetch<any>("/profiles/faculty/");
+        const facultyList = Array.isArray(faculty) ? faculty : faculty.results ?? [];
+        setFacultyUsers(facultyList);
+      } catch (err) {
+        console.error("Failed to load faculty users", err);
+      }
     } catch (err) {
       console.error("Failed to load schema options", err);
     } finally {
@@ -685,35 +765,192 @@ export default function AdminPage() {
                                   {groupSemesters.map((s) => {
                                     const termTag = getTermTag(Number(s.number));
                                     const yearInfo = getYearOfStudy(Number(s.number));
+                                    const isExpanded = expandedSemId === s.id;
+                                    const courses = semCourses[s.id] ?? [];
                                     return (
-                                      <li key={s.id} className="text-xs font-bold p-3 bg-background rounded border border-border flex justify-between items-center shadow-sm hover:border-primary/20 transition-all duration-150 group">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
-                                            Sem {s.number}
-                                          </span>
-                                          <span className="text-foreground/75">{s.title}</span>
-                                          {yearInfo && (
-                                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border", yearChipClasses[yearInfo.color])}>
-                                              {yearInfo.label}
+                                      <li key={s.id} className="bg-background rounded border border-border overflow-hidden shadow-sm hover:border-primary/20 transition-all duration-150">
+                                        <div className="p-3 flex justify-between items-center flex-wrap gap-2 group">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
+                                              Sem {s.number}
                                             </span>
-                                          )}
-                                          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border", termTag.cls)}>
-                                            {termTag.label} ({termTag.desc})
-                                          </span>
-                                          {s.academic_year_name && (
-                                            <span className="text-[10px] text-muted-foreground/50 font-medium">
-                                              ({s.academic_year_name})
+                                            <span className="text-foreground/75 font-bold text-xs">{s.title}</span>
+                                            {yearInfo && (
+                                              <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border", yearChipClasses[yearInfo.color])}>
+                                                {yearInfo.label}
+                                              </span>
+                                            )}
+                                            <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border", termTag.cls)}>
+                                              {termTag.label} ({termTag.desc})
                                             </span>
-                                          )}
+                                            {s.academic_year_name && (
+                                              <span className="text-[10px] text-muted-foreground/50 font-medium">
+                                                ({s.academic_year_name})
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => {
+                                                if (expandedSemId === s.id) {
+                                                  setExpandedSemId(null);
+                                                } else {
+                                                  setExpandedSemId(s.id);
+                                                  void loadSemesterCourses(s.id);
+                                                }
+                                              }}
+                                              className="h-7 text-[10px] font-bold uppercase tracking-wider gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                                            >
+                                              <BookOpen className="h-3 w-3" />
+                                              Configure Subjects ({courses.length})
+                                            </Button>
+                                            <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                                              <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
+                                                <Pencil className="h-3.5 w-3.5" />
+                                              </button>
+                                              <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                                          <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                          </button>
-                                          <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        </div>
+
+                                        {isExpanded && (
+                                          <div className="border-t border-border bg-muted/20 p-4 space-y-4 animate-fade-in">
+                                            <div className="flex items-center justify-between">
+                                              <h4 className="text-xs font-serif font-bold text-foreground flex items-center gap-1.5">
+                                                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                                                Subjects for {s.title}
+                                              </h4>
+                                              <span className="text-[10px] text-muted-foreground font-mono">
+                                                {courses.length} {courses.length === 1 ? "Subject" : "Subjects"} Configured
+                                              </span>
+                                            </div>
+
+                                            {loadingSemCourses === s.id && courses.length === 0 ? (
+                                              <div className="flex items-center justify-center py-6 gap-2 text-xs font-bold text-muted-foreground">
+                                                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading subjects...
+                                              </div>
+                                            ) : (
+                                              <>
+                                                {/* Subject Cards List */}
+                                                {courses.length === 0 ? (
+                                                  <div className="text-xs font-medium text-muted-foreground/70 py-3 px-4 italic bg-background/60 rounded border border-dashed border-border/70 text-center">
+                                                    No subjects added to this semester yet. Use the form below to register a subject.
+                                                  </div>
+                                                ) : (
+                                                  <div className="space-y-2">
+                                                    {courses.map((course: any) => (
+                                                      <div
+                                                        key={course.id}
+                                                        className="p-3 bg-background rounded border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs hover:border-primary/20 transition-all"
+                                                      >
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                          <span className="font-mono text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                                                            {course.code}
+                                                          </span>
+                                                          <span className="text-xs font-semibold text-foreground">
+                                                            {course.title}
+                                                          </span>
+                                                          <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border/80">
+                                                            {course.course_type || "THEORY"}
+                                                          </span>
+                                                          <span className="text-[10px] font-semibold text-muted-foreground">
+                                                            {course.credits ?? 4} Credits
+                                                          </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider hidden md:inline">Faculty:</label>
+                                                          <select
+                                                            value={course.faculty_user_id ?? course.faculty_id ?? ""}
+                                                            onChange={(e) => void handleAssignFaculty(course.id, e.target.value || null, s.id)}
+                                                            className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer max-w-[220px]"
+                                                          >
+                                                            <option value="">-- No Teacher Assigned --</option>
+                                                            {facultyUsers.map((f: any) => (
+                                                              <option key={f.id} value={f.id}>
+                                                                {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
+                                                              </option>
+                                                            ))}
+                                                          </select>
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+
+                                                {/* Quick Add Subject Shell Form */}
+                                                <div className="pt-3 border-t border-border/60 space-y-2">
+                                                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                                                    Quick Add Subject Shell
+                                                  </span>
+                                                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-5 items-end">
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Code (e.g. CSC301)"
+                                                      value={newSubjectCode}
+                                                      onChange={(e) => setNewSubjectCode(e.target.value)}
+                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-mono transition-all focus:outline-none focus:border-primary"
+                                                    />
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Title (e.g. Data Structures)"
+                                                      value={newSubjectTitle}
+                                                      onChange={(e) => setNewSubjectTitle(e.target.value)}
+                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-semibold transition-all focus:outline-none focus:border-primary md:col-span-2"
+                                                    />
+                                                    <select
+                                                      value={newSubjectType}
+                                                      onChange={(e) => setNewSubjectType(e.target.value)}
+                                                      className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold focus:outline-none focus:border-primary cursor-pointer"
+                                                    >
+                                                      <option value="THEORY">THEORY</option>
+                                                      <option value="LAB">LAB</option>
+                                                      <option value="PROJECT">PROJECT</option>
+                                                    </select>
+                                                    <input
+                                                      type="number"
+                                                      placeholder="Credits"
+                                                      value={newSubjectCredits}
+                                                      onChange={(e) => setNewSubjectCredits(e.target.value)}
+                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-semibold transition-all focus:outline-none focus:border-primary"
+                                                    />
+                                                  </div>
+                                                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                                                    <select
+                                                      value={newSubjectFaculty}
+                                                      onChange={(e) => setNewSubjectFaculty(e.target.value)}
+                                                      className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer flex-1"
+                                                    >
+                                                      <option value="">-- Select Teacher (Optional) --</option>
+                                                      {facultyUsers.map((f: any) => (
+                                                        <option key={f.id} value={f.id}>
+                                                          {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
+                                                        </option>
+                                                      ))}
+                                                    </select>
+                                                    <Button
+                                                      type="button"
+                                                      size="sm"
+                                                      disabled={addingSubject || !newSubjectCode.trim() || !newSubjectTitle.trim()}
+                                                      onClick={() => void handleAddSubject(s.id)}
+                                                      className="h-8 px-4 text-xs font-bold shrink-0"
+                                                    >
+                                                      {addingSubject ? (
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                                                      ) : (
+                                                        <Plus className="h-3.5 w-3.5 mr-1" />
+                                                      )}
+                                                      Add Subject Shell
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
                                       </li>
                                     );
                                   })}
