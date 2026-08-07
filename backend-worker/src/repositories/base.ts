@@ -28,9 +28,20 @@ export class BaseRepository<T extends Record<string, unknown>> {
   }
 
   async create(data: Record<string, unknown>): Promise<T> {
-    const columns = this.writableColumns.filter((column) => data[column] !== undefined);
+    const payload: Record<string, unknown> = { ...data };
+    if (payload.department !== undefined && payload.department_id === undefined) {
+      payload.department_id = payload.department;
+    }
+    if (payload.academic_year !== undefined && payload.academic_year_id === undefined) {
+      payload.academic_year_id = payload.academic_year;
+    }
+    if (!payload.id && !this.writableColumns.includes("id")) {
+      payload.id = crypto.randomUUID();
+    }
+    const cols = Array.from(new Set([...(payload.id ? ["id"] : []), ...this.writableColumns]));
+    const columns = cols.filter((column) => payload[column] !== undefined);
     const placeholders = columns.map(() => "?").join(", ");
-    const values = columns.map((column) => normalizeValue(data[column]));
+    const values = columns.map((column) => normalizeValue(payload[column]));
     const quotedCols = columns.map((c) => `"${c}"`).join(", ");
     const row = await this.db
       .prepare(`INSERT INTO ${this.table} (${quotedCols}) VALUES (${placeholders}) RETURNING *`)
@@ -41,14 +52,21 @@ export class BaseRepository<T extends Record<string, unknown>> {
   }
 
   async update(id: string, data: Record<string, unknown>): Promise<T> {
-    const columns = this.writableColumns.filter((column) => data[column] !== undefined);
+    const payload: Record<string, unknown> = { ...data };
+    if (payload.department !== undefined && payload.department_id === undefined) {
+      payload.department_id = payload.department;
+    }
+    if (payload.academic_year !== undefined && payload.academic_year_id === undefined) {
+      payload.academic_year_id = payload.academic_year;
+    }
+    const columns = this.writableColumns.filter((column) => payload[column] !== undefined);
     if (!columns.length) {
       const existing = await this.get(id);
       if (!existing) throw new Error(`${this.table} row not found`);
       return existing;
     }
     const assignments = columns.map((column) => `"${column}" = ?`).join(", ");
-    const values = columns.map((column) => normalizeValue(data[column]));
+    const values = columns.map((column) => normalizeValue(payload[column]));
     const row = await this.db
       .prepare(`UPDATE ${this.table} SET ${assignments} WHERE id = ? RETURNING *`)
       .bind(...values, id)

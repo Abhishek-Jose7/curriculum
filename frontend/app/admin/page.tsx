@@ -287,6 +287,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           department: Number(semDept),
           academic_year: Number(semYear),
+          department_id: Number(semDept),
+          academic_year_id: Number(semYear),
           number: Number(semNumber),
           title: semTitle,
           ordinance: semOrdinance,
