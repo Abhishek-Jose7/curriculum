@@ -142,10 +142,31 @@ api.post("/auth/token/", async (c) => {
     VALUES (?, ?, ?, ?)
   `).bind(crypto.randomUUID(), tokenJti, user.id, refreshExpiresStr).run();
   
-  return c.json({
-    access: await signJwt({ sub: user.id, role: user.role, email: user.email }, c.env.AUTH_JWT_SECRET, 60 * 15), // 15 mins
-    refresh: await signJwt({ sub: user.id, typ: "refresh", jti: tokenJti }, c.env.AUTH_JWT_SECRET, 60 * 60 * 24 * 7), // 7 days
-  });
+  const accessToken = await signJwt(
+    { sub: user.id, role: user.role, email: user.email },
+    c.env.AUTH_JWT_SECRET,
+    60 * 15
+  );
+  const refreshToken = await signJwt(
+    { sub: user.id, typ: "refresh", jti: tokenJti },
+    c.env.AUTH_JWT_SECRET,
+    60 * 60 * 24 * 7
+  );
+
+  const isProduction = c.env.ENVIRONMENT === "production";
+  const cookieBase = `HttpOnly; Path=/; SameSite=Lax${isProduction ? "; Secure" : ""}`;
+
+  return new Response(
+    JSON.stringify({ access: accessToken, refresh: refreshToken }),
+    {
+      status: 200,
+      headers: new Headers([
+        ["Content-Type", "application/json"],
+        ["Set-Cookie", `curriculum_access=${accessToken}; Max-Age=900; ${cookieBase}`],
+        ["Set-Cookie", `curriculum_refresh=${refreshToken}; Max-Age=604800; ${cookieBase}`],
+      ]),
+    }
+  );
 });
 
 api.post("/auth/token/refresh/", async (c) => {
@@ -207,6 +228,18 @@ api.post("/auth/token/revoke/", async (c) => {
   await ensureRefreshTokensTable(c.env.DB);
   await c.env.DB.prepare("UPDATE refresh_tokens SET is_revoked = 1 WHERE token_id = ?").bind(payload.jti).run();
   return c.json({ status: "revoked" });
+});
+
+api.post("/auth/logout/", async (c) => {
+  const clearBase = `HttpOnly; Path=/; Max-Age=0; SameSite=Lax`;
+  return new Response(JSON.stringify({ status: "logged_out" }), {
+    status: 200,
+    headers: new Headers([
+      ["Content-Type", "application/json"],
+      ["Set-Cookie", `curriculum_access=; ${clearBase}`],
+      ["Set-Cookie", `curriculum_refresh=; ${clearBase}`],
+    ]),
+  });
 });
 
 api.use("*", requireAuth);

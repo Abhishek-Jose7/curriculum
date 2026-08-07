@@ -1,16 +1,22 @@
 import type { Context, Next } from "hono";
-import type { AuthUser, Env, Variables } from "../types";
+import type { AuthUser, Env, Role, Variables } from "../types";
 
 const encoder = new TextEncoder();
 
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const path = c.req.path;
-  if (path.includes("/auth/token")) {
+  if (path.includes("/auth/token") || path.includes("/auth/logout")) {
     await next();
     return;
   }
   const header = c.req.header("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const cookieHeader = c.req.header("cookie") ?? "";
+  const cookieToken = cookieHeader
+    .split(";")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith("curriculum_access="))
+    ?.slice("curriculum_access=".length) ?? "";
+  const token = (header.startsWith("Bearer ") ? header.slice(7) : "") || cookieToken;
   if (!token) return c.json({ detail: "Authentication credentials were not provided." }, 401);
   const payload = await verifyJwt(token, c.env.AUTH_JWT_SECRET);
   if (!payload?.sub) return c.json({ detail: "Invalid token." }, 401);
@@ -59,3 +65,39 @@ function base64url(value: string | ArrayBuffer) {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
+export function requireRole(...roles: Role[]) {
+  return async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    next: Next
+  ) => {
+    const user = c.get("user");
+    if (!user || !roles.includes(user.role as Role)) {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
+    await next();
+  };
+}
+
+export function requireSameDepartment(getCourseId: (c: Context<any>) => string) {
+  return async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    next: Next
+  ) => {
+    const user = c.get("user");
+    if (user.role === "HOD" && user.department_id) {
+      const row = await c.env.DB.prepare(
+        `SELECT s.department_id FROM courses co
+         JOIN semesters s ON co.semester_id = s.id
+         WHERE co.id = ?`
+      )
+        .bind(getCourseId(c))
+        .first<{ department_id: string }>();
+      if (!row || row.department_id !== user.department_id) {
+        return c.json({ detail: "Cross-department access denied." }, 403);
+      }
+    }
+    await next();
+  };
+}
+
