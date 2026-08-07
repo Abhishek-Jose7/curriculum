@@ -23,6 +23,37 @@ import { cn } from "@/lib/utils";
 
 type ActiveTab = "invite" | "department" | "academic-year" | "semester";
 
+const YEAR_OF_STUDY = [
+  { label: 'FE', fullName: 'First Year', sems: [1, 2], color: 'blue' },
+  { label: 'SE', fullName: 'Second Year', sems: [3, 4], color: 'purple' },
+  { label: 'TE', fullName: 'Third Year', sems: [5, 6], color: 'amber' },
+  { label: 'BE', fullName: 'Final Year', sems: [7, 8], color: 'green' },
+];
+
+function getTermTag(semNumber: number) {
+  return semNumber % 2 === 1
+    ? { label: 'ODD', desc: 'Jul–Nov', cls: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20' }
+    : { label: 'EVEN', cls: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20', desc: 'Jan–May' };
+}
+
+function getYearOfStudy(semNumber: number) {
+  return YEAR_OF_STUDY.find(y => y.sems.includes(semNumber));
+}
+
+const yearBorderClasses: Record<string, string> = {
+  blue: 'border-l-blue-500',
+  purple: 'border-l-purple-500',
+  amber: 'border-l-amber-500',
+  green: 'border-l-emerald-500',
+};
+
+const yearChipClasses: Record<string, string> = {
+  blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+  purple: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+  amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  green: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+};
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("department");
 
@@ -563,25 +594,66 @@ export default function AdminPage() {
                     ) : semesters.length === 0 ? (
                       <div className="text-xs font-semibold text-muted-foreground py-6 text-center">No semesters mapped to departments. Use the catalog form below.</div>
                     ) : (
-                      <ul className="space-y-2">
-                        {semesters.map(s => (
-                          <li key={s.id} className="text-xs font-bold p-3 bg-background rounded border border-border flex justify-between items-center shadow-sm hover:border-primary/20 transition-all duration-150 group">
-                            <div>
-                              <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60 mr-2">Sem {s.number}</span>
-                              <span className="text-foreground/75">{s.title}</span>
-                              <span className="text-[10px] text-muted-foreground/50 ml-2 font-medium">({s.academic_year_name})</span>
+                      <div className="space-y-6">
+                        {YEAR_OF_STUDY.map((year) => {
+                          const groupSemesters = semesters.filter((s) => year.sems.includes(Number(s.number)));
+                          return (
+                            <div key={year.label} className="space-y-2">
+                              <div className={cn("flex items-center justify-between px-3 py-1.5 rounded-sm bg-muted/40 border-l-4 font-bold text-xs text-foreground", yearBorderClasses[year.color])}>
+                                <div className="flex items-center gap-2">
+                                  <span>{year.label} — {year.fullName}</span>
+                                  <span className="text-[10px] text-muted-foreground/60 font-normal font-mono">
+                                    ({groupSemesters.length} {groupSemesters.length === 1 ? "semester" : "semesters"})
+                                  </span>
+                                </div>
+                              </div>
+                              {groupSemesters.length === 0 ? (
+                                <div className="text-[11px] font-medium text-muted-foreground/60 py-2.5 px-3 italic bg-background/50 rounded border border-dashed border-border/60">
+                                  No semesters configured for {year.label} ({year.fullName})
+                                </div>
+                              ) : (
+                                <ul className="space-y-2">
+                                  {groupSemesters.map((s) => {
+                                    const termTag = getTermTag(Number(s.number));
+                                    const yearInfo = getYearOfStudy(Number(s.number));
+                                    return (
+                                      <li key={s.id} className="text-xs font-bold p-3 bg-background rounded border border-border flex justify-between items-center shadow-sm hover:border-primary/20 transition-all duration-150 group">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
+                                            Sem {s.number}
+                                          </span>
+                                          <span className="text-foreground/75">{s.title}</span>
+                                          {yearInfo && (
+                                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border", yearChipClasses[yearInfo.color])}>
+                                              {yearInfo.label}
+                                            </span>
+                                          )}
+                                          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border", termTag.cls)}>
+                                            {termTag.label} ({termTag.desc})
+                                          </span>
+                                          {s.academic_year_name && (
+                                            <span className="text-[10px] text-muted-foreground/50 font-medium">
+                                              ({s.academic_year_name})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                                          <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </button>
+                                          <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        </div>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
                             </div>
-                            <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                              <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
 
