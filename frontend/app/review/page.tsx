@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check, Loader2, MessageSquare, Send, X, ShieldAlert, FileText, CheckSquare, CornerDownRight, AlignLeft } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { RoleGuard } from "@/components/layout/role-guard";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { A4Preview } from "@/components/curriculum/a4-preview";
@@ -324,16 +325,18 @@ function ReviewContent() {
 
 export default function ReviewPage() {
   return (
-    <Suspense fallback={
-      <AppShell>
-        <div className="flex h-[60vh] flex-col items-center justify-center p-8 bg-card border border-border rounded shadow-sm space-y-4 animate-pulse">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Initializing peer review console...</span>
-        </div>
-      </AppShell>
-    }>
-      <ReviewContent />
-    </Suspense>
+    <RoleGuard allowed={["HOD", "ADMIN"]}>
+      <Suspense fallback={
+        <AppShell>
+          <div className="flex h-[60vh] flex-col items-center justify-center p-8 bg-card border border-border rounded shadow-sm space-y-4 animate-pulse">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Initializing peer review console...</span>
+          </div>
+        </AppShell>
+      }>
+        <ReviewContent />
+      </Suspense>
+    </RoleGuard>
   );
 }
 
