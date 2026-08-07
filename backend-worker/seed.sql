@@ -12,9 +12,10 @@ INSERT OR IGNORE INTO profiles (id, email, password_hash, role, department_id, f
 VALUES 
 (1, 'admin@example.edu', 'ChangeMe123!', 'ADMIN', 1, 'System', 'Admin', 'Administrator', '9999999999', 1),
 (2, 'faculty@example.edu', 'ChangeMe123!', 'FACULTY', 1, 'Faculty', 'Coordinator', 'Assistant Professor', '8888888888', 1),
-(3, 'reviewer@example.edu', 'ChangeMe123!', 'REVIEWER', 1, 'Peer', 'Reviewer', 'Associate Professor', '7777777777', 1);
+(3, 'reviewer@example.edu', 'ChangeMe123!', 'REVIEWER', 1, 'Peer', 'Reviewer', 'Associate Professor', '7777777777', 1),
+(4, 'hod@example.edu', 'ChangeMe123!', 'HOD', 1, 'Head', 'Department', 'Professor', '6666666666', 1);
 
-UPDATE profiles SET password_hash = 'ChangeMe123!' WHERE id IN ('1', '2', '3');
+UPDATE profiles SET password_hash = 'ChangeMe123!' WHERE id IN ('1', '2', '3', '4');
 
 -- 3. Academic Years
 INSERT OR IGNORE INTO academic_years (id, name, starts_on, ends_on, is_active)

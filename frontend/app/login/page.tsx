@@ -10,9 +10,9 @@ const USER_STORAGE_KEY = "curriculum_user";
 const DEV_FILLS =
   process.env.NODE_ENV === "development"
     ? [
-        { label: "Admin", email: "admin@frcrce.edu", password: "ChangeMe123!" },
-        { label: "HOD", email: "hod@frcrce.edu", password: "ChangeMe123!" },
-        { label: "Teacher", email: "faculty@frcrce.edu", password: "ChangeMe123!" },
+        { label: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
+        { label: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
+        { label: "Teacher", email: "faculty@example.edu", password: "ChangeMe123!" },
       ]
     : [];
 
