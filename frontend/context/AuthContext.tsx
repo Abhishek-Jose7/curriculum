@@ -1,0 +1,88 @@
+"use client";
+
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787/api";
+const USER_STORAGE_KEY = "curriculum_user";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  role: "ADMIN" | "HOD" | "FACULTY";
+  department_id?: string | null;
+  first_name: string;
+  last_name: string;
+  is_superuser?: number;
+};
+
+type AuthContextValue = {
+  user: AuthUser | null;
+  loading: boolean;
+  logout: () => Promise<void>;
+  refetch: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue>({
+  user: null,
+  loading: true,
+  logout: async () => {},
+  refetch: async () => {},
+});
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = window.localStorage.getItem(USER_STORAGE_KEY);
+        return stored ? (JSON.parse(stored) as AuthUser) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(true);
+
+  const fetchMe = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include" });
+      if (!res.ok) {
+        setUser(null);
+        if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+        return;
+      }
+      const data: AuthUser = await res.json();
+      setUser(data);
+      if (typeof window !== "undefined")
+        window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      setUser(null);
+      if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void fetchMe(); }, [fetchMe]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API_URL}/auth/logout/`, { method: "POST", credentials: "include" });
+    } catch { /* ignore */ }
+    setUser(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(USER_STORAGE_KEY);
+      window.location.href = "/login";
+    }
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, logout, refetch: fetchMe }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
