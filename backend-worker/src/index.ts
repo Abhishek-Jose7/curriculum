@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import puppeteer from "@cloudflare/puppeteer";
 import { BaseRepository, normalizeValue } from "./repositories/base";
 import { CoursesRepository, ReviewerRepository, WorkflowRepository } from "./repositories/curriculum";
-import { requireAuth, signJwt, isAcademicAdmin, isReviewerOrAdmin, verifyJwt } from "./middleware/auth";
+import { requireAuth, signJwt, isAcademicAdmin, isReviewerOrAdmin, verifyJwt, requireRole } from "./middleware/auth";
 import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
 import { crudRoute } from "./routes/generic";
@@ -256,6 +256,123 @@ const ayRoute = crudRoute("academic_years", ["name", "starts_on", "ends_on", "is
 api.route("/academic-years", ayRoute);
 api.route("/academic-years/", ayRoute);
 
+api.post("/academic-years/:id/rollover/", requireRole("ADMIN"), async (c) => {
+  const targetAyId = c.req.param("id");
+  try {
+    const targetAy = await c.env.DB.prepare("SELECT * FROM academic_years WHERE id = ?").bind(targetAyId).first<any>();
+    if (!targetAy) return c.json({ detail: "Not found." }, 404);
+
+    const priorYear = await c.env.DB.prepare("SELECT * FROM academic_years WHERE id != ? ORDER BY starts_on DESC LIMIT 1").bind(targetAyId).first<any>();
+    if (!priorYear) {
+      return c.json({ message: "No prior academic year to clone from", semesters_cloned: 0, courses_cloned: 0 });
+    }
+
+    const priorSemesters = await c.env.DB.prepare("SELECT * FROM semesters WHERE academic_year_id = ?").bind(priorYear.id).all<any>();
+    
+    let semestersCloned = 0;
+    let coursesCloned = 0;
+
+    for (const priorSem of priorSemesters.results ?? []) {
+      const newSemId = crypto.randomUUID();
+      const semResult = await c.env.DB.prepare(`
+        INSERT INTO semesters (id, department_id, academic_year_id, number, title, ordinance)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(department_id, academic_year_id, number) DO NOTHING
+        RETURNING *
+      `).bind(newSemId, priorSem.department_id, targetAy.id, priorSem.number, priorSem.title, priorSem.ordinance).first<any>();
+
+      if (!semResult) continue; // Skip if conflict
+      const insertedSemId = semResult.id;
+      semestersCloned++;
+
+      const priorCourses = await c.env.DB.prepare("SELECT * FROM courses WHERE semester_id = ?").bind(priorSem.id).all<any>();
+      
+      for (const origCourse of priorCourses.results ?? []) {
+        const newCourseId = crypto.randomUUID();
+        await c.env.DB.prepare(`
+          INSERT INTO courses (
+            id, semester_id, code, title, course_type,
+            lecture_hours, tutorial_hours, practical_hours, self_learning_hours,
+            lecture_credits, tutorial_credits, practical_credits, credits,
+            internal_marks, external_marks, duration_hours, passing_marks,
+            objectives, pre_requisites, syllabus_intro, online_resources, section_order,
+            status, faculty_user_id, approved_by_user_id
+          ) VALUES (
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            'DRAFT', NULL, NULL
+          )
+        `).bind(
+          newCourseId, insertedSemId, origCourse.code, origCourse.title, origCourse.course_type,
+          origCourse.lecture_hours, origCourse.tutorial_hours, origCourse.practical_hours, origCourse.self_learning_hours,
+          origCourse.lecture_credits, origCourse.tutorial_credits, origCourse.practical_credits, origCourse.credits,
+          origCourse.internal_marks, origCourse.external_marks, origCourse.duration_hours, origCourse.passing_marks,
+          origCourse.objectives, origCourse.pre_requisites, origCourse.syllabus_intro, origCourse.online_resources, origCourse.section_order
+        ).run();
+        
+        coursesCloned++;
+
+        const cloneChild = async (table: string, parentCol: string, origParentId: string, newParentId: string, fields: string[]) => {
+          const rows = await c.env.DB.prepare(`SELECT * FROM ${table} WHERE ${parentCol} = ?`).bind(origParentId).all<any>();
+          if (!rows.results?.length) return;
+          const stmts = rows.results.map(row => {
+            const newId = crypto.randomUUID();
+            const cols = ["id", parentCol, ...fields];
+            const vals = [newId, newParentId, ...fields.map(f => row[f])];
+            const qs = cols.map(() => "?").join(", ");
+            return c.env.DB.prepare(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${qs})`).bind(...vals);
+          });
+          await c.env.DB.batch(stmts);
+        };
+
+        await cloneChild("course_outcomes", "course_id", origCourse.id, newCourseId, ["code", "description", "bloom_level", "sort_order"]);
+        await cloneChild("assessment_schemes", "course_id", origCourse.id, newCourseId, ["component", "marks", "description", "sort_order"]);
+        await cloneChild("reference_books", "course_id", origCourse.id, newCourseId, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"]);
+        
+        const oldModules = await c.env.DB.prepare("SELECT * FROM modules WHERE course_id = ?").bind(origCourse.id).all<any>();
+        if (oldModules.results?.length) {
+          const modStmts: any[] = [];
+          const modMap = new Map();
+          for (const m of oldModules.results) {
+            const nmId = crypto.randomUUID();
+            modMap.set(m.id, nmId);
+            modStmts.push(c.env.DB.prepare(`INSERT INTO modules (id, course_id, number, title, contact_hours, content, references) VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(nmId, newCourseId, m.number, m.title, m.contact_hours, m.content, m.references));
+          }
+          await c.env.DB.batch(modStmts);
+
+          const topicStmts: any[] = [];
+          for (const m of oldModules.results) {
+            const nModId = modMap.get(m.id);
+            const oldTopics = await c.env.DB.prepare("SELECT * FROM topics WHERE module_id = ?").bind(m.id).all<any>();
+            for (const t of oldTopics.results ?? []) {
+              topicStmts.push(c.env.DB.prepare(`INSERT INTO topics (id, module_id, title, description, sort_order) VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), nModId, t.title, t.description, t.sort_order));
+            }
+          }
+          if (topicStmts.length > 0) {
+            const batches = [];
+            for (let i = 0; i < topicStmts.length; i += 100) batches.push(topicStmts.slice(i, i + 100));
+            for (const b of batches) await c.env.DB.batch(b);
+          }
+        }
+      }
+    }
+
+    return c.json({
+      message: "Rollover complete",
+      source_academic_year: priorYear.name,
+      target_academic_year: targetAy.name,
+      semesters_cloned: semestersCloned,
+      courses_cloned: coursesCloned
+    });
+  } catch (e: any) {
+    console.error("Rollover failed", e);
+    return c.json({ detail: "Rollover failed: " + e.message }, 500);
+  }
+});
+
 const semestersRoute = crudRoute("semesters", ["department_id", "academic_year_id", "number", "title", "ordinance"], ["department_id", "academic_year_id", "number"], true);
 api.route("/semesters", semestersRoute);
 api.route("/semesters/", semestersRoute);
@@ -493,7 +610,35 @@ api.post("/approval-workflows/", async (c) => {
   return c.json(workflow, 201);
 });
 
-api.get("/published-curricula/", async (c) => c.json(await new BaseRepository(c.env.DB, "published_curricula", [], ["department_id", "academic_year_id", "is_public"]).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+api.get("/published-curricula/", async (c) => c.json(await new BaseRepository(c.env.DB, "published_curricula", [], ["department_id", "academic_year_id", "is_public", "year_of_study"]).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+
+api.get("/published-curricula/archive/", requireRole('HOD', 'ADMIN'), async (c) => {
+  const user = c.get('user');
+  
+  let query = `
+    SELECT 
+      pc.*,
+      ay.name as academic_year_name,
+      d.name as department_name,
+      d.code as department_code
+    FROM published_curricula pc
+    JOIN academic_years ay ON pc.academic_year_id = ay.id
+    JOIN departments d ON pc.department_id = d.id
+  `;
+  
+  const params: any[] = [];
+  
+  // HOD only sees their department
+  if (user.role === 'HOD' && user.department_id) {
+    query += ' WHERE pc.department_id = ?';
+    params.push(user.department_id);
+  }
+  
+  query += ' ORDER BY ay.starts_on DESC, pc.year_of_study ASC';
+  
+  const rows = await c.env.DB.prepare(query).bind(...params).all();
+  return c.json(rows.results ?? []);
+});
 
 api.get("/published-curricula/:id/download/", async (c) => {
   const id = c.req.param("id");
@@ -520,14 +665,23 @@ api.get("/published-curricula/:id/download/", async (c) => {
 api.post("/published-curricula/publish/", async (c) => {
   if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
   const body = await c.req.json<any>();
+  
+  const YEAR_SEM_MAP: Record<string, number[]> = {
+    FE: [1, 2], SE: [3, 4], TE: [5, 6], BE: [7, 8]
+  };
+  if (!body.year_of_study || !YEAR_SEM_MAP[body.year_of_study]) {
+    return c.json({ detail: "Invalid or missing year_of_study" }, 400);
+  }
+  const sems = YEAR_SEM_MAP[body.year_of_study];
+
   const template = await c.env.DB.prepare("SELECT * FROM curriculum_templates WHERE id = ?").bind(body.template).first<any>();
   if (!template) return c.json({ detail: "Template not found." }, 404);
-  const count = await c.env.DB.prepare("SELECT count(*) AS n FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND c.status IN ('APPROVED','PUBLISHED')").bind(body.department, body.academic_year).first<any>();
-  const printUrl = `/print/final?department=${encodeURIComponent(body.department)}&academic_year=${encodeURIComponent(body.academic_year)}&version=${encodeURIComponent(body.version_label ?? "v1")}`;
+  const count = await c.env.DB.prepare("SELECT count(*) AS n FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED')").bind(body.department, body.academic_year, sems[0], sems[1]).first<any>();
+  const printUrl = `/print/final?department=${encodeURIComponent(body.department)}&academic_year=${encodeURIComponent(body.academic_year)}&year_of_study=${encodeURIComponent(body.year_of_study)}&version=${encodeURIComponent(body.version_label ?? "v1")}`;
   
   const published = await c.env.DB.prepare(`
-    INSERT INTO published_curricula (department_id, academic_year_id, template_id, published_by_user_id, print_url, pdf_url, version_label, template_snapshot, render_metrics)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+    INSERT INTO published_curricula (department_id, academic_year_id, template_id, published_by_user_id, print_url, pdf_url, version_label, template_snapshot, render_metrics, year_of_study)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
   `).bind(
     body.department,
     body.academic_year,
@@ -537,10 +691,11 @@ api.post("/published-curricula/publish/", async (c) => {
     "",
     body.version_label ?? "v1",
     JSON.stringify({ css: template.css, html_template: template.html_template, name: template.name }),
-    JSON.stringify({ status: "queued", course_count: count?.n ?? 0, export: "pdf-render" })
+    JSON.stringify({ status: "queued", course_count: count?.n ?? 0, export: "pdf-render" }),
+    body.year_of_study
   ).first<any>();
 
-  await c.env.DB.prepare("UPDATE courses SET status = 'PUBLISHED' WHERE id IN (SELECT c.id FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND c.status IN ('APPROVED','PUBLISHED'))").bind(body.department, body.academic_year).run();
+  await c.env.DB.prepare("UPDATE courses SET status = 'PUBLISHED' WHERE id IN (SELECT c.id FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED'))").bind(body.department, body.academic_year, sems[0], sems[1]).run();
   await c.env.DB.prepare("UPDATE curriculum_templates SET is_locked = 1 WHERE id = ?").bind(body.template).run();
 
   if (c.env.PUBLISH_QUEUE) {
@@ -549,11 +704,35 @@ api.post("/published-curricula/publish/", async (c) => {
       departmentId: body.department,
       academicYearId: body.academic_year,
       templateId: body.template,
-      versionLabel: body.version_label ?? "v1"
+      versionLabel: body.version_label ?? "v1",
+      yearOfStudy: body.year_of_study
     });
   }
 
   return c.json(published, 202);
+});
+
+api.post('/published-curricula/:id/hod-approve/', requireRole('HOD', 'ADMIN'), async (c) => {
+  const { id } = c.req.param();
+  const user = c.get('user');
+  
+  // Find the published curriculum
+  const curriculum = await c.env.DB.prepare(
+    'SELECT * FROM published_curricula WHERE id = ?'
+  ).bind(id).first<any>();
+  
+  if (!curriculum) return c.json({ detail: 'Not found.' }, 404);
+  
+  // HOD can only approve their own department
+  if (user.role === 'HOD' && curriculum.department_id !== user.department_id) {
+    return c.json({ detail: 'Permission denied.' }, 403);
+  }
+  
+  await c.env.DB.prepare(
+    'UPDATE published_curricula SET hod_approved_at = ?, hod_approved_by = ? WHERE id = ?'
+  ).bind(new Date().toISOString(), user.id, id).run();
+  
+  return c.json({ status: 'approved' });
 });
 
 app.route("/api", api);
@@ -607,7 +786,7 @@ export default {
   async queue(batch: any, env: Env, ctx: any) {
     for (const message of batch.messages) {
       const payload = message.body;
-      const { publishedId, departmentId, academicYearId, templateId, versionLabel } = payload;
+      const { publishedId, departmentId, academicYearId, templateId, versionLabel, yearOfStudy } = payload;
       
       console.log(`Processing queue message for publishedId: ${publishedId}`);
       
@@ -632,7 +811,9 @@ export default {
         const page = await browser.newPage();
         
         const frontendUrl = env.FRONTEND_URL ?? "http://localhost:3000";
-        const targetUrl = `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
+        const targetUrl = yearOfStudy 
+          ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&year_of_study=${encodeURIComponent(yearOfStudy)}&version=${encodeURIComponent(versionLabel)}`
+          : `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
         
         console.log(`Navigating to print page: ${targetUrl}`);
         await page.goto(targetUrl, { waitUntil: "networkidle0" });
