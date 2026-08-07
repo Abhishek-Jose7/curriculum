@@ -552,6 +552,22 @@ api.get("/courses/:id/", async (c) => {
 api.put("/courses/:id/", async (c) => updateCourse(c));
 api.patch("/courses/:id/", async (c) => updateCourse(c));
 
+const handleAssignFaculty = async (c: any) => {
+  const body = await c.req.json().catch(() => ({}));
+  const facultyUserId = body.faculty_user_id !== undefined ? body.faculty_user_id : null;
+  const course = (await c.env.DB
+    .prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ? RETURNING *")
+    .bind(facultyUserId, c.req.param("id"))
+    .first()) as any;
+  if (!course) {
+    return c.json({ detail: "Course not found." }, 404);
+  }
+  return c.json(course);
+};
+
+api.patch("/courses/:id/assign-faculty", requireRole("ADMIN", "HOD"), handleAssignFaculty);
+api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), handleAssignFaculty);
+
 api.post("/courses/:id/submit/", async (c) => {
   const course = await c.env.DB.prepare("UPDATE courses SET status = 'SUBMITTED' WHERE id = ? RETURNING *").bind(c.req.param("id")).first<any>();
   if (!course) return c.json({ detail: "Not found." }, 404);
