@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Archive,
   BookOpen,
   CheckCircle2,
   FileText,
@@ -34,6 +35,7 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
     { href: "/publishing", label: "Catalogue Press", icon: FileText },
+    { href: "/archive", label: "Curriculum Archive", icon: Archive },
   ];
 
   if (role === "ADMIN") return [
@@ -41,6 +43,7 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
     { href: "/publishing", label: "Catalogue Press", icon: FileText },
+    { href: "/archive", label: "Curriculum Archive", icon: Archive },
     { href: "/admin", label: "Office Controls", icon: Users },
   ];
 
