@@ -133,6 +133,7 @@ export default function AdminPage() {
         method: "POST",
         body: JSON.stringify({
           semester: semId,
+          semester_id: semId,
           code: newSubjectCode.trim(),
           title: newSubjectTitle.trim(),
           course_type: newSubjectType,

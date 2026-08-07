@@ -35,6 +35,9 @@ export class BaseRepository<T extends Record<string, unknown>> {
     if (payload.academic_year !== undefined && payload.academic_year_id === undefined) {
       payload.academic_year_id = payload.academic_year;
     }
+    if (payload.semester !== undefined && payload.semester_id === undefined) {
+      payload.semester_id = payload.semester;
+    }
     if (!payload.id && !this.writableColumns.includes("id")) {
       payload.id = crypto.randomUUID();
     }
@@ -56,8 +59,8 @@ export class BaseRepository<T extends Record<string, unknown>> {
     if (payload.department !== undefined && payload.department_id === undefined) {
       payload.department_id = payload.department;
     }
-    if (payload.academic_year !== undefined && payload.academic_year_id === undefined) {
-      payload.academic_year_id = payload.academic_year;
+    if (payload.semester !== undefined && payload.semester_id === undefined) {
+      payload.semester_id = payload.semester;
     }
     const columns = this.writableColumns.filter((column) => payload[column] !== undefined);
     if (!columns.length) {
