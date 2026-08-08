@@ -55,7 +55,7 @@ const yearChipClasses: Record<string, string> = {
   green: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
 };
 
-export default function AdminPage() {
+function AdminContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("department");
 
   // Options for selects
@@ -404,7 +404,7 @@ export default function AdminPage() {
   };
 
   return (
-    <RoleGuard allowed={["ADMIN"]}>
+    <>
       <AppShell>
         <div className="space-y-6 animate-fade-in text-left">
           {/* Header Section */}
@@ -1060,6 +1060,13 @@ export default function AdminPage() {
           </div>
         </div>
       </AppShell>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <RoleGuard allowed={["ADMIN"]}>
+      <AdminContent />
     </RoleGuard>
   );
 }
