@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import puppeteer from "@cloudflare/puppeteer";
 import { BaseRepository, normalizeValue } from "./repositories/base";
 import { CoursesRepository, ReviewerRepository, WorkflowRepository } from "./repositories/curriculum";
 import { requireAuth, signJwt, isAcademicAdmin, isReviewerOrAdmin, verifyJwt, requireRole } from "./middleware/auth";
@@ -794,16 +793,9 @@ api.post("/published-curricula/publish/", async (c) => {
   await c.env.DB.prepare("UPDATE courses SET status = 'PUBLISHED' WHERE id IN (SELECT c.id FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED'))").bind(body.department, body.academic_year, sems[0], sems[1]).run();
   await c.env.DB.prepare("UPDATE curriculum_templates SET is_locked = 1 WHERE id = ?").bind(body.template).run();
 
-  if (c.env.PUBLISH_QUEUE) {
-    await c.env.PUBLISH_QUEUE.send({
-      publishedId: published.id,
-      departmentId: body.department,
-      academicYearId: body.academic_year,
-      templateId: body.template,
-      versionLabel: body.version_label ?? "v1",
-      yearOfStudy: body.year_of_study
-    });
-  }
+  c.executionCtx.waitUntil(
+    generatePdfTask(c.env, published.id, body.department, body.academic_year, body.version_label ?? "v1", body.year_of_study)
+  );
 
   return c.json(published, 202);
 });
@@ -917,110 +909,103 @@ async function syncChildren(db: D1Database, table: string, parentColumn: string,
   }
 }
 
-export default {
-  fetch: app.fetch,
-  async queue(batch: any, env: Env, ctx: any) {
-    for (const message of batch.messages) {
-      const payload = message.body;
-      const { publishedId, departmentId, academicYearId, templateId, versionLabel, yearOfStudy } = payload;
-      
-      console.log(`Processing queue message for publishedId: ${publishedId}`);
-      
-      try {
-        await env.DB.prepare(`
-          UPDATE published_curricula
-          SET render_metrics = json_patch(render_metrics, ?)
-          WHERE id = ?
-        `).bind(JSON.stringify({ status: "processing", started_at: new Date().toISOString() }), publishedId).run();
+async function generatePdfTask(env: Env, publishedId: string, departmentId: string, academicYearId: string, versionLabel: string, yearOfStudy?: string) {
+  console.log(`Processing background PDF generation for publishedId: ${publishedId}`);
+  
+  try {
+    await env.DB.prepare(`
+      UPDATE published_curricula
+      SET render_metrics = json_patch(render_metrics, ?)
+      WHERE id = ?
+    `).bind(JSON.stringify({ status: "processing", started_at: new Date().toISOString() }), publishedId).run();
 
-        let browser;
-        try {
-          if (!env.BROWSER) {
-            throw new Error("Cloudflare Browser Rendering (BROWSER binding) not available in current environment");
-          }
-          browser = await puppeteer.launch(env.BROWSER);
-        } catch (launchErr: any) {
-          console.error("Puppeteer launch failed:", launchErr);
-          throw launchErr;
-        }
-
-        const page = await browser.newPage();
-        
-        const frontendUrl = env.FRONTEND_URL ?? "http://localhost:3000";
-        const targetUrl = yearOfStudy 
-          ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&year_of_study=${encodeURIComponent(yearOfStudy)}&version=${encodeURIComponent(versionLabel)}`
-          : `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
-        
-        console.log(`Navigating to print page: ${targetUrl}`);
-        await page.goto(targetUrl, { waitUntil: "networkidle0" });
-
-        try {
-          await page.waitForSelector('main[data-fonts-loaded="true"]', { timeout: 15000 });
-        } catch (fontErr) {
-          console.warn("Fonts did not confirm loading in 15s, continuing anyway:", fontErr);
-        }
-
-        const headerTemplate = `
-          <div style="font-size: 8pt; width: 100%; border-bottom: 0.5pt solid #000; padding-bottom: 4px; margin: 0 12mm; display: flex; align-items: center; justify-content: space-between; font-family: 'Times New Roman', serif;">
-            <div style="display: flex; align-items: center;">
-              <span style="font-weight: bold; font-size: 9pt;">FR. CONCEICAO RODRIGUES COLLEGE OF ENGINEERING</span>
-            </div>
-            <div style="text-align: right; font-style: italic; font-size: 7.5pt;">
-              Autonomous College affiliated to University of Mumbai
-            </div>
-          </div>
-        `;
-        
-        const footerTemplate = `
-          <div style="font-size: 8pt; width: 100%; margin: 0 12mm; text-align: center; display: flex; justify-content: space-between; font-family: 'Times New Roman', serif; border-top: 0.5pt solid #ccc; padding-top: 4px;">
-            <span>Curriculum Handbook - ${versionLabel}</span>
-            <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-          </div>
-        `;
-
-        const pdfBuffer = await page.pdf({
-          format: "A4",
-          printBackground: true,
-          displayHeaderFooter: true,
-          headerTemplate,
-          footerTemplate,
-          margin: {
-            top: "28mm",
-            bottom: "18mm",
-            left: "12mm",
-            right: "12mm"
-          }
-        });
-
-        await browser.close();
-
-        const pdfKey = `published/${publishedId}.pdf`;
-        await env.BUCKET.put(pdfKey, pdfBuffer, {
-          httpMetadata: { contentType: "application/pdf" }
-        });
-
-        const pdfUrl = `/api/published-curricula/${publishedId}/download/`;
-        await env.DB.prepare(`
-          UPDATE published_curricula
-          SET pdf_url = ?, render_metrics = json_patch(render_metrics, ?)
-          WHERE id = ?
-        `).bind(pdfUrl, JSON.stringify({ status: "completed", completed_at: new Date().toISOString() }), publishedId).run();
-
-        console.log(`Publishing completed successfully for publishedId: ${publishedId}`);
-      } catch (err: any) {
-        console.error(`Error rendering PDF in queue worker: ${err.message}`);
-        
-        const attempts = message.attempts ?? 1;
-        if (attempts >= 3) {
-          await env.DB.prepare(`
-            UPDATE published_curricula
-            SET render_metrics = json_patch(render_metrics, ?)
-            WHERE id = ?
-          `).bind(JSON.stringify({ status: "failed", error: err.message, failed_at: new Date().toISOString() }), publishedId).run();
-        } else {
-          throw err;
-        }
-      }
+    if (!env.BROWSERLESS_API_TOKEN) {
+      throw new Error("BROWSERLESS_API_TOKEN is not configured.");
     }
+
+    const frontendUrl = env.FRONTEND_URL ?? "http://localhost:3000";
+    const targetUrl = yearOfStudy 
+      ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&year_of_study=${encodeURIComponent(yearOfStudy)}&version=${encodeURIComponent(versionLabel)}`
+      : `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
+    
+    console.log(`Requesting PDF from Browserless for URL: ${targetUrl}`);
+
+    const headerTemplate = `
+      <div style="font-size: 8pt; width: 100%; border-bottom: 0.5pt solid #000; padding-bottom: 4px; margin: 0 12mm; display: flex; align-items: center; justify-content: space-between; font-family: 'Times New Roman', serif;">
+        <div style="display: flex; align-items: center;">
+          <span style="font-weight: bold; font-size: 9pt;">FR. CONCEICAO RODRIGUES COLLEGE OF ENGINEERING</span>
+        </div>
+        <div style="text-align: right; font-style: italic; font-size: 7.5pt;">
+          Autonomous College affiliated to University of Mumbai
+        </div>
+      </div>
+    `;
+    
+    const footerTemplate = `
+      <div style="font-size: 8pt; width: 100%; margin: 0 12mm; text-align: center; display: flex; justify-content: space-between; font-family: 'Times New Roman', serif; border-top: 0.5pt solid #ccc; padding-top: 4px;">
+        <span>Curriculum Handbook - ${versionLabel}</span>
+        <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      </div>
+    `;
+
+    const browserlessReq = {
+      url: targetUrl,
+      options: {
+        format: "A4",
+        printBackground: true,
+        displayHeaderFooter: true,
+        headerTemplate,
+        footerTemplate,
+        margin: {
+          top: "28mm",
+          bottom: "18mm",
+          left: "12mm",
+          right: "12mm"
+        }
+      },
+      gotoOptions: {
+        waitUntil: "networkidle0"
+      },
+      waitFor: "main[data-fonts-loaded=\"true\"]"
+    };
+
+    const response = await fetch(`https://chrome.browserless.io/pdf?token=${env.BROWSERLESS_API_TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(browserlessReq)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Browserless API failed with status ${response.status}: ${errorText}`);
+    }
+
+    const pdfBuffer = await response.arrayBuffer();
+
+    const pdfKey = `published/${publishedId}.pdf`;
+    await env.BUCKET.put(pdfKey, pdfBuffer, {
+      httpMetadata: { contentType: "application/pdf" }
+    });
+
+    const pdfUrl = `/api/published-curricula/${publishedId}/download/`;
+    await env.DB.prepare(`
+      UPDATE published_curricula
+      SET pdf_url = ?, render_metrics = json_patch(render_metrics, ?)
+      WHERE id = ?
+    `).bind(pdfUrl, JSON.stringify({ status: "completed", completed_at: new Date().toISOString() }), publishedId).run();
+
+    console.log(`Publishing completed successfully for publishedId: ${publishedId}`);
+  } catch (err: any) {
+    console.error(`Error rendering PDF in background task: ${err.message}`);
+    
+    await env.DB.prepare(`
+      UPDATE published_curricula
+      SET render_metrics = json_patch(render_metrics, ?)
+      WHERE id = ?
+    `).bind(JSON.stringify({ status: "failed", error: err.message, failed_at: new Date().toISOString() }), publishedId).run();
   }
+}
+
+export default {
+  fetch: app.fetch
 };

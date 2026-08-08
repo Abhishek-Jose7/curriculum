@@ -7,8 +7,7 @@ export type Env = {
   BUCKET: R2Bucket;
   AUTH_JWT_SECRET: string;
   FRONTEND_URL?: string;
-  BROWSER: any;
-  PUBLISH_QUEUE: Queue<any>;
+  BROWSERLESS_API_TOKEN: string;
   CORS_ALLOWED_ORIGINS?: string;
   ENVIRONMENT?: string;
 };

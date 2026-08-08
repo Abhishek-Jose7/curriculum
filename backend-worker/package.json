@@ -7,7 +7,6 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.1.0",
     "hono": "^4.0.0"
   },
   "devDependencies": {
