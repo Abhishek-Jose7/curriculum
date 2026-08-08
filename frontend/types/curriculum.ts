@@ -79,6 +79,8 @@ export type ReviewerComment = {
   section_label: string;
   body: string;
   reviewer_name: string;
+  reviewer_email?: string;
+  is_external?: boolean;
   is_resolved: boolean;
 };
 

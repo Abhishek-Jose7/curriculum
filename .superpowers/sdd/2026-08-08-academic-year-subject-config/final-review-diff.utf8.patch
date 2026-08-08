@@ -1,0 +1,638 @@
+﻿diff --git a/backend-worker/src/index.ts b/backend-worker/src/index.ts
+index efc0f40..b0a86bf 100644
+--- a/backend-worker/src/index.ts
++++ b/backend-worker/src/index.ts
+@@ -248,10 +248,82 @@ api.use("*", requireAuth);
+ 
+ api.get("/auth/me/", (c) => c.json(c.get("user")));
+ 
++api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), async (c) => {
++  const rows = await c.env.DB.prepare(
++    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
++  ).all();
++  return c.json(rows.results ?? []);
++});
++api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), async (c) => {
++  const rows = await c.env.DB.prepare(
++    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
++  ).all();
++  return c.json(rows.results ?? []);
++});
++
+ const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "university_name", "logo_url"], ["code"], true);
+ api.route("/departments", deptsRoute);
+ api.route("/departments/", deptsRoute);
+ 
++const handleCreateAcademicYear = async (c: any) => {
++  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
++  try {
++    const body = await c.req.json();
++    const newAy = await new BaseRepository(
++      c.env.DB,
++      "academic_years",
++      ["name", "starts_on", "ends_on", "is_active"],
++      ["is_active"]
++    ).create(body);
++
++    const countRes = (await c.env.DB.prepare(
++      "SELECT COUNT(*) AS count FROM academic_years WHERE id != ?"
++    ).bind((newAy as any).id).first()) as any;
++    const count = countRes?.count ?? 0;
++
++    if (count === 0) {
++      const depts = await c.env.DB.prepare("SELECT id FROM departments").all();
++      for (const dept of (depts.results ?? []) as any[]) {
++        const stmts: any[] = [];
++        for (let semNumber = 1; semNumber <= 8; semNumber++) {
++          const semId = crypto.randomUUID();
++          stmts.push(
++            c.env.DB.prepare(
++              "INSERT INTO semesters (id, department_id, academic_year_id, number, title, ordinance) VALUES (?, ?, ?, ?, ?, ?)"
++            ).bind(semId, dept.id, (newAy as any).id, semNumber, `Semester ${semNumber}`, "")
++          );
++          const c1Id = crypto.randomUUID();
++          stmts.push(
++            c.env.DB.prepare(
++              `INSERT INTO courses (id, semester_id, code, title, course_type, credits, lecture_hours, tutorial_hours, status)
++               VALUES (?, ?, ?, ?, 'THEORY', 4, 3, 1, 'DRAFT')`
++            ).bind(c1Id, semId, `SUB${semNumber}01`, `Subject ${semNumber}.1`)
++          );
++          const c2Id = crypto.randomUUID();
++          stmts.push(
++            c.env.DB.prepare(
++              `INSERT INTO courses (id, semester_id, code, title, course_type, credits, practical_hours, status)
++               VALUES (?, ?, ?, ?, 'LAB', 2, 4, 'DRAFT')`
++            ).bind(c2Id, semId, `SUB${semNumber}02`, `Subject ${semNumber}.2 Lab`)
++          );
++        }
++        await c.env.DB.batch(stmts);
++      }
++    }
++
++    return c.json(newAy, 201);
++  } catch (err: any) {
++    const msg = err?.message || String(err);
++    if (msg.includes("UNIQUE constraint failed") || msg.includes("SQLITE_CONSTRAINT")) {
++      return c.json({ detail: "A record with this identifier or semester number already exists for this selection." }, 400);
++    }
++    return c.json({ detail: msg }, 400);
++  }
++};
++
++api.post("/academic-years", handleCreateAcademicYear);
++api.post("/academic-years/", handleCreateAcademicYear);
++
+ const ayRoute = crudRoute("academic_years", ["name", "starts_on", "ends_on", "is_active"], ["is_active"], true);
+ api.route("/academic-years", ayRoute);
+ api.route("/academic-years/", ayRoute);
+@@ -480,6 +552,22 @@ api.get("/courses/:id/", async (c) => {
+ api.put("/courses/:id/", async (c) => updateCourse(c));
+ api.patch("/courses/:id/", async (c) => updateCourse(c));
+ 
++const handleAssignFaculty = async (c: any) => {
++  const body = await c.req.json().catch(() => ({}));
++  const facultyUserId = body.faculty_user_id !== undefined ? body.faculty_user_id : null;
++  const course = (await c.env.DB
++    .prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ? RETURNING *")
++    .bind(facultyUserId, c.req.param("id"))
++    .first()) as any;
++  if (!course) {
++    return c.json({ detail: "Course not found." }, 404);
++  }
++  return c.json(course);
++};
++
++api.patch("/courses/:id/assign-faculty", requireRole("ADMIN", "HOD"), handleAssignFaculty);
++api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), handleAssignFaculty);
++
+ api.post("/courses/:id/submit/", async (c) => {
+   const course = await c.env.DB.prepare("UPDATE courses SET status = 'SUBMITTED' WHERE id = ? RETURNING *").bind(c.req.param("id")).first<any>();
+   if (!course) return c.json({ detail: "Not found." }, 404);
+diff --git a/docs/superpowers/plans/2026-08-08-academic-year-subject-config.md b/docs/superpowers/plans/2026-08-08-academic-year-subject-config.md
+new file mode 100644
+index 0000000..cfffc48
+--- /dev/null
++++ b/docs/superpowers/plans/2026-08-08-academic-year-subject-config.md
+@@ -0,0 +1,127 @@
++# Academic Year Setup, Auto-Semester Generation, Subject Config & Teacher Assignment Implementation Plan
++
++> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++
++**Goal:** Provide auto-creation of Semesters 1-8 and pre-filled default subject shells on fresh Academic Year creation, an inline Subject Configuration drawer per semester, and 1-click teacher assignment/re-assignment for HODs and Admins.
++
++**Architecture:** Extend backend Worker `index.ts` with auto-seeding logic for new academic years, a faculty listing endpoint, and a quick faculty assignment PATCH route. Update frontend `admin/page.tsx` with an inline Subject Drawer inside semester cards featuring an instant teacher dropdown.
++
++**Tech Stack:** Next.js, Cloudflare Worker (Hono), SQLite D1, Tailwind CSS, Lucide icons.
++
++## Global Constraints
++
++- Repo root: `d:/Coding/Projects/CRCE-CURR/curriculum/`
++- All PowerShell commands use semicolons `;` instead of `&&`
++- Roles: `ADMIN`, `HOD`, `FACULTY`
++- No breaking changes to existing routes or data models
++
++---
++
++### Task 1: Backend Endpoint for Auto-Semester/Subject Pre-filling & Faculty List
++
++**Files:**
++- Modify: `backend-worker/src/index.ts`
++
++**Interfaces:**
++- Produces: `POST /api/academic-years/` auto-generation, `GET /api/profiles/faculty/`
++
++- [ ] **Step 1: Update POST /api/academic-years/ in backend-worker/src/index.ts**
++
++In `backend-worker/src/index.ts`, intercept `POST /academic-years/` or update `ayRoute`:
++
++Add a custom handler for `POST /academic-years/` (or update `ayRoute`) so that after creating the academic year:
++1. Check if any other academic year exists (`SELECT COUNT(*) FROM academic_years WHERE id != ?`).
++2. If count === 0 (first/fresh setup):
++   - Query all departments: `SELECT id FROM departments`.
++   - For each department:
++     - For semester numbers 1 to 8:
++       - Generate semester `id = crypto.randomUUID()`.
++       - Title = `Semester ${semNumber}`.
++       - Insert into `semesters (id, department_id, academic_year_id, number, title, ordinance)`.
++       - Create 2-3 default subject shells for that semester (e.g. `CS101` - Programming Fundamentals for Sem 1, `CS201` - Data Structures for Sem 3, etc.).
++       - Set `status = 'DRAFT'`, `faculty_user_id = NULL`.
++
++- [ ] **Step 2: Add GET /api/profiles/faculty/ endpoint**
++
++In `backend-worker/src/index.ts`, add:
++```typescript
++api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), async (c) => {
++  const rows = await c.env.DB.prepare(
++    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
++  ).all();
++  return c.json(rows.results ?? []);
++});
++```
++
++- [ ] **Step 3: Commit Task 1**
++
++```powershell
++git add backend-worker/src/index.ts
++git commit -m "feat(backend): auto-generate sem 1-8 and default subjects on fresh academic year creation + GET /profiles/faculty/ route"
++```
++
++---
++
++### Task 2: Backend Endpoint for Quick 1-Click Faculty Re-assignment
++
++**Files:**
++- Modify: `backend-worker/src/index.ts`
++
++- [ ] **Step 1: Add PATCH /api/courses/:id/assign-faculty/ in backend-worker/src/index.ts**
++
++```typescript
++api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), async (c) => {
++  const { id } = c.req.param();
++  const body = await c.req.json<{ faculty_user_id: string | null }>();
++  const course = await c.env.DB.prepare(
++    "UPDATE courses SET faculty_user_id = ? WHERE id = ? RETURNING *"
++  ).bind(body.faculty_user_id ?? null, id).first<any>();
++  if (!course) return c.json({ detail: "Course not found." }, 404);
++  return c.json(course);
++});
++```
++
++- [ ] **Step 2: Commit Task 2**
++
++```powershell
++git add backend-worker/src/index.ts
++git commit -m "feat(backend): PATCH /courses/:id/assign-faculty/ for 1-click teacher assignment"
++```
++
++---
++
++### Task 3: Frontend Inline Subject Drawer & Faculty Dropdown in Admin Page
++
++**Files:**
++- Modify: `frontend/app/admin/page.tsx`
++
++- [ ] **Step 1: Load Faculty list on mount in admin/page.tsx**
++
++Add state for `facultyUsers: { id: string; email: string; first_name: string; last_name: string; role: string }[]`.
++Fetch `GET /profiles/faculty/` on mount.
++
++- [ ] **Step 2: Add Inline Subject Drawer & Faculty Dropdown inside Semester cards**
++
++Add state:
++```typescript
++const [expandedSemId, setExpandedSemId] = useState<string | null>(null);
++const [semCourses, setSemCourses] = useState<Record<string, any[]>>({});
++```
++
++In each Semester card in the Semester List section:
++- Add a **"Configure Subjects"** button with a count badge.
++- When expanded, render the **Subject Drawer**:
++  - **Quick Add Subject Form**: Code, Title, Course Type (`THEORY`, `LAB`, `PROJECT`), Credits, and Teacher Dropdown.
++  - **Subject Cards List**: Code, Title, Credits, Course Type, and a **Teacher Selector Dropdown** (`<select value={course.faculty_user_id || ''} onChange={...}>`).
++  - Selecting a teacher calls `PATCH /courses/:id/assign-faculty/` directly and updates the state.
++
++- [ ] **Step 3: Test TypeScript build**
++
++Run `npx tsc --noEmit` in `frontend/` to ensure zero errors.
++
++- [ ] **Step 4: Commit Task 3**
++
++```powershell
++git add frontend/app/admin/page.tsx
++git commit -m "feat(frontend): inline subject drawer in semester cards with 1-click faculty assignment dropdown"
++```
+diff --git a/docs/superpowers/specs/2026-08-08-academic-year-subject-config-design.md b/docs/superpowers/specs/2026-08-08-academic-year-subject-config-design.md
+new file mode 100644
+index 0000000..874e071
+--- /dev/null
++++ b/docs/superpowers/specs/2026-08-08-academic-year-subject-config-design.md
+@@ -0,0 +1,66 @@
++# Design Spec: Academic Year Setup, Auto-Semester Generation, Subject Configuration & Teacher Assignment
++
++**Date:** 2026-08-08  
++**Status:** Approved by User  
++
++---
++
++## 1. Overview & Goals
++
++This specification outlines the complete workflow for managing Academic Years, Semesters, Subject Shells, and Faculty Assignments in the Curriculum Management System:
++
++1. **Academic Year Setup**:
++   - **With Prior Year**: Rollover automatically clones all semesters, course shells, and child structures from the prior academic year into the new academic year (courses set to `DRAFT`, faculty assignments cleared).
++   - **Fresh Setup (No Prior Year)**: Automatically generates **Semesters 1 through 8** for all departments AND seeds standard initial subject shells for each semester so the system is pre-populated out-of-the-box.
++
++2. **Inline Subject Configuration**:
++   - Inside each Semester card on the Admin Office Controls page (`/admin`), an **"Inline Subject Configuration"** panel enables Admins/HODs to view, add, and configure subjects directly for that semester.
++
++3. **Teacher Assignment & Faculty Re-assignment**:
++   - Subject cards and subject creation forms include a **Teacher Selector Dropdown** populated with registered faculty users.
++   - Admins/HODs can assign or change the teacher assigned to any course in 1 click.
++   - Assigned courses immediately appear on the teacher's dashboard under **"My Assigned Courses"** and under **"My Courses"** (`/courses`).
++
++---
++
++## 2. Architecture & Database Updates
++
++### Backend Endpoints (`backend-worker/src/index.ts`)
++
++1. **`POST /api/academic-years/` (Updated)**:
++   - When a new Academic Year is created, check if a prior academic year exists.
++   - If **NO prior year exists**: Automatically insert Semesters 1ΓÇô8 for all departments AND insert default subject shells (e.g. CS101, CS201, CS301, etc.) into those semesters.
++   - Return initial creation summary `{ academic_year, auto_created_semesters: N, auto_created_courses: N }`.
++
++2. **`GET /api/profiles/faculty/`**:
++   - Returns all active profiles with role `FACULTY`, `HOD`, or `ADMIN` (`id`, `email`, `first_name`, `last_name`, `role`, `department_id`) for populating teacher dropdowns.
++
++3. **`PATCH /api/courses/:id/assign-faculty/`**:
++   - Updates `faculty_user_id` for a specific course. Accessible to `HOD` and `ADMIN`.
++
++---
++
++## 3. Frontend UI Components (`frontend/app/admin/page.tsx`)
++
++### Semester List & Subject Drawer
++- Each Semester card displays a **"Configure Subjects (N)"** toggle button.
++- Clicking the toggle opens an inline **Subject Drawer**:
++  - **Quick Add Subject Form**: `code`, `title`, `course_type` (`THEORY`, `LAB`, `PROJECT`), `credits`, and `faculty_user_id` dropdown.
++  - **Subject Cards List**: Displays subject code, title, credits, course type badge, and a **Teacher Selector Dropdown** for 1-click re-assignment.
++
++---
++
++## 4. Teacher Dashboard Verification
++
++- When a user logged in with `FACULTY` role views `/` or `/courses`:
++  - `GET /courses/` filters by `faculty_user_id === user.id`.
++  - Assigned courses immediately display under **My Assigned Courses**.
++
++---
++
++## 5. Verification Plan
++
++1. **Fresh Academic Year Creation**: Create a brand new Academic Year when database is clean ΓåÆ Verify Semesters 1ΓÇô8 and default subject shells are auto-generated.
++2. **Rollover Creation**: Create a new Academic Year when prior year exists ΓåÆ Verify rollover prompt appears and clones prior year data.
++3. **Inline Subject Configuration**: Open a semester's Subject Drawer in `/admin` ΓåÆ Add a subject and assign a teacher via the dropdown.
++4. **Teacher Visibility**: Log in as the assigned teacher ΓåÆ Verify the newly assigned course appears on the home dashboard.
+diff --git a/frontend/app/admin/page.tsx b/frontend/app/admin/page.tsx
+index caa4567..9c608e7 100644
+--- a/frontend/app/admin/page.tsx
++++ b/frontend/app/admin/page.tsx
+@@ -18,6 +18,7 @@ import {
+   Trash2,
+   Wrench,
+   ShieldCheck,
++  BookOpen,
+ } from "lucide-react";
+ import { cn } from "@/lib/utils";
+ 
+@@ -95,6 +96,74 @@ export default function AdminPage() {
+   const [editingYearId, setEditingYearId] = useState<string | null>(null);
+   const [editingSemId, setEditingSemId] = useState<string | null>(null);
+ 
++  // Faculty users list
++  const [facultyUsers, setFacultyUsers] = useState<any[]>([]);
++
++  // Inline Subject Configuration Drawer state
++  const [expandedSemId, setExpandedSemId] = useState<string | null>(null);
++  const [semCourses, setSemCourses] = useState<Record<string, any[]>>({});
++  const [loadingSemCourses, setLoadingSemCourses] = useState<string | null>(null);
++
++  // Quick add subject form state
++  const [newSubjectCode, setNewSubjectCode] = useState("");
++  const [newSubjectTitle, setNewSubjectTitle] = useState("");
++  const [newSubjectType, setNewSubjectType] = useState("THEORY");
++  const [newSubjectCredits, setNewSubjectCredits] = useState("4");
++  const [newSubjectFaculty, setNewSubjectFaculty] = useState("");
++  const [addingSubject, setAddingSubject] = useState(false);
++
++  async function loadSemesterCourses(semId: string) {
++    setLoadingSemCourses(semId);
++    try {
++      const res = await apiFetch<any[]>(`/courses/?semester=${semId}`);
++      const list = Array.isArray(res) ? res : (res as any).results ?? [];
++      setSemCourses((prev) => ({ ...prev, [semId]: list }));
++    } catch (err) {
++      console.error("Failed to load semester courses", err);
++    } finally {
++      setLoadingSemCourses(null);
++    }
++  }
++
++  async function handleAddSubject(semId: string) {
++    if (!newSubjectCode.trim() || !newSubjectTitle.trim()) return;
++    setAddingSubject(true);
++    try {
++      await apiFetch("/courses/", {
++        method: "POST",
++        body: JSON.stringify({
++          semester: semId,
++          code: newSubjectCode.trim(),
++          title: newSubjectTitle.trim(),
++          course_type: newSubjectType,
++          credits: Number(newSubjectCredits) || 4,
++          faculty_user_id: newSubjectFaculty || null,
++          status: "DRAFT",
++        }),
++      });
++      setNewSubjectCode("");
++      setNewSubjectTitle("");
++      setNewSubjectFaculty("");
++      await loadSemesterCourses(semId);
++    } catch (err: any) {
++      alert("Failed to add subject: " + (err?.message ?? "Error"));
++    } finally {
++      setAddingSubject(false);
++    }
++  }
++
++  async function handleAssignFaculty(courseId: string, facultyId: string | null, semId: string) {
++    try {
++      await apiFetch(`/courses/${courseId}/assign-faculty/`, {
++        method: "PATCH",
++        body: JSON.stringify({ faculty_user_id: facultyId || null }),
++      });
++      await loadSemesterCourses(semId);
++    } catch (err: any) {
++      alert("Failed to assign faculty: " + (err?.message ?? "Error"));
++    }
++  }
++
+   const getSemesterTitle = (num: number, deptId: string, depts: any[]) => {
+     const dept = depts.find(d => String(d.id) === String(deptId));
+     const deptName = dept ? dept.name : "Engineering";
+@@ -131,6 +200,17 @@ export default function AdminPage() {
+       const sems = await apiFetch<any>("/semesters/");
+       const semsList = Array.isArray(sems) ? sems : sems.results ?? [];
+       setSemesters(semsList);
++      for (const sem of semsList) {
++        void loadSemesterCourses(String(sem.id));
++      }
++
++      try {
++        const faculty = await apiFetch<any>("/profiles/faculty/");
++        const facultyList = Array.isArray(faculty) ? faculty : faculty.results ?? [];
++        setFacultyUsers(facultyList);
++      } catch (err) {
++        console.error("Failed to load faculty users", err);
++      }
+     } catch (err) {
+       console.error("Failed to load schema options", err);
+     } finally {
+@@ -685,35 +765,192 @@ export default function AdminPage() {
+                                   {groupSemesters.map((s) => {
+                                     const termTag = getTermTag(Number(s.number));
+                                     const yearInfo = getYearOfStudy(Number(s.number));
++                                    const isExpanded = expandedSemId === s.id;
++                                    const courses = semCourses[s.id] ?? [];
+                                     return (
+-                                      <li key={s.id} className="text-xs font-bold p-3 bg-background rounded border border-border flex justify-between items-center shadow-sm hover:border-primary/20 transition-all duration-150 group">
+-                                        <div className="flex items-center gap-2 flex-wrap">
+-                                          <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
+-                                            Sem {s.number}
+-                                          </span>
+-                                          <span className="text-foreground/75">{s.title}</span>
+-                                          {yearInfo && (
+-                                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border", yearChipClasses[yearInfo.color])}>
+-                                              {yearInfo.label}
++                                      <li key={s.id} className="bg-background rounded border border-border overflow-hidden shadow-sm hover:border-primary/20 transition-all duration-150">
++                                        <div className="p-3 flex justify-between items-center flex-wrap gap-2 group">
++                                          <div className="flex items-center gap-2 flex-wrap">
++                                            <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
++                                              Sem {s.number}
+                                             </span>
+-                                          )}
+-                                          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border", termTag.cls)}>
+-                                            {termTag.label} ({termTag.desc})
+-                                          </span>
+-                                          {s.academic_year_name && (
+-                                            <span className="text-[10px] text-muted-foreground/50 font-medium">
+-                                              ({s.academic_year_name})
++                                            <span className="text-foreground/75 font-bold text-xs">{s.title}</span>
++                                            {yearInfo && (
++                                              <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border", yearChipClasses[yearInfo.color])}>
++                                                {yearInfo.label}
++                                              </span>
++                                            )}
++                                            <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border", termTag.cls)}>
++                                              {termTag.label} ({termTag.desc})
+                                             </span>
+-                                          )}
+-                                        </div>
+-                                        <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+-                                          <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
+-                                            <Pencil className="h-3.5 w-3.5" />
+-                                          </button>
+-                                          <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
+-                                            <Trash2 className="h-3.5 w-3.5" />
+-                                          </button>
++                                            {s.academic_year_name && (
++                                              <span className="text-[10px] text-muted-foreground/50 font-medium">
++                                                ({s.academic_year_name})
++                                              </span>
++                                            )}
++                                          </div>
++                                          <div className="flex items-center gap-2">
++                                            <Button
++                                              variant="outline"
++                                              size="sm"
++                                              onClick={() => {
++                                                if (expandedSemId === s.id) {
++                                                  setExpandedSemId(null);
++                                                } else {
++                                                  setExpandedSemId(s.id);
++                                                  void loadSemesterCourses(s.id);
++                                                }
++                                              }}
++                                              className="h-7 text-[10px] font-bold uppercase tracking-wider gap-1 border-primary/30 text-primary hover:bg-primary/10"
++                                            >
++                                              <BookOpen className="h-3 w-3" />
++                                              Configure Subjects ({courses.length})
++                                            </Button>
++                                            <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
++                                              <button type="button" onClick={() => handleEditSemester(s)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-blue-500/10 hover:text-blue-500 transition-colors" title="Edit semester">
++                                                <Pencil className="h-3.5 w-3.5" />
++                                              </button>
++                                              <button type="button" onClick={() => handleDeleteSemester(s.id)} className="h-8 w-8 rounded flex items-center justify-center hover:bg-rose-500/10 hover:text-rose-500 transition-colors" title="Delete semester">
++                                                <Trash2 className="h-3.5 w-3.5" />
++                                              </button>
++                                            </div>
++                                          </div>
+                                         </div>
++
++                                        {isExpanded && (
++                                          <div className="border-t border-border bg-muted/20 p-4 space-y-4 animate-fade-in">
++                                            <div className="flex items-center justify-between">
++                                              <h4 className="text-xs font-serif font-bold text-foreground flex items-center gap-1.5">
++                                                <BookOpen className="h-3.5 w-3.5 text-primary" />
++                                                Subjects for {s.title}
++                                              </h4>
++                                              <span className="text-[10px] text-muted-foreground font-mono">
++                                                {courses.length} {courses.length === 1 ? "Subject" : "Subjects"} Configured
++                                              </span>
++                                            </div>
++
++                                            {loadingSemCourses === s.id && courses.length === 0 ? (
++                                              <div className="flex items-center justify-center py-6 gap-2 text-xs font-bold text-muted-foreground">
++                                                <Loader2 className="h-4 w-4 animate-spin text-primary" /> Loading subjects...
++                                              </div>
++                                            ) : (
++                                              <>
++                                                {/* Subject Cards List */}
++                                                {courses.length === 0 ? (
++                                                  <div className="text-xs font-medium text-muted-foreground/70 py-3 px-4 italic bg-background/60 rounded border border-dashed border-border/70 text-center">
++                                                    No subjects added to this semester yet. Use the form below to register a subject.
++                                                  </div>
++                                                ) : (
++                                                  <div className="space-y-2">
++                                                    {courses.map((course: any) => (
++                                                      <div
++                                                        key={course.id}
++                                                        className="p-3 bg-background rounded border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs hover:border-primary/20 transition-all"
++                                                      >
++                                                        <div className="flex items-center gap-2 flex-wrap">
++                                                          <span className="font-mono text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
++                                                            {course.code}
++                                                          </span>
++                                                          <span className="text-xs font-semibold text-foreground">
++                                                            {course.title}
++                                                          </span>
++                                                          <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border/80">
++                                                            {course.course_type || "THEORY"}
++                                                          </span>
++                                                          <span className="text-[10px] font-semibold text-muted-foreground">
++                                                            {course.credits ?? 4} Credits
++                                                          </span>
++                                                        </div>
++                                                        <div className="flex items-center gap-2 shrink-0">
++                                                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider hidden md:inline">Faculty:</label>
++                                                          <select
++                                                            value={course.faculty_user_id ?? course.faculty_id ?? ""}
++                                                            onChange={(e) => void handleAssignFaculty(course.id, e.target.value || null, s.id)}
++                                                            className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer max-w-[220px]"
++                                                          >
++                                                            <option value="">-- No Teacher Assigned --</option>
++                                                            {facultyUsers.map((f: any) => (
++                                                              <option key={f.id} value={f.id}>
++                                                                {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
++                                                              </option>
++                                                            ))}
++                                                          </select>
++                                                        </div>
++                                                      </div>
++                                                    ))}
++                                                  </div>
++                                                )}
++
++                                                {/* Quick Add Subject Shell Form */}
++                                                <div className="pt-3 border-t border-border/60 space-y-2">
++                                                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
++                                                    Quick Add Subject Shell
++                                                  </span>
++                                                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-5 items-end">
++                                                    <input
++                                                      type="text"
++                                                      placeholder="Code (e.g. CSC301)"
++                                                      value={newSubjectCode}
++                                                      onChange={(e) => setNewSubjectCode(e.target.value)}
++                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-mono transition-all focus:outline-none focus:border-primary"
++                                                    />
++                                                    <input
++                                                      type="text"
++                                                      placeholder="Title (e.g. Data Structures)"
++                                                      value={newSubjectTitle}
++                                                      onChange={(e) => setNewSubjectTitle(e.target.value)}
++                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-semibold transition-all focus:outline-none focus:border-primary md:col-span-2"
++                                                    />
++                                                    <select
++                                                      value={newSubjectType}
++                                                      onChange={(e) => setNewSubjectType(e.target.value)}
++                                                      className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold focus:outline-none focus:border-primary cursor-pointer"
++                                                    >
++                                                      <option value="THEORY">THEORY</option>
++                                                      <option value="LAB">LAB</option>
++                                                      <option value="PROJECT">PROJECT</option>
++                                                    </select>
++                                                    <input
++                                                      type="number"
++                                                      placeholder="Credits"
++                                                      value={newSubjectCredits}
++                                                      onChange={(e) => setNewSubjectCredits(e.target.value)}
++                                                      className="h-8 rounded border border-border bg-background px-2.5 text-xs font-semibold transition-all focus:outline-none focus:border-primary"
++                                                    />
++                                                  </div>
++                                                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
++                                                    <select
++                                                      value={newSubjectFaculty}
++                                                      onChange={(e) => setNewSubjectFaculty(e.target.value)}
++                                                      className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer flex-1"
++                                                    >
++                                                      <option value="">-- Select Teacher (Optional) --</option>
++                                                      {facultyUsers.map((f: any) => (
++                                                        <option key={f.id} value={f.id}>
++                                                          {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
++                                                        </option>
++                                                      ))}
++                                                    </select>
++                                                    <Button
++                                                      type="button"
++                                                      size="sm"
++                                                      disabled={addingSubject || !newSubjectCode.trim() || !newSubjectTitle.trim()}
++                                                      onClick={() => void handleAddSubject(s.id)}
++                                                      className="h-8 px-4 text-xs font-bold shrink-0"
++                                                    >
++                                                      {addingSubject ? (
++                                                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
++                                                      ) : (
++                                                        <Plus className="h-3.5 w-3.5 mr-1" />
++                                                      )}
++                                                      Add Subject Shell
++                                                    </Button>
++                                                  </div>
++                                                </div>
++                                              </>
++                                            )}
++                                          </div>
++                                        )}
+                                       </li>
+                                     );
+                                   })}

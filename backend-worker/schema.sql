@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS courses (
   section_order TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(section_order)),
   approved_by_user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   approved_at TEXT,
+  share_token TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (semester_id, code)
@@ -202,6 +203,9 @@ CREATE TABLE IF NOT EXISTS reviewer_comments (
   is_resolved INTEGER NOT NULL DEFAULT 0 CHECK (is_resolved IN (0, 1)),
   resolved_by_user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   resolved_at TEXT,
+  is_external INTEGER NOT NULL DEFAULT 0,
+  reviewer_name TEXT,
+  reviewer_email TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
