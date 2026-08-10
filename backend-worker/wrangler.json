@@ -9,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "curriculum-db",
-      "database_id": "c4eb7d41-0a09-4b90-b4e7-1e4b2177428c"
+      "database_id": "3a696de6-d975-45cc-8a2b-c59a290bfedc"
     }
   ],
   "r2_buckets": [
@@ -18,16 +18,37 @@
       "bucket_name": "curriculum-files"
     }
   ],
+  "browser": {
+    "binding": "BROWSER",
+    "remote": true
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "PUBLISH_QUEUE",
+        "queue": "publish-queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "publish-queue",
+        "max_batch_size": 1
+      }
+    ]
+  },
   "observability": {
     "enabled": true
   },
   "vars": {
     "CORS_ALLOWED_ORIGINS": "http://localhost:3000",
+    "FRONTEND_URL": "http://localhost:3000",
     "ENVIRONMENT": "development"
   },
   "env": {
     "production": {
       "vars": {
+        "CORS_ALLOWED_ORIGINS": "https://curriculum-phi-lovat.vercel.app",
+        "FRONTEND_URL": "https://curriculum-phi-lovat.vercel.app",
         "ENVIRONMENT": "production"
       }
     }

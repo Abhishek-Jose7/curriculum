@@ -20,6 +20,9 @@ app.use(
       if (origins.includes(origin)) {
         return origin;
       }
+      if (origin && (origin.endsWith(".vercel.app") || origin.startsWith("http://localhost:"))) {
+        return origin;
+      }
       if (!origin && c.env.ENVIRONMENT === "development") {
         return "*";
       }

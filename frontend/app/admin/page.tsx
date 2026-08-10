@@ -404,9 +404,8 @@ function AdminContent() {
   };
 
   return (
-    <>
-      <AppShell>
-        <div className="space-y-6 animate-fade-in text-left">
+    <AppShell>
+      <div className="space-y-6 animate-fade-in text-left">
           {/* Header Section */}
           <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-5">
             <div className="space-y-1">
