@@ -47,6 +47,8 @@
   "env": {
     "production": {
       "vars": {
+        "CORS_ALLOWED_ORIGINS": "https://curriculum-phi-lovat.vercel.app",
+        "FRONTEND_URL": "https://curriculum-phi-lovat.vercel.app",
         "ENVIRONMENT": "production"
       }
     }
