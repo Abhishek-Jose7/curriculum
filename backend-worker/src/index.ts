@@ -1010,5 +1010,19 @@ async function generatePdfTask(env: Env, publishedId: string, departmentId: stri
 }
 
 export default {
-  fetch: app.fetch
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        const { publishedId, departmentId, academicYearId, versionLabel, yearOfStudy } = message.body || {};
+        if (publishedId) {
+          await generatePdfTask(env, publishedId, departmentId, academicYearId, versionLabel, yearOfStudy);
+        }
+        message.ack();
+      } catch (e) {
+        console.error("Queue message processing error:", e);
+        message.retry();
+      }
+    }
+  }
 };

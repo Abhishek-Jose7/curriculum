@@ -7,14 +7,12 @@ import { Button } from "@/components/ui/button";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787/api";
 const USER_STORAGE_KEY = "curriculum_user";
 
-const DEV_FILLS =
-  process.env.NODE_ENV === "development"
-    ? [
-        { label: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
-        { label: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
-        { label: "Teacher", email: "faculty@example.edu", password: "ChangeMe123!" },
-      ]
-    : [];
+const QUICK_LOGINS = [
+  { label: "Administrator", role: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
+  { label: "Faculty (Coordinator)", role: "Faculty", email: "faculty@example.edu", password: "ChangeMe123!" },
+  { label: "Head of Department (HOD)", role: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
+  { label: "Reviewer", role: "Reviewer", email: "reviewer@example.edu", password: "ChangeMe123!" },
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -125,26 +123,32 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {/* Dev quick-fills — only in development builds */}
-        {DEV_FILLS.length > 0 && (
-          <div className="border-t border-border pt-4 space-y-2">
-            <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest text-center">
-              Dev quick-fill
-            </p>
-            <div className="flex gap-2 justify-center flex-wrap">
-              {DEV_FILLS.map((fill) => (
-                <button
-                  key={fill.label}
-                  type="button"
-                  onClick={() => { setEmail(fill.email); setPassword(fill.password); }}
-                  className="text-[11px] font-bold border border-border rounded px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
-                >
+        {/* Quick Login / Demo Accounts */}
+        <div className="border-t border-border pt-4 space-y-3">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">
+            Quick Login Demo Accounts
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {QUICK_LOGINS.map((fill) => (
+              <button
+                key={fill.label}
+                type="button"
+                onClick={() => {
+                  setEmail(fill.email);
+                  setPassword(fill.password);
+                }}
+                className="flex flex-col items-start p-2 rounded border border-border bg-card/60 hover:bg-accent hover:border-primary/40 text-left transition-all group cursor-pointer"
+              >
+                <span className="text-[11px] font-semibold text-foreground group-hover:text-primary transition-colors">
                   {fill.label}
-                </button>
-              ))}
-            </div>
+                </span>
+                <span className="text-[10px] text-muted-foreground font-mono truncate w-full">
+                  {fill.email}
+                </span>
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
