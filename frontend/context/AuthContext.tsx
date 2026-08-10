@@ -35,10 +35,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchMe = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include" });
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("accessToken") : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include", headers });
       if (!res.ok) {
         setUser(null);
-        if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(USER_STORAGE_KEY);
+          window.localStorage.removeItem("accessToken");
+        }
         return;
       }
       const data: AuthUser = await res.json();
@@ -47,7 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
     } catch {
       setUser(null);
-      if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+        window.localStorage.removeItem("accessToken");
+      }
     } finally {
       setLoading(false);
     }
@@ -72,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(USER_STORAGE_KEY);
+      window.localStorage.removeItem("accessToken");
       window.location.href = "/login";
     }
   }, []);

@@ -155,8 +155,7 @@ api.post("/auth/token/", async (c) => {
     60 * 60 * 24 * 7
   );
 
-  const isProduction = c.env.ENVIRONMENT === "production";
-  const cookieBase = `HttpOnly; Path=/; SameSite=Lax${isProduction ? "; Secure" : ""}`;
+  const cookieBase = "HttpOnly; Path=/; SameSite=None; Secure";
 
   return new Response(
     JSON.stringify({ access: accessToken, refresh: refreshToken }),
@@ -233,8 +232,7 @@ api.post("/auth/token/revoke/", async (c) => {
 });
 
 api.post("/auth/logout/", async (c) => {
-  const isProduction = c.env.ENVIRONMENT === "production";
-  const clearBase = `HttpOnly; Path=/; Max-Age=0; SameSite=Lax${isProduction ? "; Secure" : ""}`;
+  const clearBase = "HttpOnly; Path=/; Max-Age=0; SameSite=None; Secure";
   return new Response(JSON.stringify({ status: "logged_out" }), {
     status: 200,
     headers: new Headers([

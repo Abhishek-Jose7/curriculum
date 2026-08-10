@@ -18,7 +18,7 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-export async function hashPassword(password: string, iterations = 600000): Promise<string> {
+export async function hashPassword(password: string, iterations = 100000): Promise<string> {
   const saltBytes = crypto.getRandomValues(new Uint8Array(16));
   const passwordKey = await crypto.subtle.importKey(
     "raw",
