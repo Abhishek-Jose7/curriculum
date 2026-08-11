@@ -21,8 +21,9 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem("accessToken");
-      if (window.location.pathname !== "/") {
-        window.location.href = "/";
+      document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
     }
     throw new Error(await response.text());

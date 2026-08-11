@@ -46,18 +46,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== "undefined") {
           window.localStorage.removeItem(USER_STORAGE_KEY);
           window.localStorage.removeItem("accessToken");
+          document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
         }
         return;
       }
       const data: AuthUser = await res.json();
       setUser(data);
-      if (typeof window !== "undefined")
+      if (typeof window !== "undefined") {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
+        if (token) {
+          document.cookie = `curriculum_access=${token}; path=/; max-age=604800; SameSite=Lax; Secure`;
+        }
+      }
     } catch {
       setUser(null);
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(USER_STORAGE_KEY);
         window.localStorage.removeItem("accessToken");
+        document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
       }
     } finally {
       setLoading(false);
@@ -84,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(USER_STORAGE_KEY);
       window.localStorage.removeItem("accessToken");
+      document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
       window.location.href = "/login";
     }
   }, []);
