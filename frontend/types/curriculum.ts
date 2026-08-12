@@ -20,6 +20,7 @@ export type Course = {
   objectives: string;
   outcomes: CourseOutcome[];
   modules: CourseModule[];
+  bloom_level?: string;
 };
 
 
@@ -114,4 +115,5 @@ export type CourseDraft = {
   reference_books: ReferenceBook[];
   comments: ReviewerComment[];
   online_resources: string[];
+  bloom_level?: string;
 };

@@ -32,12 +32,18 @@ export function A4Preview({
   const eseMaxVal = course.external_marks || 0;
   const eseMinVal = course.passing_marks || (eseMaxVal === 50 ? 20 : eseMaxVal === 60 ? 24 : Math.round(eseMaxVal * 0.4));
   const theoryTotalVal = iseVal + mseVal + eseMaxVal;
-  const hasBloom = (level: string) => 
-    course.outcomes.some(o => 
+  const hasBloom = (level: string) => {
+    if (typeof course.bloom_level === "string" && course.bloom_level !== "") {
+      return course.bloom_level
+        .split(",")
+        .some(l => l.trim().toLowerCase() === level.toLowerCase());
+    }
+    return (course.outcomes || []).some(o => 
       (o.bloom_level || "")
         .split(",")
         .some(l => l.trim().toLowerCase() === level.toLowerCase())
     );
+  };
   const formatValue = (val: number | string | undefined | null) => {
     if (val === 0 || val === "0" || !val) return "--";
     return val;
@@ -535,12 +541,14 @@ export function A4Preview({
               <table className="bloom-table">
                 <tbody>
                   <tr>
-                    <td>Remember {hasBloom("Remember") && "✓"}</td>
-                    <td>Understand {hasBloom("Understand") && "✓"}</td>
-                    <td className="font-bold">Apply {(!hasBloom("Remember") && !hasBloom("Understand") && !hasBloom("Analyze") && !hasBloom("Evaluate") && !hasBloom("Create")) || hasBloom("Apply") ? "✓" : ""}</td>
-                    <td>Analyze {hasBloom("Analyze") && "✓"}</td>
-                    <td>Evaluate {hasBloom("Evaluate") && "✓"}</td>
-                    <td>Create {hasBloom("Create") && "✓"}</td>
+                    {["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"].map((level) => {
+                      const active = hasBloom(level);
+                      return (
+                        <td key={level} className={active ? "font-bold" : ""}>
+                          {level}{active ? " ✓" : ""}
+                        </td>
+                      );
+                    })}
                   </tr>
                 </tbody>
               </table>

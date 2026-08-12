@@ -7,7 +7,7 @@ const courseFields = [
   "tutorial_credits", "practical_credits", "credits", "internal_marks",
   "external_marks", "duration_hours", "passing_marks", "pre_requisites",
   "objectives", "syllabus_intro", "online_resources", "section_order",
-  "approved_by_user_id", "approved_at",
+  "approved_by_user_id", "approved_at", "bloom_level",
 ];
 
 export class CoursesRepository extends BaseRepository<CourseRow> {

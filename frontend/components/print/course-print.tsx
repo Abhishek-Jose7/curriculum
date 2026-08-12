@@ -464,12 +464,18 @@ export function SemesterStructure({ semester }: { semester: PrintSemester }) {
 }
 
 function CoPoMatrix({ course }: { course: CourseDraft }) {
-  const hasBloom = (level: string) => 
-    course.outcomes.some(o => 
+  const hasBloom = (level: string) => {
+    if (typeof course.bloom_level === "string" && course.bloom_level !== "") {
+      return course.bloom_level
+        .split(",")
+        .some(l => l.trim().toLowerCase() === level.toLowerCase());
+    }
+    return (course.outcomes || []).some(o => 
       (o.bloom_level || "")
         .split(",")
         .some(l => l.trim().toLowerCase() === level.toLowerCase())
     );
+  };
 
   return (
     <section className="copo-block avoid-break">
@@ -510,12 +516,14 @@ function CoPoMatrix({ course }: { course: CourseDraft }) {
       <table className="official-table" style={{ width: "100%", tableLayout: "auto", borderCollapse: "collapse" }}>
         <tbody>
           <tr>
-            <td className="center border border-black p-2">Remember {hasBloom("Remember") && "✓"}</td>
-            <td className="center border border-black p-2">Understand {hasBloom("Understand") && "✓"}</td>
-            <td className="center border border-black p-2 font-bold">Apply {(!hasBloom("Remember") && !hasBloom("Understand") && !hasBloom("Analyze") && !hasBloom("Evaluate") && !hasBloom("Create")) || hasBloom("Apply") ? "✓" : ""}</td>
-            <td className="center border border-black p-2">Analyze {hasBloom("Analyze") && "✓"}</td>
-            <td className="center border border-black p-2">Evaluate {hasBloom("Evaluate") && "✓"}</td>
-            <td className="center border border-black p-2">Create {hasBloom("Create") && "✓"}</td>
+            {["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"].map((level) => {
+              const active = hasBloom(level);
+              return (
+                <td key={level} className={`center border border-black p-2 ${active ? "font-bold bold" : ""}`}>
+                  {level}{active ? " ✓" : ""}
+                </td>
+              );
+            })}
           </tr>
         </tbody>
       </table>
