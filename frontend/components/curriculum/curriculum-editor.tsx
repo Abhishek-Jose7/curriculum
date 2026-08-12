@@ -289,15 +289,67 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   );
 }
 
+const BLOOMS_LEVELS = ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"] as const;
+
+function BloomLevelPicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+  const currentLevels = (value || "").split(",").map((s) => s.trim()).filter(Boolean);
+
+  const toggleLevel = (level: string) => {
+    const exists = currentLevels.some((l) => l.toLowerCase() === level.toLowerCase());
+    let updated: string[];
+    if (exists) {
+      updated = currentLevels.filter((l) => l.toLowerCase() !== level.toLowerCase());
+    } else {
+      updated = [...currentLevels, level].sort((a, b) => {
+        const idxA = BLOOMS_LEVELS.findIndex((l) => l.toLowerCase() === a.toLowerCase());
+        const idxB = BLOOMS_LEVELS.findIndex((l) => l.toLowerCase() === b.toLowerCase());
+        return idxA - idxB;
+      });
+    }
+    onChange(updated.join(", "));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[10px] font-bold uppercase tracking-wider text-foreground/80">
+        Bloom&apos;s Taxonomy Level(s)
+      </label>
+      <div className="inline-flex flex-wrap border border-border rounded overflow-hidden divide-x divide-border bg-card">
+        {BLOOMS_LEVELS.map((level) => {
+          const isSelected = currentLevels.some((l) => l.toLowerCase() === level.toLowerCase());
+          return (
+            <button
+              key={level}
+              type="button"
+              onClick={() => toggleLevel(level)}
+              className={cn(
+                "px-3 py-1.5 text-xs transition-colors select-none font-medium cursor-pointer flex items-center gap-1",
+                isSelected
+                  ? "bg-primary/10 text-primary font-bold"
+                  : "bg-background text-muted-foreground hover:bg-muted/50"
+              )}
+            >
+              <span>{level}</span>
+              {isSelected && <span className="text-emerald-600 font-bold">✓</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function OutcomeEditor({ outcomes, onChange }: { outcomes: CourseOutcome[]; onChange: (items: CourseOutcome[]) => void }) {
   return (
     <Panel title="Course Outcomes" description="Outcomes must represent clear intellectual competencies, mapped directly to Bloom cognitive domains.">
       <Rows items={outcomes} addLabel="Add Course Outcome" newItem={{ code: `CO${outcomes.length + 1}`, description: "", bloom_level: "Apply", order: outcomes.length + 1 }} onChange={onChange} render={(item, index, update) => (
-        <div className="grid gap-4 md:grid-cols-[90px_1fr_160px_auto] items-end">
-          <Field label="CO" value={item.code} onChange={(value) => update({ code: value })} />
-          <TextArea label="Description of Competency" value={item.description} onChange={(value) => update({ description: value })} error={item.description.length < 12 ? "Outcome description is too short" : undefined} />
-          <Field label="Bloom Level" value={item.bloom_level} onChange={(value) => update({ bloom_level: value })} />
-          <RemoveButton onClick={() => onChange(outcomes.filter((_, i) => i !== index))} />
+        <div className="space-y-3.5 p-4 rounded-sm border border-border/80 bg-card shadow-xs">
+          <div className="grid gap-4 md:grid-cols-[90px_1fr_auto] items-start">
+            <Field label="CO" value={item.code} onChange={(value) => update({ code: value })} />
+            <TextArea label="Description of Competency" value={item.description} onChange={(value) => update({ description: value })} error={item.description.length < 12 ? "Outcome description is too short" : undefined} />
+            <RemoveButton onClick={() => onChange(outcomes.filter((_, i) => i !== index))} />
+          </div>
+          <BloomLevelPicker value={item.bloom_level} onChange={(value) => update({ bloom_level: value })} />
         </div>
       )} />
     </Panel>

@@ -33,7 +33,11 @@ export function A4Preview({
   const eseMinVal = course.passing_marks || (eseMaxVal === 50 ? 20 : eseMaxVal === 60 ? 24 : Math.round(eseMaxVal * 0.4));
   const theoryTotalVal = iseVal + mseVal + eseMaxVal;
   const hasBloom = (level: string) => 
-    course.outcomes.some(o => o.bloom_level?.toLowerCase() === level.toLowerCase());
+    course.outcomes.some(o => 
+      (o.bloom_level || "")
+        .split(",")
+        .some(l => l.trim().toLowerCase() === level.toLowerCase())
+    );
   const formatValue = (val: number | string | undefined | null) => {
     if (val === 0 || val === "0" || !val) return "--";
     return val;

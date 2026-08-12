@@ -465,7 +465,11 @@ export function SemesterStructure({ semester }: { semester: PrintSemester }) {
 
 function CoPoMatrix({ course }: { course: CourseDraft }) {
   const hasBloom = (level: string) => 
-    course.outcomes.some(o => o.bloom_level?.toLowerCase() === level.toLowerCase());
+    course.outcomes.some(o => 
+      (o.bloom_level || "")
+        .split(",")
+        .some(l => l.trim().toLowerCase() === level.toLowerCase())
+    );
 
   return (
     <section className="copo-block avoid-break">
