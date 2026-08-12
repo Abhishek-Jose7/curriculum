@@ -10,23 +10,77 @@ import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Assessment, CourseDraft, CourseModule, CourseOutcome, Experiment, ReferenceBook } from "@/types/curriculum";
 
-const tabs = [
-  { key: "basic", label: "Basic Details", icon: BookOpen },
-  { key: "teaching", label: "Teaching Scheme", icon: ClipboardList },
-  { key: "exam", label: "Examination Scheme", icon: ClipboardList },
-  { key: "blooms", label: "Bloom's Level", icon: Check },
-  { key: "outcomes", label: "Course Outcomes", icon: Check },
-  { key: "modules", label: "Modules", icon: ScrollText },
-  { key: "experiments", label: "Experiments/Tutorials", icon: FlaskConical },
-  { key: "assessments", label: "Assessments", icon: ClipboardList },
-  { key: "references", label: "References", icon: Library },
-  { key: "comments", label: "Comments", icon: MessageSquare },
-  { key: "versions", label: "History", icon: ClipboardList },
-  { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch },
-  { key: "preview", label: "Live Preview", icon: Eye }
-] as const;
+export type TabKey =
+  | "basic"
+  | "teaching"
+  | "exam"
+  | "blooms"
+  | "outcomes"
+  | "modules"
+  | "experiments"
+  | "assessments"
+  | "references"
+  | "comments"
+  | "versions"
+  | "compare_previous"
+  | "preview";
 
-type TabKey = (typeof tabs)[number]["key"];
+type TabItem = {
+  key: TabKey;
+  label: string;
+  icon: React.ElementType;
+};
+
+type MacroCategory = {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  tabs: TabItem[];
+};
+
+const MACRO_CATEGORIES: MacroCategory[] = [
+  {
+    id: "overview",
+    label: "Overview & Schemes",
+    icon: BookOpen,
+    tabs: [
+      { key: "basic", label: "Basic Details", icon: BookOpen },
+      { key: "teaching", label: "Teaching Scheme", icon: ClipboardList },
+      { key: "exam", label: "Examination Scheme", icon: ClipboardList },
+      { key: "blooms", label: "Bloom's Level", icon: Check },
+    ]
+  },
+  {
+    id: "content",
+    label: "Outcomes & Content",
+    icon: ScrollText,
+    tabs: [
+      { key: "outcomes", label: "Course Outcomes", icon: Check },
+      { key: "modules", label: "Modules", icon: ScrollText },
+      { key: "experiments", label: "Experiments/Tutorials", icon: FlaskConical },
+    ]
+  },
+  {
+    id: "assessment",
+    label: "Assessment & References",
+    icon: Library,
+    tabs: [
+      { key: "assessments", label: "Assessments", icon: ClipboardList },
+      { key: "references", label: "References", icon: Library },
+    ]
+  },
+  {
+    id: "review",
+    label: "Review & History",
+    icon: Eye,
+    tabs: [
+      { key: "comments", label: "Comments", icon: MessageSquare },
+      { key: "versions", label: "History", icon: ClipboardList },
+      { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch },
+      { key: "preview", label: "Live Preview", icon: Eye }
+    ]
+  }
+];
 
 export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [active, setActive] = useState<TabKey>("basic");
@@ -34,6 +88,11 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const [version, setVersion] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const activeCategory = useMemo(() => {
+    return MACRO_CATEGORIES.find(cat => cat.tabs.some(t => t.key === active)) || MACRO_CATEGORIES[0];
+  }, [active]);
 
   useEffect(() => {
     apiFetch<CourseDraft>(`/courses/${courseId}/`).then(setCourse).catch(console.error);
@@ -111,14 +170,21 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
   const handleSubmitForReview = async () => {
     if (!course) return;
     setSubmitting(true);
+    setSubmitStatus(null);
     try {
       const updated = await apiFetch<CourseDraft>(`/courses/${course.id}/submit/`, {
         method: "POST"
       });
       setCourse(updated);
-      alert("Subject syllabus successfully submitted for review!");
+      setSubmitStatus({
+        type: "success",
+        message: "Subject syllabus successfully submitted for review!"
+      });
     } catch (err: any) {
-      alert("Failed to submit for review: " + err.message);
+      setSubmitStatus({
+        type: "error",
+        message: "Failed to submit for review: " + err.message
+      });
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +194,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center p-8 bg-card rounded border border-border shadow-sm space-y-3">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <span className="text-xs font-bold text-muted-foreground/60">Loading curriculum ledger from catalog...</span>
+        <span className="text-xs font-bold text-muted-foreground/60">Loading course syllabus details...</span>
       </div>
     );
   }
@@ -140,7 +206,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
       "grid min-h-[calc(100vh-80px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
       isExpanded ? "grid-cols-1" : "xl:grid-cols-2"
     )}>
-      {/* Left Column Form Manuscript Editor */}
+      {/* Left Column Form Editor */}
       <section className={cn("min-w-0 overflow-hidden bg-card", isExpanded ? "hidden" : "flex flex-col")}>
         {/* Course identity header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 p-5 bg-background/10">
@@ -179,14 +245,57 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
           </div>
         </div>
 
-        {/* Dynamic Nav Chapters list */}
+        {/* Inline Submission Status Banner */}
+        {submitStatus && (
+          <div className={cn(
+            "p-3 text-xs font-semibold flex items-center justify-between border-b transition-all",
+            submitStatus.type === "success" 
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" 
+              : "bg-destructive/10 text-destructive border-destructive/20"
+          )}>
+            <div className="flex items-center gap-2">
+              {submitStatus.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+              <span>{submitStatus.message}</span>
+            </div>
+            <button 
+              onClick={() => setSubmitStatus(null)} 
+              className="text-muted-foreground hover:text-foreground text-[10px] font-bold uppercase tracking-wider underline ml-4"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Level 1: Macro Category Selector Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 bg-muted/40 border-b border-border/80 p-1.5 gap-1">
+          {MACRO_CATEGORIES.map(cat => {
+            const isCatActive = cat.id === activeCategory.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActive(cat.tabs[0].key)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-bold rounded transition-all border text-center truncate",
+                  isCatActive
+                    ? "bg-card text-primary shadow-xs border-border font-extrabold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/40 border-transparent"
+                )}
+              >
+                <cat.icon className={cn("h-3.5 w-3.5 shrink-0", isCatActive ? "text-primary" : "text-muted-foreground")} />
+                <span className="truncate">{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Level 2: Sub-Section Chapter Tabs */}
         <div className="flex flex-wrap gap-1.5 bg-secondary/10 p-2 border-b border-border/60">
-          {tabs.map(tab => (
+          {activeCategory.tabs.map(tab => (
             <button 
               key={tab.key} 
               onClick={() => setActive(tab.key)} 
               className={cn(
-                "flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-bold rounded transition-all uppercase tracking-wider whitespace-nowrap border border-transparent", 
+                "flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded transition-all uppercase tracking-wider whitespace-nowrap border border-transparent", 
                 active === tab.key 
                   ? "bg-background text-primary shadow-sm border-border/60" 
                   : "text-foreground/60 hover:text-foreground hover:bg-muted/40"

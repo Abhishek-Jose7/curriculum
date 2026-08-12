@@ -127,13 +127,13 @@ export default function PublishingPage() {
         <div className="space-y-10 max-w-5xl mx-auto animate-fade-in text-left">
           {/* Editorial Page Title */}
           <section className="space-y-2">
-            <div className="text-[10px] font-mono font-bold tracking-widest text-primary uppercase">presse &amp; compilation</div>
+            <div className="text-[10px] font-mono font-bold tracking-widest text-primary uppercase">PDF Publisher</div>
             <h1 className="text-2xl font-serif font-bold text-foreground tracking-tight flex items-center gap-2">
-              Academic Press &amp; Publication Register
+              Syllabus Booklet Publisher
             </h1>
             <div className="w-12 h-0.5 bg-primary/40 my-2" />
             <p className="text-xs text-muted-foreground max-w-2xl font-medium leading-relaxed">
-              Configure metadata parameters to assemble courses and structure syllabuses into unified curriculum books by year of study (FE, SE, TE, BE). Once generated, booklets are registered in the institution's archive.
+              Compile courses and syllabi into unified curriculum booklets by year of study (FE, SE, TE, BE). Once generated, published booklets are preserved in the curriculum archive.
             </p>
           </section>
 

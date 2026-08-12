@@ -65,16 +65,16 @@ export default function CoursesPage() {
         {/* Title Bar Action area */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-5">
           <div className="space-y-1">
-            <h2 className="text-xl font-serif font-bold text-foreground">Curriculum Register Queue</h2>
-            <p className="text-xs text-muted-foreground font-semibold">Catalogue listing of active course shells, validation completeness, and active reviewer approvals.</p>
+            <h2 className="text-xl font-serif font-bold text-foreground">Course Syllabi Directory</h2>
+            <p className="text-xs text-muted-foreground font-semibold">Catalogue listing of active courses, syllabus completeness validation, and reviewer status.</p>
           </div>
           <div className="flex gap-2.5 self-start sm:self-center">
             <Button variant="secondary" onClick={() => void fetchCourses()} className="h-9 border-border">
-              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin text-primary")} /> Refresh ledger
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin text-primary")} /> Refresh List
             </Button>
             <Button asChild className="h-9">
               <Link href="/admin">
-                <Plus className="h-3.5 w-3.5 mr-1.5" /> Initialize subject
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add New Course
               </Link>
             </Button>
           </div>
@@ -84,7 +84,7 @@ export default function CoursesPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center py-16 bg-card rounded border border-border shadow-sm space-y-3">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            <span className="text-xs font-bold text-muted-foreground/60">Fetching curriculum registers...</span>
+            <span className="text-xs font-bold text-muted-foreground/60">Loading courses...</span>
           </div>
         )}
 

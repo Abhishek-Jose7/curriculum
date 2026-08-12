@@ -64,7 +64,7 @@ export default function HomePage() {
         {/* Header */}
         <section className="space-y-4 pt-4">
           <div className="text-[10px] font-bold text-primary uppercase tracking-widest font-mono">
-            academic catalog registry
+            Academic Syllabus Portal
           </div>
           <h1 className="text-3xl md:text-4xl font-serif font-bold text-foreground tracking-tight leading-tight">
             {ROLE_HEADINGS[user?.role ?? "ADMIN"]} <br />
@@ -74,12 +74,12 @@ export default function HomePage() {
           <div className="pt-2 flex flex-wrap gap-3">
             <Button asChild>
               <Link href="/courses">
-                Browse Active Register <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                View All Courses <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Link>
             </Button>
             {user?.role === "ADMIN" && (
               <Button variant="secondary" asChild className="border-border">
-                <Link href="/admin">Administrative Office</Link>
+                <Link href="/admin">Admin Controls</Link>
               </Button>
             )}
           </div>
@@ -89,10 +89,10 @@ export default function HomePage() {
         <section className="border-t border-b border-border bg-card/10 shadow-sm">
           <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
             {[
-              { label: "Draft Manuscripts", val: stats.draft },
+              { label: "Draft Syllabi", val: stats.draft },
               { label: "Under Peer Review", val: stats.review, pulse: stats.review > 0 },
-              { label: "Approved Syllabuses", val: stats.approved },
-              { label: "Published Books", val: stats.published },
+              { label: "Approved Syllabi", val: stats.approved },
+              { label: "Published Syllabi", val: stats.published },
             ].map(({ label, val, pulse }) => (
               <div key={label} className="p-5 space-y-1 text-center md:text-left">
                 <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">{label}</span>

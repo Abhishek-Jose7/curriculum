@@ -43,7 +43,8 @@ export default function LoginPage() {
       const tokenData = await res.json().catch(() => ({}));
       if (tokenData.access) {
         window.localStorage.setItem("accessToken", tokenData.access);
-        document.cookie = `curriculum_access=${tokenData.access}; path=/; max-age=604800; SameSite=Lax; Secure`;
+        const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+        document.cookie = `curriculum_access=${tokenData.access}; path=/; max-age=604800; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       }
       // Hydrate user into localStorage for immediate AuthContext access
       const meRes = await fetch(`${API_URL}/auth/me/`, {

@@ -41,12 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers["Authorization"] = `Bearer ${token}`;
       }
       const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include", headers });
+      const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+      const secureFlag = isSecure ? "; Secure" : "";
+
       if (!res.ok) {
         setUser(null);
         if (typeof window !== "undefined") {
           window.localStorage.removeItem(USER_STORAGE_KEY);
           window.localStorage.removeItem("accessToken");
-          document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+          document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${secureFlag}`;
         }
         return;
       }
@@ -55,15 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== "undefined") {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
         if (token) {
-          document.cookie = `curriculum_access=${token}; path=/; max-age=604800; SameSite=Lax; Secure`;
+          document.cookie = `curriculum_access=${token}; path=/; max-age=604800; SameSite=Lax${secureFlag}`;
         }
       }
     } catch {
       setUser(null);
       if (typeof window !== "undefined") {
+        const isSecure = window.location.protocol === "https:";
         window.localStorage.removeItem(USER_STORAGE_KEY);
         window.localStorage.removeItem("accessToken");
-        document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+        document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       }
     } finally {
       setLoading(false);
@@ -88,9 +92,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
     setUser(null);
     if (typeof window !== "undefined") {
+      const isSecure = window.location.protocol === "https:";
       window.localStorage.removeItem(USER_STORAGE_KEY);
       window.localStorage.removeItem("accessToken");
-      document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+      document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       window.location.href = "/login";
     }
   }, []);

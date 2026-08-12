@@ -85,41 +85,108 @@ export function A4Preview({
 
   const pageRef = useRef<HTMLDivElement>(null);
 
-  const downloadAsDoc = () => {
+  const downloadAsDoc = async () => {
     if (!pageRef.current) return;
     
-    const css = `
-      body { font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.2; padding: 20px; }
-      table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
-      td, th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; }
-      .text-center { text-align: center; }
-      .font-bold { font-weight: bold; }
-      h1, h2, h3, h4 { margin: 10px 0; }
-      .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
-      .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
-      .exam-tbl { width: 100%; border-collapse: collapse; margin: 0; }
-      .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000; padding: 3pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
-      .col-hdr { font-weight: bold; text-align: center; }
-    `;
+    // Convert logo image to Base64 Data URI so Word embeds it
+    let logoSrc = "/logo.jpeg";
+    try {
+      const res = await fetch("/logo.jpeg");
+      const blob = await res.blob();
+      logoSrc = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve("/logo.jpeg");
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      logoSrc = window.location.origin + "/logo.jpeg";
+    }
 
-    const docContent = pageRef.current.innerHTML;
+    // Clone DOM element and sanitize for Word
+    const clone = pageRef.current.cloneNode(true) as HTMLElement;
+
+    // Embed image
+    const imgs = clone.querySelectorAll("img");
+    imgs.forEach((img) => {
+      img.src = logoSrc;
+      img.removeAttribute("srcset");
+      img.setAttribute("width", "72");
+      img.setAttribute("height", "72");
+      img.style.width = "72px";
+      img.style.height = "72px";
+    });
+
+    // Set Word-compatible table attributes
+    const tables = clone.querySelectorAll("table");
+    tables.forEach((tbl) => {
+      tbl.setAttribute("border", "1");
+      tbl.setAttribute("cellspacing", "0");
+      tbl.setAttribute("cellpadding", "3");
+      (tbl as HTMLElement).style.borderCollapse = "collapse";
+    });
+
+    // Remove double borders on exam-tbl container
+    const examCells = clone.querySelectorAll("td[colspan='8']");
+    examCells.forEach((td) => {
+      (td as HTMLElement).style.border = "none";
+      (td as HTMLElement).style.padding = "0px";
+    });
+
+    // Remove borders on header-table cells
+    const headerCells = clone.querySelectorAll(".header-table td");
+    headerCells.forEach((td) => {
+      (td as HTMLElement).style.border = "none";
+    });
+
+    const docContent = clone.innerHTML;
+
+    const css = `
+      @page WordSection1 {
+        size: 595.3pt 841.9pt; /* A4 */
+        margin: 0.5in 0.6in 0.5in 0.6in;
+        mso-page-orientation: portrait;
+      }
+      div.WordSection1 { page: WordSection1; }
+      body { font-family: "Times New Roman", Times, serif; font-size: 10pt; line-height: 1.15; color: #000000; }
+      p { margin: 0; padding: 0; }
+      table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%; table-layout: fixed; }
+      td, th { border: 0.75pt solid #000000; vertical-align: middle; padding: 3pt 4pt; word-break: break-word; font-family: "Times New Roman", Times, serif; }
+      .header-table { width: 100%; border-collapse: collapse; border: none !important; border-bottom: 1.5pt solid #000000 !important; margin-bottom: 8pt; }
+      .header-table td { border: none !important; vertical-align: middle; }
+      .text-center { text-align: center; }
+      .font-bold, .bold { font-weight: bold; }
+      .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
+      .preview-table td, .preview-table th { border: 0.75pt solid #000000; padding: 3pt 4pt; vertical-align: middle; }
+      .exam-tbl { border-collapse: collapse; border: none !important; width: 100%; margin: 0; }
+      .exam-tbl td, .exam-tbl th { border: 0.75pt solid #000000; padding: 2.5pt 3pt; vertical-align: middle; font-size: 8.5pt; }
+      .col-hdr { font-weight: bold; text-align: center; }
+      .copo-table { width: 100%; border-collapse: collapse; margin-top: 6pt; margin-bottom: 8pt; }
+      .copo-table th, .copo-table td { border: 0.75pt solid #000000; padding: 2.5pt 2pt; text-align: center; font-size: 8.5pt; }
+      .bloom-table { width: 100%; border-collapse: collapse; margin-top: 4pt; }
+      .bloom-table td { border: 0.75pt solid #000000; padding: 3.5pt 4pt; text-align: center; font-size: 9pt; }
+    `;
 
     const html = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
+        <meta charset="utf-8" />
         <title>${course.code} - ${course.title}</title>
         <!--[if gte mso 9]>
         <xml>
           <w:WordDocument>
             <w:View>Print</w:View>
             <w:Zoom>100</w:Zoom>
+            <w:DoNotOptimizeForCustomXSL/>
           </w:WordDocument>
         </xml>
         <![endif]-->
         <style>${css}</style>
       </head>
       <body>
-        ${docContent}
+        <div class="WordSection1">
+          ${docContent}
+        </div>
       </body>
       </html>
     `;
@@ -186,17 +253,21 @@ export function A4Preview({
           }}
         >
           
-          <header className="mb-2 flex w-full items-center border-b-[1.5pt] border-black pb-[5pt]">
-            <div className="pr-[5pt] w-[21mm]">
-              <img src="/logo.jpeg" alt="Institutional Logo" className="h-[19mm] w-[19mm] object-contain block" />
-            </div>
-            <div className="text-center flex-1 bold font-bold" style={{ lineHeight: 1.38 }}>
-              <p className="m-0 text-[8.5pt] italic bold font-bold">Society of St.&nbsp;Francis Xavier, Pilar&rsquo;s</p>
-              <p className="m-0 text-[11pt] bold font-bold">Fr. Conceicao Rodrigues College of Engineering</p>
-              <p className="m-0 text-[8.5pt] bold font-bold">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai &ndash; 400&nbsp;050</p>
-              <p className="m-0 text-[8pt] italic bold font-bold">(Autonomous College affiliated to University of Mumbai)</p>
-            </div>
-          </header>
+          <table className="header-table" style={{ width: "100%", borderCollapse: "collapse", border: "none", marginBottom: "8pt", borderBottom: "1.5pt solid #000000" }}>
+            <tbody>
+              <tr>
+                <td style={{ width: "22mm", verticalAlign: "middle", border: "none", padding: "0 5pt 5pt 0" }}>
+                  <img src="/logo.jpeg" alt="Institutional Logo" style={{ width: "19mm", height: "19mm", objectFit: "contain", display: "block" }} />
+                </td>
+                <td style={{ textAlign: "center", verticalAlign: "middle", border: "none", paddingBottom: "5pt", lineHeight: 1.38 }} className="bold font-bold">
+                  <p className="m-0 text-[8.5pt] italic bold font-bold">Society of St.&nbsp;Francis Xavier, Pilar&rsquo;s</p>
+                  <p className="m-0 text-[11pt] bold font-bold">Fr. Conceicao Rodrigues College of Engineering</p>
+                  <p className="m-0 text-[8.5pt] bold font-bold">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai &ndash; 400&nbsp;050</p>
+                  <p className="m-0 text-[8pt] italic bold font-bold">(Autonomous College affiliated to University of Mumbai)</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
           
           <div className="text-center font-bold underline mt-[5pt] mb-[7pt] text-[11pt]" style={{ letterSpacing: '0.015em' }}>
             Course Content{hasLab && !isLab ? " (includes Practical's)" : isLab ? " (Practical Only)" : ""}

@@ -4,6 +4,7 @@ import {
   Archive,
   BookOpen,
   CheckCircle2,
+  ChevronRight,
   FileText,
   GraduationCap,
   LayoutDashboard,
@@ -34,18 +35,18 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
     ...base,
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
-    { href: "/publishing", label: "Catalogue Press", icon: FileText },
+    { href: "/publishing", label: "PDF Publisher", icon: FileText },
     { href: "/archive", label: "Curriculum Archive", icon: Archive },
-    { href: "/admin", label: "Office Controls", icon: Users },
+    { href: "/admin", label: "Admin Controls", icon: Users },
   ];
 
   if (role === "ADMIN") return [
     ...base,
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
-    { href: "/publishing", label: "Catalogue Press", icon: FileText },
+    { href: "/publishing", label: "PDF Publisher", icon: FileText },
     { href: "/archive", label: "Curriculum Archive", icon: Archive },
-    { href: "/admin", label: "Office Controls", icon: Users },
+    { href: "/admin", label: "Admin Controls", icon: Users },
   ];
 
   return base;
@@ -66,23 +67,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const displayName =
     user ? `${user.first_name} ${user.last_name}`.trim() || user.email : "";
 
+  const pathSegments = pathname.split("/").filter(Boolean);
+
   return (
     <div className="min-h-screen bg-background relative selection:bg-primary/20">
       {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:flex flex-col z-20">
-        {/* Brand */}
-        <div className="flex h-20 items-center gap-2.5 px-6 border-b border-border/60 shrink-0">
-          <GraduationCap className="h-5 w-5 text-primary shrink-0" />
+        {/* Brand Link to Home */}
+        <Link
+          href="/"
+          className="flex h-20 items-center gap-2.5 px-6 border-b border-border/60 shrink-0 hover:bg-secondary/20 transition-colors group cursor-pointer"
+          title="Return to Home Dashboard"
+        >
+          <GraduationCap className="h-5 w-5 text-primary shrink-0 group-hover:scale-105 transition-transform" />
           <div>
-            <div className="text-xs font-serif font-bold uppercase tracking-widest text-foreground">Syllabus press</div>
+            <div className="text-xs font-serif font-bold uppercase tracking-widest text-foreground group-hover:text-primary transition-colors">Syllabus Press</div>
             <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Fr. CRCE Autonomous</div>
           </div>
-        </div>
+        </Link>
 
         {/* Nav */}
         <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
           <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
-            Manuscript Ledger
+            Curriculum Portal
           </div>
           {nav.map((item) => {
             const isActive =
@@ -129,11 +136,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <main className="md:pl-60">
         <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border/80 bg-background/95 px-4 md:px-6">
-          <h1 className="text-xs font-serif font-bold text-foreground">Curriculum Document Office</h1>
+          <nav className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground overflow-x-auto py-1">
+            <Link href="/" className="hover:text-primary transition-colors font-serif font-bold text-foreground">
+              Syllabus Portal
+            </Link>
+            {pathSegments.length > 0 && (
+              <>
+                <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+                {pathSegments.map((seg, i) => {
+                  const href = "/" + pathSegments.slice(0, i + 1).join("/");
+                  const isLast = i === pathSegments.length - 1;
+                  const label = seg.toUpperCase() === "COURSES" ? "Courses"
+                    : seg.toUpperCase() === "REVIEW" ? "Review Board"
+                    : seg.toUpperCase() === "PUBLISHING" ? "PDF Publisher"
+                    : seg.toUpperCase() === "ARCHIVE" ? "Curriculum Archive"
+                    : seg.toUpperCase() === "ADMIN" ? "Admin Controls"
+                    : seg;
+                  return (
+                    <span key={href} className="flex items-center gap-1.5 shrink-0">
+                      {isLast ? (
+                        <span className="font-bold text-foreground truncate max-w-[180px]">{label}</span>
+                      ) : (
+                        <Link href={href} className="hover:text-primary transition-colors">
+                          {label}
+                        </Link>
+                      )}
+                      {!isLast && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />}
+                    </span>
+                  );
+                })}
+              </>
+            )}
+          </nav>
           <Button
             variant="secondary"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="h-8 w-8 p-0 rounded"
+            className="h-8 w-8 p-0 rounded shrink-0 ml-2"
             aria-label="Toggle theme"
           >
             <Sun className="hidden h-3.5 w-3.5 dark:block text-amber-500" />
@@ -145,3 +183,4 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
