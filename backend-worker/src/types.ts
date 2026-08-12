@@ -54,4 +54,7 @@ export type CourseRow = {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
+  faculty_name?: string;
+  invite_token?: string | null;
+  invite_email?: string | null;
 };

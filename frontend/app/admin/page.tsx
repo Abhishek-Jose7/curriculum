@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { RoleGuard } from "@/components/layout/role-guard";
 import { InviteTeacherPanel } from "@/components/admin/invite-teacher-panel";
+import { HodCurriculumWorkspace } from "@/components/admin/hod-curriculum-workspace";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/context";
 import {
   GraduationCap,
   Building2,
@@ -22,7 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ActiveTab = "invite" | "department" | "academic-year" | "semester";
+type ActiveTab = "invite" | "department" | "academic-year" | "semester" | "department-curriculum";
 
 const YEAR_OF_STUDY = [
   { label: 'FE', fullName: 'First Year', sems: [1, 2], color: 'blue' },
@@ -56,7 +58,14 @@ const yearChipClasses: Record<string, string> = {
 };
 
 function AdminContent() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>("department");
+
+  useEffect(() => {
+    if (user?.role === "HOD") {
+      setActiveTab("department-curriculum");
+    }
+  }, [user]);
 
   // Options for selects
   const [departments, setDepartments] = useState<any[]>([]);
@@ -443,50 +452,79 @@ function AdminContent() {
           <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
             <aside className="space-y-1 bg-card/20 border border-border rounded p-3 shadow-sm h-fit">
               <div className="text-[9px] font-mono font-bold text-muted-foreground/60 uppercase tracking-widest px-2 mb-2">Office ledger</div>
-              <button
-                onClick={() => setActiveTab("department")}
-                className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
-                  activeTab === "department" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
-                )}
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                Manage Departments
-              </button>
-              <button
-                onClick={() => setActiveTab("academic-year")}
-                className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
-                  activeTab === "academic-year" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
-                )}
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Manage Academic Years
-              </button>
-              <button
-                onClick={() => setActiveTab("semester")}
-                className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
-                  activeTab === "semester" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
-                )}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                Manage Semesters
-              </button>
-              <button
-                onClick={() => setActiveTab("invite")}
-                className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-dashed border-primary/20 active:scale-[0.98]",
-                  activeTab === "invite" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none border-transparent" : "hover:bg-muted text-foreground/75 hover:text-foreground"
-                )}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create Subject
-              </button>
+              {user?.role === "HOD" ? (
+                <>
+                  <button
+                    onClick={() => setActiveTab("department-curriculum")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "department-curriculum" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Curriculum Setup
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("academic-year")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "academic-year" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    Manage Academic Years
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setActiveTab("department")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "department" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    Manage Departments
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("academic-year")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "academic-year" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Calendar className="h-3.5 w-3.5" />
+                    Manage Academic Years
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("semester")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "semester" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                    Manage Semesters
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("invite")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-dashed border-primary/20 active:scale-[0.98]",
+                      activeTab === "invite" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none border-transparent" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Subject
+                  </button>
+                </>
+              )}
             </aside>
 
             {/* Main content ledger views */}
             <main className="space-y-6">
+              {activeTab === "department-curriculum" && <HodCurriculumWorkspace />}
+
               {activeTab === "invite" && <InviteTeacherPanel />}
 
               {activeTab === "department" && (
@@ -1064,7 +1102,7 @@ function AdminContent() {
 
 export default function AdminPage() {
   return (
-    <RoleGuard allowed={["ADMIN"]}>
+    <RoleGuard allowed={["ADMIN", "HOD"]}>
       <AdminContent />
     </RoleGuard>
   );

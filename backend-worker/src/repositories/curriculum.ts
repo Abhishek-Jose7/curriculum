@@ -15,6 +15,52 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     super(db, "courses", courseFields, ["semester_id", "faculty_user_id", "course_type", "status"]);
   }
 
+  async list(query: Record<string, string | undefined> = {}) {
+    const clauses: string[] = [];
+    const values: unknown[] = [];
+    
+    const filterColumns = ["semester_id", "faculty_user_id", "course_type", "status"];
+    for (const column of filterColumns) {
+      const value = query[column];
+      if (value !== undefined && value !== "") {
+        clauses.push(`c.${column} = ?`);
+        values.push(value);
+      }
+    }
+    
+    if (query.department_id || query.department) {
+      clauses.push("s.department_id = ?");
+      values.push(query.department_id || query.department);
+    }
+    if (query.academic_year_id || query.academic_year) {
+      clauses.push("s.academic_year_id = ?");
+      values.push(query.academic_year_id || query.academic_year);
+    }
+
+    const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
+    
+    const sql = `
+      SELECT 
+        c.*,
+        trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name,
+        ci.token AS invite_token,
+        ci.email AS invite_email
+      FROM courses c
+      JOIN semesters s ON c.semester_id = s.id
+      LEFT JOIN profiles p ON c.faculty_user_id = p.id
+      LEFT JOIN course_invitations ci ON c.id = ci.course_id AND ci.accepted_at IS NULL
+      ${where}
+    `;
+
+    const result = await this.db.prepare(sql).bind(...values).all();
+    return (result.results ?? []).map(row => ({
+      ...row,
+      faculty_name: (row.faculty_name as string) || "",
+      invite_token: (row.invite_token as string) || null,
+      invite_email: (row.invite_email as string) || null,
+    })) as CourseRow[];
+  }
+
   async detail(id: string) {
     const course = await this.get(id);
     if (!course) return null;

@@ -36,6 +36,7 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
     { href: "/publishing", label: "Catalogue Press", icon: FileText },
     { href: "/archive", label: "Curriculum Archive", icon: Archive },
+    { href: "/admin", label: "Office Controls", icon: Users },
   ];
 
   if (role === "ADMIN") return [

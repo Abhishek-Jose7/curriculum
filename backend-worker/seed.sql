@@ -2,7 +2,11 @@
 
 -- 1. Departments
 INSERT OR IGNORE INTO departments (id, code, name, college_name, university_name, logo_url) 
-VALUES (1, 'COMP', 'Computer Engineering', 'College of Engineering', 'Official University', '');
+VALUES 
+(1, 'COMP', 'Computer Engineering', 'Fr. Conceicao Rodrigues College of Engineering', 'University of Mumbai', ''),
+(2, 'CSE', 'Computer Science and Engineering', 'Fr. Conceicao Rodrigues College of Engineering', 'University of Mumbai', ''),
+(3, 'ECS', 'Electronics and Computer Science', 'Fr. Conceicao Rodrigues College of Engineering', 'University of Mumbai', ''),
+(4, 'MECH', 'Mechanical Engineering', 'Fr. Conceicao Rodrigues College of Engineering', 'University of Mumbai', '');
 
 -- 2. Profiles (Users)
 -- Development-only password verifier for the Worker migration bridge.
@@ -13,9 +17,12 @@ VALUES
 (1, 'admin@example.edu', 'ChangeMe123!', 'ADMIN', 1, 'System', 'Admin', 'Administrator', '9999999999', 1),
 (2, 'faculty@example.edu', 'ChangeMe123!', 'FACULTY', 1, 'Faculty', 'Coordinator', 'Assistant Professor', '8888888888', 1),
 (3, 'reviewer@example.edu', 'ChangeMe123!', 'REVIEWER', 1, 'Peer', 'Reviewer', 'Associate Professor', '7777777777', 1),
-(4, 'hod@example.edu', 'ChangeMe123!', 'HOD', 1, 'Head', 'Department', 'Professor', '6666666666', 1);
+(4, 'hod@example.edu', 'ChangeMe123!', 'HOD', 1, 'Head', 'Department', 'Professor', '6666666666', 1),
+(5, 'hod_cse@example.edu', 'ChangeMe123!', 'HOD', 2, 'Head', 'CSE', 'Professor', '5555555555', 1),
+(6, 'hod_ecs@example.edu', 'ChangeMe123!', 'HOD', 3, 'Head', 'ECS', 'Professor', '4444444444', 1),
+(7, 'hod_mech@example.edu', 'ChangeMe123!', 'HOD', 4, 'Head', 'Mechanical', 'Professor', '3333333333', 1);
 
-UPDATE profiles SET password_hash = 'ChangeMe123!' WHERE id IN ('1', '2', '3', '4');
+UPDATE profiles SET password_hash = 'ChangeMe123!' WHERE id IN ('1', '2', '3', '4', '5', '6', '7');
 
 -- 3. Academic Years
 INSERT OR IGNORE INTO academic_years (id, name, starts_on, ends_on, is_active)
