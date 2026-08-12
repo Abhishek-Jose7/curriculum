@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://curriculum-backend.collacou.workers.dev/api";
 const USER_STORAGE_KEY = "curriculum_user";
 
 export type AuthUser = {
@@ -35,19 +35,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchMe = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include" });
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("accessToken") : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include", headers });
       if (!res.ok) {
         setUser(null);
-        if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(USER_STORAGE_KEY);
+          window.localStorage.removeItem("accessToken");
+          document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+        }
         return;
       }
       const data: AuthUser = await res.json();
       setUser(data);
-      if (typeof window !== "undefined")
+      if (typeof window !== "undefined") {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
+        if (token) {
+          document.cookie = `curriculum_access=${token}; path=/; max-age=604800; SameSite=Lax; Secure`;
+        }
+      }
     } catch {
       setUser(null);
-      if (typeof window !== "undefined") window.localStorage.removeItem(USER_STORAGE_KEY);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+        window.localStorage.removeItem("accessToken");
+        document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
+      }
     } finally {
       setLoading(false);
     }
@@ -72,6 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(USER_STORAGE_KEY);
+      window.localStorage.removeItem("accessToken");
+      document.cookie = "curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure";
       window.location.href = "/login";
     }
   }, []);

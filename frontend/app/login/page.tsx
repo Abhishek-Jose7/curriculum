@@ -4,7 +4,9 @@ import { useState, FormEvent } from "react";
 import { GraduationCap, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787/api";
+import { useRouter } from "next/navigation";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://curriculum-backend.collacou.workers.dev/api";
 const USER_STORAGE_KEY = "curriculum_user";
 
 const QUICK_LOGINS = [
@@ -15,6 +17,7 @@ const QUICK_LOGINS = [
 ];
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -37,12 +40,20 @@ export default function LoginPage() {
         setError((data as any).detail ?? "Invalid credentials.");
         return;
       }
+      const tokenData = await res.json().catch(() => ({}));
+      if (tokenData.access) {
+        window.localStorage.setItem("accessToken", tokenData.access);
+        document.cookie = `curriculum_access=${tokenData.access}; path=/; max-age=604800; SameSite=Lax; Secure`;
+      }
       // Hydrate user into localStorage for immediate AuthContext access
-      const meRes = await fetch(`${API_URL}/auth/me/`, { credentials: "include" });
+      const meRes = await fetch(`${API_URL}/auth/me/`, {
+        credentials: "include",
+        headers: tokenData.access ? { Authorization: `Bearer ${tokenData.access}` } : {}
+      });
       if (meRes.ok) {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(await meRes.json()));
       }
-      window.location.href = "/";
+      router.push("/");
     } catch {
       setError("Network error. Please try again.");
     } finally {

@@ -63,13 +63,14 @@ export default function InvitePage() {
           const authData = await apiFetch<any>("/auth/token/", {
             method: "POST",
             body: JSON.stringify({
-              username: "faculty",
+              email: "faculty@example.edu",
               password: "ChangeMe123!",
             }),
           });
           window.localStorage.setItem("accessToken", authData.access);
           window.localStorage.setItem("refreshToken", authData.refresh);
           window.localStorage.setItem("userRole", "FACULTY");
+          document.cookie = `curriculum_access=${authData.access}; path=/; max-age=604800; SameSite=Lax; Secure`;
         } catch (authErr) {
           throw new Error("Could not authenticate as faculty user. Admin must seed the database.");
         }

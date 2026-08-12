@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 **/.env*
 __pycache__/
 *.pyc
@@ -7,3 +7,8 @@ build/
 .vscode/
 .next
 .venv
+.wrangler/
+**/.wrangler/
+*.sqlite*
+*.db
+curriculum/
