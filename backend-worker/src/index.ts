@@ -244,6 +244,33 @@ api.post("/auth/logout/", async (c) => {
 });
 
 
+api.get("/course-invitations/:token/", async (c) => {
+  const token = c.req.param("token");
+  const invitation = await c.env.DB.prepare(`
+    SELECT ci.*, c.code AS course_code, c.title AS course_title
+    FROM course_invitations ci
+    JOIN courses c ON ci.course_id = c.id
+    WHERE ci.token = ?
+  `).bind(token).first<any>();
+
+  if (!invitation) {
+    return c.json({ detail: "Invitation not found." }, 404);
+  }
+
+  const isAccepted = invitation.accepted_at !== null;
+  const isExpired = new Date(invitation.expires_at) < new Date();
+
+  return c.json({
+    token: invitation.token,
+    email: invitation.email,
+    course_code: invitation.course_code,
+    course_title: invitation.course_title,
+    course_id: invitation.course_id,
+    is_accepted: isAccepted,
+    is_expired: isExpired,
+  });
+});
+
 api.use("*", requireAuth);
 
 api.get("/auth/me/", (c) => c.json(c.get("user")));
@@ -567,6 +594,139 @@ const handleAssignFaculty = async (c: any) => {
 
 api.patch("/courses/:id/assign-faculty", requireRole("ADMIN", "HOD"), handleAssignFaculty);
 api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), handleAssignFaculty);
+
+const PREVIOUS_SUBJECTS: Record<string, Array<{ code: string; title: string; course_type: string; credits: number; semester: number }>> = {
+  "COMP": [
+    { code: "25BSC12CE05", title: "Discrete Mathematics and Graph Theory", course_type: "THEORY", credits: 2, semester: 3 },
+    { code: "25PCC12CE05", title: "Computer Organization and Architecture", course_type: "THEORY_LAB", credits: 3, semester: 3 },
+    { code: "25PCC12CE06", title: "Data Structures", course_type: "THEORY_LAB", credits: 4, semester: 3 },
+    { code: "25PCC12CE07", title: "Object Oriented Programming with JAVA", course_type: "LAB", credits: 1, semester: 3 },
+    { code: "25OE13CE11", title: "Law for Engineers", course_type: "THEORY", credits: 2, semester: 3 },
+    { code: "25OE13CE12", title: "Financial Planning, Taxation and Investment", course_type: "THEORY", credits: 2, semester: 3 },
+    { code: "25VEC12CE01", title: "Human Values and Professional Ethics", course_type: "THEORY", credits: 2, semester: 3 },
+    { code: "25CEP12CE01", title: "Community Engagement Project", course_type: "PROJECT", credits: 2, semester: 3 },
+    { code: "25BSC12CE06", title: "Linear Algebra and Business Statistics", course_type: "THEORY", credits: 2, semester: 4 },
+    { code: "25PCC12CE08", title: "Database Management Systems", course_type: "THEORY_LAB", credits: 3, semester: 4 },
+    { code: "25PCC12CE09", title: "Analysis of Algorithm", course_type: "THEORY_LAB", credits: 4, semester: 4 },
+    { code: "25PCC12CE010", title: "Operating Systems", course_type: "THEORY_LAB", credits: 3, semester: 4 },
+    { code: "25OE13CE21", title: "Emerging Technology and Law", course_type: "THEORY", credits: 2, semester: 4 },
+    { code: "25OE13CE22", title: "Principles of Management", course_type: "THEORY", credits: 2, semester: 4 },
+    { code: "25VSE12CE03", title: "Full Stack Development", course_type: "LAB", credits: 2, semester: 4 },
+    { code: "25EEM12CE02", title: "Technology Entrepreneurship", course_type: "THEORY", credits: 2, semester: 4 },
+    { code: "25VEC12CE02", title: "Technology Innovation for Sustainable Development", course_type: "THEORY", credits: 2, semester: 4 },
+    { code: "25PCC13CE11", title: "Cryptography and System Security", course_type: "THEORY_LAB", credits: 3, semester: 5 },
+    { code: "25PCC13CE12", title: "Theory of Computer Science", course_type: "THEORY_LAB", credits: 3, semester: 5 },
+    { code: "25PCC13CE13", title: "System Programming and Compiler construction", course_type: "THEORY_LAB", credits: 3, semester: 5 },
+    { code: "25PCC13CE14", title: "Data Warehousing and Mining", course_type: "THEORY_LAB", credits: 3, semester: 5 },
+    { code: "25VSE13CE04", title: "Cloud Computing Lab", course_type: "LAB", credits: 2, semester: 5 },
+    { code: "25PCC13CE15", title: "Distributed Computing", course_type: "THEORY_LAB", credits: 3, semester: 6 },
+    { code: "25PCC13CE16", title: "Software Engineering", course_type: "THEORY_LAB", credits: 3, semester: 6 },
+    { code: "25PCC13CE17", title: "Artificial Intelligence Lab", course_type: "LAB", credits: 1, semester: 6 },
+    { code: "25PCC13CE18", title: "Mini Project", course_type: "PROJECT", credits: 1, semester: 6 },
+    { code: "25PCC13CE19", title: "Mobile App development", course_type: "LAB", credits: 1, semester: 6 },
+    { code: "25PCC13CE20", title: "DevOps Lab", course_type: "LAB", credits: 1, semester: 6 },
+    { code: "25PCC13CE21", title: "Advanced Microprocessors", course_type: "THEORY_LAB", credits: 3, semester: 6 }
+  ],
+  "CSE": [
+    { code: "25CS301", title: "Mathematical Foundations of Computer Science", course_type: "THEORY", credits: 4, semester: 3 },
+    { code: "25CS302", title: "Design and Analysis of Algorithms", course_type: "THEORY_LAB", credits: 4, semester: 3 },
+    { code: "25CS303", title: "Software Engineering Principles", course_type: "THEORY", credits: 3, semester: 3 },
+    { code: "25CS401", title: "Database Systems and Applications", course_type: "THEORY_LAB", credits: 4, semester: 4 },
+    { code: "25CS402", title: "Computer Networks", course_type: "THEORY_LAB", credits: 4, semester: 4 }
+  ],
+  "ECS": [
+    { code: "25EC301", title: "Electronic Devices and Circuits", course_type: "THEORY_LAB", credits: 4, semester: 3 },
+    { code: "25EC302", title: "Digital System Design", course_type: "THEORY_LAB", credits: 3, semester: 3 },
+    { code: "25EC401", title: "Microcontrollers and Embedded Systems", course_type: "THEORY_LAB", credits: 4, semester: 4 },
+    { code: "25EC402", title: "Signals and Systems", course_type: "THEORY", credits: 3, semester: 4 }
+  ],
+  "MECH": [
+    { code: "25ME301", title: "Thermodynamics", course_type: "THEORY", credits: 3, semester: 3 },
+    { code: "25ME302", title: "Strength of Materials", course_type: "THEORY_LAB", credits: 4, semester: 3 },
+    { code: "25ME401", title: "Fluid Mechanics and Machinery", course_type: "THEORY_LAB", credits: 4, semester: 4 },
+    { code: "25ME402", title: "Manufacturing Processes", course_type: "THEORY_LAB", credits: 3, semester: 4 }
+  ]
+};
+
+api.post("/courses/:id/invite_teacher/", requireRole("ADMIN", "HOD"), async (c) => {
+  const courseId = c.req.param("id");
+  const { email } = await c.req.json<{ email: string }>();
+  if (!email) return c.json({ detail: "Email is required." }, 400);
+
+  const course = await c.env.DB.prepare("SELECT * FROM courses WHERE id = ?").bind(courseId).first<any>();
+  if (!course) return c.json({ detail: "Course not found." }, 404);
+
+  const token = crypto.randomUUID();
+  const invitationId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+  await c.env.DB.prepare(`
+    INSERT INTO course_invitations (id, course_id, email, token, invited_by_user_id, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(invitationId, courseId, email, token, c.get("user").id, expiresAt).run();
+
+  const frontendUrl = c.env.FRONTEND_URL ?? "http://localhost:3000";
+  const invitationUrl = `${frontendUrl}/invite/${token}`;
+
+  return c.json({ invitation_url: invitationUrl });
+});
+
+api.post("/course-invitations/:token/accept/", async (c) => {
+  const token = c.req.param("token");
+  const user = c.get("user");
+
+  const invitation = await c.env.DB.prepare("SELECT * FROM course_invitations WHERE token = ?").bind(token).first<any>();
+  if (!invitation) return c.json({ detail: "Invitation not found." }, 404);
+  if (invitation.accepted_at) return c.json({ detail: "Invitation already accepted." }, 400);
+  if (new Date(invitation.expires_at) < new Date()) return c.json({ detail: "Invitation has expired." }, 400);
+
+  await c.env.DB.prepare("UPDATE course_invitations SET accepted_at = CURRENT_TIMESTAMP, accepted_by_user_id = ? WHERE token = ?").bind(user.id, token).run();
+  await c.env.DB.prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ?").bind(user.id, invitation.course_id).run();
+  
+  await createCourseVersion(c.env.DB, invitation.course_id, user, "Coordinator assigned via invite link");
+
+  return c.json({ status: "success" });
+});
+
+api.get("/departments/:id/previous-subjects/", async (c) => {
+  const deptId = c.req.param("id");
+  const dept = await c.env.DB.prepare("SELECT code FROM departments WHERE id = ?").bind(deptId).first<any>();
+  if (!dept) return c.json({ detail: "Department not found." }, 404);
+
+  const subjects = PREVIOUS_SUBJECTS[dept.code] || [];
+  return c.json(subjects);
+});
+
+api.post("/semesters/initialize-year/", requireRole("ADMIN", "HOD"), async (c) => {
+  const { department_id, academic_year_id, year_of_study } = await c.req.json<{ department_id: string, academic_year_id: string, year_of_study: string }>();
+  
+  const YEAR_SEM_MAP: Record<string, number[]> = {
+    "FE": [1, 2],
+    "SE": [3, 4],
+    "TE": [5, 6],
+    "BE": [7, 8]
+  };
+  const semNumbers = YEAR_SEM_MAP[year_of_study] || [];
+  const createdSems = [];
+
+  for (const num of semNumbers) {
+    const semTitle = `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][num - 1]}`;
+    let existing = await c.env.DB.prepare("SELECT * FROM semesters WHERE department_id = ? AND academic_year_id = ? AND number = ?")
+      .bind(department_id, academic_year_id, num)
+      .first<any>();
+
+    if (!existing) {
+      const id = crypto.randomUUID();
+      existing = await c.env.DB.prepare(`
+        INSERT INTO semesters (id, department_id, academic_year_id, number, title, ordinance)
+        VALUES (?, ?, ?, ?, ?, '') RETURNING *
+      `).bind(id, department_id, academic_year_id, num, semTitle).first<any>();
+    }
+    createdSems.push(existing);
+  }
+
+  return c.json({ semesters: createdSems });
+});
 
 api.post("/courses/:id/submit/", async (c) => {
   const course = await c.env.DB.prepare("UPDATE courses SET status = 'SUBMITTED' WHERE id = ? RETURNING *").bind(c.req.param("id")).first<any>();
