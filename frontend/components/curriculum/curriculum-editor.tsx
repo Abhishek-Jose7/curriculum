@@ -340,18 +340,51 @@ function BloomLevelPicker({ value, onChange }: { value: string; onChange: (val: 
 }
 
 function OutcomeEditor({ outcomes, onChange }: { outcomes: CourseOutcome[]; onChange: (items: CourseOutcome[]) => void }) {
+  const subjectBloomLevel = useMemo(() => {
+    const set = new Set<string>();
+    outcomes.forEach((o) => {
+      if (o.bloom_level) {
+        o.bloom_level.split(",").forEach((l) => {
+          if (l.trim()) set.add(l.trim());
+        });
+      }
+    });
+    return Array.from(set).join(", ") || "Apply";
+  }, [outcomes]);
+
+  const handleSubjectBloomChange = (newBloomLevel: string) => {
+    const updated = outcomes.map((o) => ({
+      ...o,
+      bloom_level: newBloomLevel,
+    }));
+    onChange(updated);
+  };
+
   return (
     <Panel title="Course Outcomes" description="Outcomes must represent clear intellectual competencies, mapped directly to Bloom cognitive domains.">
-      <Rows items={outcomes} addLabel="Add Course Outcome" newItem={{ code: `CO${outcomes.length + 1}`, description: "", bloom_level: "Apply", order: outcomes.length + 1 }} onChange={onChange} render={(item, index, update) => (
-        <div className="space-y-3.5 p-4 rounded-sm border border-border/80 bg-card shadow-xs">
-          <div className="grid gap-4 md:grid-cols-[90px_1fr_auto] items-start">
+      <div className="mb-6 p-4 rounded border border-border bg-card/60 space-y-2">
+        <div className="text-xs font-bold uppercase tracking-wider text-foreground">
+          Subject Bloom&apos;s Level(s)
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Select the overall Bloom&apos;s Taxonomy cognitive levels that apply to this subject:
+        </p>
+        <BloomLevelPicker value={subjectBloomLevel} onChange={handleSubjectBloomChange} />
+      </div>
+
+      <Rows
+        items={outcomes}
+        addLabel="Add Course Outcome"
+        newItem={{ code: `CO${outcomes.length + 1}`, description: "", bloom_level: subjectBloomLevel, order: outcomes.length + 1 }}
+        onChange={onChange}
+        render={(item, index, update) => (
+          <div className="grid gap-4 md:grid-cols-[90px_1fr_auto] items-start p-4 rounded-sm border border-border/80 bg-card shadow-xs">
             <Field label="CO" value={item.code} onChange={(value) => update({ code: value })} />
             <TextArea label="Description of Competency" value={item.description} onChange={(value) => update({ description: value })} error={item.description.length < 12 ? "Outcome description is too short" : undefined} />
             <RemoveButton onClick={() => onChange(outcomes.filter((_, i) => i !== index))} />
           </div>
-          <BloomLevelPicker value={item.bloom_level} onChange={(value) => update({ bloom_level: value })} />
-        </div>
-      )} />
+        )}
+      />
     </Panel>
   );
 }
