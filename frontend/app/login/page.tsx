@@ -4,7 +4,7 @@ import { useState, FormEvent } from "react";
 import { GraduationCap, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"; // Not used anymore but keep for now if needed
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://curriculum-backend.collacou.workers.dev/api";
 const USER_STORAGE_KEY = "curriculum_user";
@@ -17,7 +17,6 @@ const QUICK_LOGINS = [
 ];
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -43,8 +42,8 @@ export default function LoginPage() {
       const tokenData = await res.json().catch(() => ({}));
       if (tokenData.access) {
         window.localStorage.setItem("accessToken", tokenData.access);
-        const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
-        document.cookie = `curriculum_access=${tokenData.access}; path=/; max-age=604800; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+        // Backend already sets curriculum_access cookie with SameSite=None; Secure
+        // Do NOT override it with SameSite=Lax as that breaks cross-origin transmission
       }
       // Hydrate user into localStorage for immediate AuthContext access
       const meRes = await fetch(`${API_URL}/auth/me/`, {
@@ -54,7 +53,7 @@ export default function LoginPage() {
       if (meRes.ok) {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(await meRes.json()));
       }
-      router.push("/");
+      window.location.href = "/";
     } catch {
       setError("Network error. Please try again.");
     } finally {

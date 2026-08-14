@@ -13,6 +13,7 @@ import {
   Sun,
   Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -61,18 +62,26 @@ const ROLE_LABELS: Record<AuthUser["role"], string> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  // Wait for client hydration before rendering nav
+  // This prevents SSR/client mismatch since server can't access localStorage
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const nav = user ? getNavForRole(user.role) : [];
   const displayName =
     user ? `${user.first_name} ${user.last_name}`.trim() || user.email : "";
 
-  const pathSegments = pathname.split("/").filter(Boolean);
+  const pathSegments = (pathname || "").split("/").filter(Boolean);
 
   return (
     <div className="min-h-screen bg-background relative selection:bg-primary/20">
       {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:flex flex-col z-20">
+      {mounted && !authLoading && user && (
+        <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:flex flex-col z-20">
         {/* Brand Link to Home */}
         <Link
           href="/"
@@ -87,36 +96,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
 
         {/* Nav */}
-        <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
-          <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
-            Curriculum Portal
-          </div>
-          {nav.map((item) => {
-            const isActive =
-              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "relative flex items-center gap-3 rounded-sm px-3.5 py-2.5 text-xs font-bold transition-all border border-transparent",
-                  isActive
-                    ? "text-primary bg-secondary/40"
-                    : "text-foreground/55 hover:text-foreground hover:bg-secondary/20"
-                )}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" />
-                )}
-                <item.icon className="h-3.5 w-3.5 opacity-65 shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        {mounted && user && (
+          <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
+            <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
+              Curriculum Portal
+            </div>
+            {nav.map((item) => {
+              const isActive =
+                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-sm px-3.5 py-2.5 text-xs font-bold transition-all border border-transparent",
+                    isActive
+                      ? "text-primary bg-secondary/40"
+                      : "text-foreground/55 hover:text-foreground hover:bg-secondary/20"
+                  )}
+                >
+                  {isActive && (
+                    <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" />
+                  )}
+                  <item.icon className="h-3.5 w-3.5 opacity-65 shrink-0" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         {/* User footer */}
-        {user && (
+        {mounted && user && (
           <div className="border-t border-border/60 p-4 shrink-0 space-y-0.5">
             <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">
               {ROLE_LABELS[user.role]}
@@ -131,10 +142,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         )}
-      </aside>
+        </aside>
+      )}
 
       {/* Main */}
-      <main className="md:pl-60">
+      <main className={mounted && !authLoading && user ? "md:pl-60" : ""}>
         <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border/80 bg-background/95 px-4 md:px-6">
           <nav className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground overflow-x-auto py-1">
             <Link href="/" className="hover:text-primary transition-colors font-serif font-bold text-foreground">

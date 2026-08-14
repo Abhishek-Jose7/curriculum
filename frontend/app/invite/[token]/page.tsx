@@ -70,7 +70,8 @@ export default function InvitePage() {
           window.localStorage.setItem("accessToken", authData.access);
           window.localStorage.setItem("refreshToken", authData.refresh);
           window.localStorage.setItem("userRole", "FACULTY");
-          document.cookie = `curriculum_access=${authData.access}; path=/; max-age=604800; SameSite=Lax; Secure`;
+          // Backend already sets curriculum_access cookie with SameSite=None; Secure
+          // Do NOT override it as that breaks cross-origin transmission
         } catch (authErr) {
           throw new Error("Could not authenticate as faculty user. Admin must seed the database.");
         }
