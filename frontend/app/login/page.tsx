@@ -42,8 +42,8 @@ export default function LoginPage() {
       const tokenData = await res.json().catch(() => ({}));
       if (tokenData.access) {
         window.localStorage.setItem("accessToken", tokenData.access);
-        // Backend already sets curriculum_access cookie with SameSite=None; Secure
-        // Do NOT override it with SameSite=Lax as that breaks cross-origin transmission
+        const isSecure = window.location.protocol === "https:";
+        document.cookie = `curriculum_access=${tokenData.access}; path=/; max-age=900; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       }
       // Hydrate user into localStorage for immediate AuthContext access
       const meRes = await fetch(`${API_URL}/auth/me/`, {

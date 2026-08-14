@@ -37,16 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = typeof window !== "undefined" ? window.localStorage.getItem("accessToken") : null;
       
-      // Skip fetch if no token AND no prior user session
-      // (fresh load without authentication - user should see login page, not 401 error)
-      if (!token) {
-        const storedUser = typeof window !== "undefined" ? window.localStorage.getItem(USER_STORAGE_KEY) : null;
-        if (!storedUser) {
-          setLoading(false);
-          return;
-        }
-        // User was logged in before; verify session is still valid
-      }
+      // We always attempt to fetch me if we reach here, because even without a token,
+      // the user might have an HttpOnly curriculum_access cookie that validates them.
       
       const headers: Record<string, string> = {};
       if (token) {
@@ -63,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           window.localStorage.removeItem(USER_STORAGE_KEY);
           window.localStorage.removeItem("accessToken");
           // Clear HttpOnly cookie by clearing the document.cookie record
-          document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None${secureFlag}`;
+          document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${secureFlag}`;
           // Redirect to login only if not already there
           if (window.location.pathname !== "/login") {
             window.location.href = "/login";
@@ -83,7 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const isSecure = window.location.protocol === "https:";
         window.localStorage.removeItem(USER_STORAGE_KEY);
         window.localStorage.removeItem("accessToken");
-        document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None${isSecure ? "; Secure" : ""}`;
+        document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     } finally {
       setLoading(false);
@@ -111,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const isSecure = window.location.protocol === "https:";
       window.localStorage.removeItem(USER_STORAGE_KEY);
       window.localStorage.removeItem("accessToken");
-      document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None${isSecure ? "; Secure" : ""}`;
+      document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
       window.location.href = "/login";
     }
   }, []);
