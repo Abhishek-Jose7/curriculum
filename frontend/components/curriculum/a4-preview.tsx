@@ -70,7 +70,7 @@ export function A4Preview({
         .filter((v: number, i: number, self: number[]) => self.indexOf(v) === i)
         .sort()
         .join(", ");
-      const coMapped = exp.coMapped || `CO${Math.min(Math.floor((exp.number - 1) / 2) + 1, course.outcomes.length || 1)}`;
+      const coMapped = exp.coMapped || `CO${Math.min(Math.floor((exp.number - 1) / 2) + 1, (course.outcomes || []).length || 1)}`;
       return {
         number: exp.number,
         title: exp.title,
@@ -81,7 +81,7 @@ export function A4Preview({
     });
   };
 
-  const totalModuleHours = course.modules.reduce((sum, module) => sum + (module.contact_hours || 0), 0);
+  const totalModuleHours = (course.modules || []).reduce((sum, module) => sum + (module.contact_hours || 0), 0);
 
   const pageRef = useRef<HTMLDivElement>(null);
 
@@ -366,9 +366,9 @@ export function A4Preview({
                   <td>{course.pre_requisites || "--"}</td>
                 </tr>
                 <tr><td colSpan={2}>After the successful completion students should be able to:</td></tr>
-                {course.outcomes.map((outcome, idx) => (
+                {(course.outcomes || []).map((outcome, idx) => (
                   <tr key={outcome.code}>
-                    {idx === 0 && <td className="font-bold" rowSpan={course.outcomes.length || 1}>Course Outcomes</td>}
+                    {idx === 0 && <td className="font-bold" rowSpan={(course.outcomes || []).length || 1}>Course Outcomes</td>}
                     <td><span className="font-bold">{outcome.code}</span>&ensp;{outcome.description}</td>
                   </tr>
                 ))}
@@ -389,7 +389,7 @@ export function A4Preview({
                     <th style={{ textAlign: "left" }} className="font-bold">Topics</th>
                     <th className="text-center font-bold">Ref.</th><th className="text-center font-bold">Hrs.</th>
                   </tr>
-                  {course.modules.flatMap((module) => {
+                  {(course.modules || []).flatMap((module) => {
                     const units = module.topics?.length ? module.topics : [];
                     const rowSpan = units.length + 1;
                     
@@ -572,7 +572,7 @@ export function A4Preview({
                   </tr>
                 </thead>
                 <tbody>
-                  {course.outcomes.map((outcome) => {
+                  {(course.outcomes || []).map((outcome) => {
                     const poMap = outcome.po_map || {};
                     return (
                       <tr key={outcome.code}>
