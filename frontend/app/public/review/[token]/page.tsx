@@ -15,9 +15,11 @@ import {
   Send,
   ShieldAlert,
   Trash2,
+  FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { A4Preview } from "@/components/curriculum/a4-preview";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://curriculum-backend.collacou.workers.dev/api").replace(/\/api$/, "");
 
@@ -34,7 +36,7 @@ async function publicFetch<T>(path: string, options: RequestInit = {}): Promise<
     try {
       data = await res.json();
     } catch {
-      /* ignore parse errors */
+      /* ignore */
     }
     const err: ApiError = new Error(data.error || data.detail || `Request failed (${res.status})`);
     err.status = res.status;
@@ -58,29 +60,142 @@ type CommentRow = {
   is_external?: number;
   status?: string;
   submitted_at?: string | null;
-  created_at?: string;
 };
 
 const SECTION_LABELS: Record<string, string> = {
-  overview: "Overview & Schemes",
-  outcomes: "Course Outcomes & CO-PO Matrix",
-  modules: "Modules & Syllabus Content",
-  experiments: "Experiments",
+  overview: "Course Overview & Objectives",
+  outcomes: "Course Outcomes & CO-PO",
+  modules: "Modules & Content",
+  experiments: "Experiments / Lab Work",
   assessment_references: "Assessment & References",
 };
 
-function SectionCard({
+// Map A4Preview detailed selectable keys to backend comment section keys
+const A4_TO_SECTION_MAP: Record<string, string> = {
+  basic: "overview",
+  examination: "overview",
+  outcomes: "outcomes",
+  modules: "modules",
+  self_learning: "modules",
+  assessments: "assessment_references",
+  experiments: "experiments",
+  references: "assessment_references",
+  video_lectures: "assessment_references",
+  copo_matrix: "outcomes",
+};
+
+function PinGate({
+  token,
+  onVerified,
+  onInvalid,
+}: {
+  token: string;
+  onVerified: (sessionToken: string, course: { code: string; title: string }) => void;
+  onInvalid: () => void;
+}) {
+  const [pin, setPin] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lockedSeconds, setLockedSeconds] = useState(0);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (lockedSeconds > 0) {
+      const interval = setInterval(() => setLockedSeconds((s) => s - 1), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [lockedSeconds]);
+
+  const handleSubmit = async () => {
+    if (pin.length !== 4 || lockedSeconds > 0 || verifying) return;
+    setVerifying(true);
+    setError(null);
+    try {
+      const data = await publicFetch<{ sessionToken: string; course: { code: string; title: string } }>(
+        `/public/review/${token}/verify/`,
+        { method: "POST", body: JSON.stringify({ pin }) }
+      );
+      onVerified(data.sessionToken, data.course);
+    } catch (err) {
+      const e = err as ApiError;
+      if (e.status === 404) {
+        onInvalid();
+      } else if (e.status === 429) {
+        setLockedSeconds(e.data?.retryAfterSeconds ?? 300);
+        setError("Too many failed attempts.");
+        setAttemptsRemaining(null);
+      } else if (e.status === 401 && e.code === "PIN_INVALID") {
+        setError("Invalid PIN.");
+        setAttemptsRemaining(e.data?.attemptsRemaining ?? null);
+        setPin("");
+      } else {
+        setError("An unexpected error occurred.");
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm rounded border border-border bg-card p-6 shadow-sm">
+        <div className="mb-6 text-center space-y-2">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+            <Lock className="h-4 w-4 text-primary" />
+          </div>
+          <h1 className="text-xl font-serif font-bold text-foreground">Secure Review</h1>
+          <p className="text-xs text-muted-foreground">Enter the 4-digit PIN provided by the course coordinator.</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2 text-center">
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              placeholder="••••"
+              className="h-14 w-32 rounded border border-border bg-background px-4 text-center text-2xl font-mono tracking-[0.5em] focus-visible:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50 mx-auto"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              onKeyDown={(e) => e.key === "Enter" && void handleSubmit()}
+              disabled={lockedSeconds > 0 || verifying}
+            />
+            {error && (
+              <p className="text-[10px] font-medium text-destructive mt-1">
+                {error} {attemptsRemaining !== null && `(${attemptsRemaining} attempts left)`}
+              </p>
+            )}
+            {lockedSeconds > 0 && (
+              <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                Locked. Try again in {Math.ceil(lockedSeconds / 60)} min.
+              </p>
+            )}
+          </div>
+          <Button className="w-full h-10 font-bold uppercase tracking-wider text-xs" onClick={() => void handleSubmit()} disabled={pin.length !== 4 || lockedSeconds > 0 || verifying}>
+            {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <KeyRound className="h-3.5 w-3.5 mr-2" />}
+            Unlock Review
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionCommentsPane({
   sectionKey,
-  course,
+  label,
   comments,
+  course,
   token,
   sessionToken,
   onUpdateComments,
   onSessionInvalid,
 }: {
   sectionKey: string;
-  course: any;
+  label: string;
   comments: CommentRow[];
+  course: any;
   token: string;
   sessionToken: string;
   onUpdateComments: (updater: (prev: CommentRow[]) => CommentRow[]) => void;
@@ -88,14 +203,20 @@ function SectionCard({
 }) {
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
-  const [busy, setBusy] = useState(false);
 
-  const authHeaders = { Authorization: `Bearer ${sessionToken}` };
+  const sectionComments = comments.filter((c) => c.section_key === sectionKey);
+  const isDraft = (c: CommentRow) => c.status === "DRAFT";
 
-  const handleError = (err: ApiError) => {
-    if (err.status === 401) {
+  const authHeaders = {
+    Authorization: `Bearer ${sessionToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const handleError = (e: ApiError) => {
+    if (e.status === 401) {
       onSessionInvalid();
       return true;
     }
@@ -103,7 +224,7 @@ function SectionCard({
   };
 
   const handleAdd = async () => {
-    if (!body.trim() || !name.trim()) return;
+    if (!body.trim() || !name.trim() || busy) return;
     setBusy(true);
     try {
       const created = await publicFetch<CommentRow>(`/public/review/${token}/comments/`, {
@@ -111,7 +232,7 @@ function SectionCard({
         headers: authHeaders,
         body: JSON.stringify({
           section_key: sectionKey,
-          section_label: SECTION_LABELS[sectionKey] ?? sectionKey,
+          section_label: label,
           body,
           reviewer_name: name,
         }),
@@ -119,13 +240,14 @@ function SectionCard({
       onUpdateComments((prev) => [created, ...prev]);
       setBody("");
     } catch (err) {
-      if (!handleError(err as ApiError)) alert("Failed to post comment. Please try again.");
+      if (!handleError(err as ApiError)) alert("Failed to save comment.");
     } finally {
       setBusy(false);
     }
   };
 
   const handleEdit = async (comment: CommentRow) => {
+    if (!editBody.trim() || busy) return;
     setBusy(true);
     try {
       const updated = await publicFetch<CommentRow>(`/public/review/${token}/comments/${comment.id}/`, {
@@ -133,7 +255,7 @@ function SectionCard({
         headers: authHeaders,
         body: JSON.stringify({ body: editBody }),
       });
-      onUpdateComments((prev) => prev.map((c) => (c.id === comment.id ? updated : c)));
+      onUpdateComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       setEditingId(null);
     } catch (err) {
       if (!handleError(err as ApiError)) alert("Failed to update comment.");
@@ -143,7 +265,7 @@ function SectionCard({
   };
 
   const handleDelete = async (comment: CommentRow) => {
-    if (!window.confirm("Delete this draft comment?")) return;
+    if (!confirm("Are you sure you want to delete this comment?")) return;
     setBusy(true);
     try {
       await publicFetch(`/public/review/${token}/comments/${comment.id}/`, {
@@ -158,38 +280,25 @@ function SectionCard({
     }
   };
 
-  const isDraft = (c: CommentRow) => c.status === "DRAFT";
-
   return (
-    <div className="rounded border border-border bg-card shadow-sm overflow-hidden">
-      {/* Section header */}
-      <div className="border-b border-border/80 bg-card/60 px-5 py-4">
-        <h2 className="text-sm font-serif font-bold text-foreground">
-          {SECTION_LABELS[sectionKey] ?? sectionKey}
+    <div id={`section-${sectionKey}`} className="rounded border border-border bg-card shadow-sm overflow-hidden mb-6 scroll-mt-20">
+      <div className="p-3 border-b border-border/80 bg-muted/20">
+        <h2 className="text-sm font-serif font-bold text-foreground flex items-center gap-2">
+          {label}
         </h2>
         <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mt-0.5">
-          Section {sectionKey} · {comments.length} comment{comments.length === 1 ? "" : "s"}
+          {sectionComments.length} comment{sectionComments.length === 1 ? "" : "s"}
         </p>
       </div>
 
-      {/* Section content (read-only) */}
-      <div className="px-5 py-4 border-b border-border/40 bg-background/40 text-xs text-foreground/80 leading-relaxed">
-        {sectionKey === "overview" && <OverviewContent course={course} />}
-        {sectionKey === "outcomes" && <OutcomesContent course={course} />}
-        {sectionKey === "modules" && <ModulesContent course={course} />}
-        {sectionKey === "experiments" && <ExperimentsContent course={course} />}
-        {sectionKey === "assessment_references" && <AssessmentReferencesContent course={course} />}
-      </div>
-
-      {/* Comments thread */}
-      <div className="space-y-3 px-5 py-4 bg-muted/10">
-        {comments.length === 0 ? (
+      <div className="p-4 space-y-3 bg-muted/5">
+        {sectionComments.length === 0 ? (
           <div className="py-4 text-center text-[11px] font-medium text-muted-foreground border border-dashed border-border/70 rounded bg-card/40">
-            <MessageSquare className="mx-auto h-4 w-4 mb-1 text-muted-foreground/45" />
-            No comments yet on this section.
+            <MessageSquare className="mx-auto h-4 w-4 mb-2 text-muted-foreground/45" />
+            No comments yet.
           </div>
         ) : (
-          comments.map((comment) => (
+          sectionComments.map((comment) => (
             <div key={comment.id} className="rounded border border-border bg-card p-3.5 shadow-sm">
               <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2 mb-2">
                 <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
@@ -257,8 +366,7 @@ function SectionCard({
         )}
       </div>
 
-      {/* Add comment form */}
-      <div className="border-t border-border/60 px-5 py-4 bg-card/60 space-y-2.5">
+      <div className="border-t border-border/60 p-4 bg-muted/10 space-y-2.5">
         <input
           type="text"
           placeholder="Your name (required)"
@@ -267,7 +375,7 @@ function SectionCard({
           className="h-9 w-full rounded border border-border bg-background px-3 text-xs font-medium placeholder:text-muted-foreground/50 focus-visible:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
         />
         <textarea
-          placeholder={`Add a comment on ${SECTION_LABELS[sectionKey] ?? sectionKey}...`}
+          placeholder={`Add a comment on ${label}...`}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           className="min-h-[70px] w-full rounded border border-border bg-background p-2.5 text-xs font-medium resize-none placeholder:text-muted-foreground/50 focus-visible:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -280,307 +388,6 @@ function SectionCard({
           {busy ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Send className="h-3 w-3 mr-1.5" />}
           Save Draft Comment
         </Button>
-      </div>
-    </div>
-  );
-}
-
-function OverviewContent({ course }: { course: any }) {
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Info label="Course Objectives" value={course.objectives || "—"} />
-        <Info label="Prerequisites" value={course.pre_requisites || "—"} />
-      </div>
-      <Info label="Syllabus Introduction" value={course.syllabus_intro || "—"} />
-      <div className="rounded border border-border/70 bg-card/50 p-3">
-        <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Teaching Scheme</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-          <Metric label="Lecture hrs/wk" value={course.lecture_hours ?? 0} />
-          <Metric label="Tutorial hrs/wk" value={course.tutorial_hours ?? 0} />
-          <Metric label="Practical hrs/wk" value={course.practical_hours ?? 0} />
-          <Metric label="Credits" value={course.credits ?? 0} />
-        </div>
-      </div>
-      <div className="rounded border border-border/70 bg-card/50 p-3">
-        <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Examination Scheme</div>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <Metric label="Internal" value={course.internal_marks ?? 0} />
-          <Metric label="External (ESE)" value={course.external_marks ?? 0} />
-          <Metric label="Duration (hrs)" value={course.duration_hours ?? 0} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">{label}</div>
-      <p className="text-xs text-foreground/75 whitespace-pre-wrap">{value}</p>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div>
-      <div className="text-sm font-mono font-bold text-foreground">{value}</div>
-      <div className="text-[8px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
-    </div>
-  );
-}
-
-function OutcomesContent({ course }: { course: any }) {
-  const outcomes = course.outcomes ?? [];
-  const poColumns = ["PO1", "PO2", "PO3", "PO4", "PO5", "PO6", "PO7", "PO8", "PO9", "PO10", "PO11", "PO12", "PSO1", "PSO2"];
-  return (
-    <div className="space-y-3">
-      {outcomes.length === 0 ? (
-        <p className="text-muted-foreground">No course outcomes defined.</p>
-      ) : (
-        <ul className="space-y-2">
-          {outcomes.map((outcome: any) => (
-            <li key={outcome.id ?? outcome.code} className="rounded border border-border/70 bg-card/50 p-2.5">
-              <span className="font-mono font-bold text-primary mr-2">{outcome.code}</span>
-              <span>{outcome.description}</span>
-              {outcome.bloom_level && (
-                <span className="ml-2 rounded-sm bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-                  {outcome.bloom_level}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {outcomes.some((o: any) => o.po_map && Object.keys(o.po_map).length > 0) && (
-        <div className="overflow-x-auto rounded border border-border/70 bg-card/50">
-          <table className="w-full text-[9px] border-collapse min-w-[640px]">
-            <thead>
-              <tr className="border-b border-border/70">
-                <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wider text-muted-foreground">CO</th>
-                {poColumns.map((po) => (
-                  <th key={po} className="px-1.5 py-1.5 text-center font-bold text-muted-foreground">{po}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {outcomes.map((outcome: any) => (
-                <tr key={outcome.id ?? outcome.code} className="border-b border-border/40 last:border-b-0">
-                  <td className="px-2 py-1.5 font-mono font-bold text-primary">{outcome.code}</td>
-                  {poColumns.map((po) => {
-                    const weight = outcome.po_map?.[po];
-                    return (
-                      <td key={po} className={cn("px-1.5 py-1.5 text-center", weight ? "font-bold text-foreground" : "text-muted-foreground/30")}>
-                        {weight ?? "—"}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ModulesContent({ course }: { course: any }) {
-  const modules = course.modules ?? [];
-  if (modules.length === 0) return <p className="text-muted-foreground">No modules defined.</p>;
-  return (
-    <div className="space-y-3">
-      {modules.map((mod: any) => (
-        <div key={mod.id ?? mod.number} className="rounded border border-border/70 bg-card/50 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-foreground">Module {mod.number}: {mod.title}</span>
-            {mod.contact_hours ? <span className="text-[9px] font-mono text-muted-foreground shrink-0">{mod.contact_hours} hrs</span> : null}
-          </div>
-          <p className="mt-1.5 text-xs text-foreground/75 whitespace-pre-wrap">{mod.content}</p>
-          {(mod.topics ?? []).length > 0 && (
-            <ul className="mt-2 space-y-1 border-t border-border/40 pt-2">
-              {(mod.topics ?? []).map((topic: any, idx: number) => (
-                <li key={topic.id ?? idx} className="text-[11px] text-foreground/70">
-                  <span className="text-muted-foreground">•</span> <span className="font-semibold">{topic.title}</span>
-                  {topic.description ? <span> — {topic.description}</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ExperimentsContent({ course }: { course: any }) {
-  const experiments = course.experiments ?? [];
-  if (experiments.length === 0) return <p className="text-muted-foreground">No experiments defined.</p>;
-  return (
-    <ul className="space-y-2">
-      {experiments.map((exp: any) => (
-        <li key={exp.id ?? exp.number} className="rounded border border-border/70 bg-card/50 p-2.5">
-          <span className="font-mono font-bold text-primary mr-2">Exp {exp.number}</span>
-          <span className="font-semibold">{exp.title}</span>
-          {exp.description && <p className="mt-1 text-[11px] text-foreground/70">{exp.description}</p>}
-          {exp.hours ? <span className="mt-1 block text-[9px] font-mono text-muted-foreground">{exp.hours} hrs</span> : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function AssessmentReferencesContent({ course }: { course: any }) {
-  const assessments = course.assessments ?? [];
-  const references = course.reference_books ?? [];
-  return (
-    <div className="space-y-4">
-      <div>
-        <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Assessment Scheme</div>
-        {assessments.length === 0 ? (
-          <p className="text-muted-foreground">No assessments defined.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {assessments.map((a: any) => (
-              <li key={a.id ?? a.component} className="flex items-baseline justify-between gap-3 rounded border border-border/70 bg-card/50 p-2.5">
-                <div>
-                  <span className="font-semibold">{a.component}</span>
-                  {a.description && <p className="text-[11px] text-foreground/70">{a.description}</p>}
-                </div>
-                <span className="font-mono font-bold text-primary shrink-0">{a.marks} marks</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div>
-        <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Reference Books</div>
-        {references.length === 0 ? (
-          <p className="text-muted-foreground">No references defined.</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {references.map((b: any) => (
-              <li key={b.id ?? b.title} className="rounded border border-border/70 bg-card/50 p-2.5">
-                <span className="font-semibold">{b.title}</span>
-                {b.authors && <span className="text-muted-foreground"> — {b.authors}</span>}
-                <span className="text-[10px] text-muted-foreground block mt-0.5">
-                  {[b.publisher, b.edition, b.year].filter(Boolean).join(", ")}
-                  {b.is_textbook ? " · Textbook" : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PinGate({
-  token,
-  onVerified,
-  onInvalid,
-}: {
-  token: string;
-  onVerified: (sessionToken: string, course: { code: string; title: string }) => void;
-  onInvalid: () => void;
-}) {
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [lockedSeconds, setLockedSeconds] = useState(0);
-  const [verifying, setVerifying] = useState(false);
-
-  useEffect(() => {
-    if (lockedSeconds <= 0) return;
-    const t = setInterval(() => setLockedSeconds((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(t);
-  }, [lockedSeconds]);
-
-  const handleSubmit = async () => {
-    if (pin.length !== 4 || lockedSeconds > 0 || verifying) return;
-    setError(null);
-    setVerifying(true);
-    try {
-      const data = await publicFetch<{ sessionToken: string; course: { code: string; title: string } }>(
-        `/public/review/${token}/verify/`,
-        { method: "POST", body: JSON.stringify({ pin }) }
-      );
-      onVerified(data.sessionToken, data.course);
-    } catch (err) {
-      const e = err as ApiError;
-      if (e.status === 429) {
-        setLockedSeconds(e.data?.retryAfterSeconds ?? 900);
-        setPin("");
-      } else if (e.status === 401) {
-        const remaining = e.data?.attemptsRemaining;
-        setError(remaining != null ? `Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.` : "Incorrect PIN.");
-        setPin("");
-      } else if (e.status === 404) {
-        onInvalid();
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const minutes = Math.floor(lockedSeconds / 60);
-  const seconds = lockedSeconds % 60;
-
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm rounded border border-border bg-card p-6 shadow-sm space-y-5">
-        <div className="flex justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded border border-border bg-background">
-            <Lock className="h-5 w-5 text-primary" />
-          </div>
-        </div>
-        <div className="text-center space-y-1">
-          <h1 className="text-sm font-serif font-bold text-foreground">Protected Reviewer Portal</h1>
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Fr. CRCE — Curriculum Review</p>
-        </div>
-        <div className="rounded border border-border/70 bg-muted/20 px-3 py-2.5 text-center">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Course</p>
-          <p className="text-xs font-bold text-foreground">Enter the 4-digit PIN to continue</p>
-        </div>
-
-        <div className="space-y-3">
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            maxLength={4}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleSubmit();
-            }}
-            placeholder="••••"
-            disabled={lockedSeconds > 0 || verifying}
-            className="h-12 w-full rounded border border-border bg-background text-center text-xl font-mono font-bold tracking-[0.5em] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/60 disabled:opacity-50"
-          />
-          {lockedSeconds > 0 ? (
-            <div className="rounded border border-destructive/20 bg-destructive/5 px-3 py-2 text-center">
-              <p className="text-[11px] font-bold text-destructive">
-                Too many incorrect attempts. Try again in {minutes}:{String(seconds).padStart(2, "0")}
-              </p>
-            </div>
-          ) : error ? (
-            <div className="rounded border border-destructive/20 bg-destructive/5 px-3 py-2 text-center">
-              <p className="text-[11px] font-bold text-destructive">{error}</p>
-            </div>
-          ) : null}
-          <Button className="w-full h-10 font-bold uppercase tracking-wider text-xs" onClick={() => void handleSubmit()} disabled={pin.length !== 4 || lockedSeconds > 0 || verifying}>
-            {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <KeyRound className="h-3.5 w-3.5 mr-2" />}
-            Unlock Review
-          </Button>
-          <p className="text-center text-[9px] font-medium text-muted-foreground">
-            This link is protected. Enter the PIN shared by the course coordinator to view and comment on the syllabus.
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -599,6 +406,8 @@ function PublicReviewContent() {
   const [invalidLink, setInvalidLink] = useState(false);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  
+  const [selectedA4Section, setSelectedA4Section] = useState<string | null>(null);
 
   const sections = useMemo(() => {
     const base = [
@@ -643,20 +452,28 @@ function PublicReviewContent() {
 
   const handleVerified = (newSessionToken: string, info: { code: string; title: string }) => {
     setSessionToken(newSessionToken);
-    // Placeholder until the full course detail loads; the reviewing stage fetches it immediately.
     setCourse((prev: any) => ({ ...(prev ?? {}), code: info.code, title: info.title }));
     setStage("reviewing");
   };
 
   const handleSessionInvalid = () => {
     setSessionToken(null);
-    setCourse(null);
-    setComments([]);
     setStage("pin");
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleSubmit = async () => {
     if (!sessionToken) return;
+    if (!confirm("Are you sure you want to submit all draft comments? You won't be able to edit them after submission.")) return;
     setSubmitting(true);
     try {
       const data = await publicFetch<{ submittedCount: number }>(`/public/review/${token}/submit/`, {
@@ -670,20 +487,10 @@ function PublicReviewContent() {
       if (e.status === 401) {
         handleSessionInvalid();
       } else {
-        alert(e.message || "Failed to submit review.");
+        alert("Failed to submit review.");
       }
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
     }
   };
 
@@ -724,12 +531,12 @@ function PublicReviewContent() {
   const draftCount = comments.filter((c) => c.status === "DRAFT").length;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-border/80 bg-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+      <header className="shrink-0 z-20 border-b border-border/80 bg-card/95 backdrop-blur">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <GraduationCap className="h-4 w-4 text-primary shrink-0" />
+            <GraduationCap className="h-5 w-5 text-primary shrink-0" />
             <div className="min-w-0">
               <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">External Reviewer Portal</div>
               <div className="truncate text-sm font-serif font-bold text-foreground">
@@ -737,67 +544,94 @@ function PublicReviewContent() {
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleCopyLink()}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded border border-border bg-background px-2.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            title="Copy this review link"
-          >
-            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-            {copied ? "Copied" : "Copy link"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleCopyLink()}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded border border-border bg-background px-2.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              title="Copy this review link"
+            >
+              {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Copied" : "Copy link"}
+            </button>
+            <Button
+              onClick={() => void handleSubmit()}
+              disabled={submitting || draftCount === 0}
+              className="h-8 px-4 font-bold uppercase tracking-wider text-[10px]"
+            >
+              {submitting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Check className="h-3 w-3 mr-1.5" />}
+              Submit Review ({draftCount})
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-6 space-y-6 pb-28">
+      {/* Main Split Content */}
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {loading ? (
-          <div className="flex h-[40vh] flex-col items-center justify-center gap-3 text-muted-foreground">
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground bg-muted/10">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <span className="text-[10px] font-mono uppercase tracking-wider">Loading syllabus for review...</span>
           </div>
         ) : !course ? (
-          <div className="py-16 text-center text-xs font-semibold text-muted-foreground">Could not load this syllabus.</div>
+          <div className="flex-1 flex items-center justify-center text-xs font-semibold text-muted-foreground">Could not load this syllabus.</div>
         ) : (
           <>
-            <div className="rounded border border-border bg-card/60 px-4 py-3 text-[11px] text-muted-foreground leading-relaxed">
-              You are viewing a <span className="font-bold text-foreground">read-only</span> copy of the syllabus. Draft comments below are only visible
-              to people holding this link until you press <span className="font-bold text-foreground">Submit Review</span>, after which they become visible
-              to the course coordinator and HOD.
+            {/* Left Pane - A4 Preview */}
+            <div className="w-full md:w-[60%] lg:w-[65%] h-full overflow-y-auto bg-[#e5e7eb] dark:bg-muted/30 relative">
+              <div className="sticky top-4 left-0 right-0 flex justify-center pointer-events-none z-10">
+                {selectedA4Section && (
+                  <div className="bg-foreground/80 text-background text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-md backdrop-blur">
+                    Viewing {A4_TO_SECTION_MAP[selectedA4Section] ? SECTION_LABELS[A4_TO_SECTION_MAP[selectedA4Section]] : selectedA4Section}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 md:p-8 flex justify-center pb-24">
+                <div className="bg-white text-black shadow-xl max-w-full origin-top">
+                  <A4Preview 
+                    course={course} 
+                    reviewMode={true} 
+                    selectedSection={selectedA4Section ?? undefined} 
+                    onSelectSection={(id) => {
+                      setSelectedA4Section(id === selectedA4Section ? null : id);
+                      // Scroll the right pane to the section
+                      const targetKey = A4_TO_SECTION_MAP[id];
+                      if (targetKey) {
+                        document.getElementById(`section-${targetKey}`)?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-            {sections.map((section) => (
-              <SectionCard
-                key={section.key}
-                sectionKey={section.key}
-                course={course}
-                comments={comments.filter((c) => c.section_key === section.key)}
-                token={token}
-                sessionToken={sessionToken ?? ""}
-                onUpdateComments={(updater) => setComments((prev) => updater(prev))}
-                onSessionInvalid={handleSessionInvalid}
-              />
-            ))}
+
+            {/* Right Pane - Comments */}
+            <div className="w-full md:w-[40%] lg:w-[35%] h-[50vh] md:h-full border-t md:border-t-0 md:border-l border-border shrink-0 bg-muted/5 z-10 flex flex-col">
+              <div className="p-4 border-b border-border/80 bg-card shadow-sm shrink-0 z-20">
+                <h2 className="text-sm font-serif font-bold text-foreground">Review Comments</h2>
+                <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mt-0.5">
+                  Scroll to leave feedback per section
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {sections.map((section) => (
+                  <SectionCommentsPane
+                    key={section.key}
+                    sectionKey={section.key}
+                    label={section.label}
+                    comments={comments}
+                    course={course}
+                    token={token}
+                    sessionToken={sessionToken ?? ""}
+                    onUpdateComments={(updater) => setComments((prev) => updater(prev))}
+                    onSessionInvalid={handleSessionInvalid}
+                  />
+                ))}
+              </div>
+            </div>
           </>
         )}
       </main>
-
-      {/* Sticky submit bar */}
-      {stage === "reviewing" && course && (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/80 bg-card/95 backdrop-blur">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
-            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-              {draftCount} draft comment{draftCount === 1 ? "" : "s"} ready
-            </div>
-            <Button
-              onClick={() => void handleSubmit()}
-              disabled={submitting || draftCount === 0}
-              className="h-10 px-6 font-bold uppercase tracking-wider text-xs"
-            >
-              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : <Check className="h-3.5 w-3.5 mr-2" />}
-              Submit Review
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
