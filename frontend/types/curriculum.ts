@@ -1,7 +1,7 @@
 export type CourseStatus = "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "CHANGES_REQUESTED" | "APPROVED" | "PUBLISHED" | "LOCKED";
 
 export type Course = {
-  id: number;
+  id: string | number;
   code: string;
   title: string;
   status: CourseStatus;
@@ -26,7 +26,7 @@ export type Course = {
 
 
 export type CourseOutcome = {
-  id?: number;
+  id?: string | number;
   code: string;
   description: string;
   bloom_level: string;
@@ -35,7 +35,7 @@ export type CourseOutcome = {
 };
 
 export type CourseModule = {
-  id?: number;
+  id?: string | number;
   number: number;
   title: string;
   contact_hours: number;
@@ -45,13 +45,13 @@ export type CourseModule = {
 };
 
 export type CourseTopic = {
-  id?: number;
+  id?: string | number;
   title: string;
   description: string;
 };
 
 export type Experiment = {
-  id?: number;
+  id?: string | number;
   number: number;
   title: string;
   description: string;
@@ -59,14 +59,14 @@ export type Experiment = {
 };
 
 export type Assessment = {
-  id?: number;
+  id?: string | number;
   component: string;
   marks: number;
   description: string;
 };
 
 export type ReferenceBook = {
-  id?: number;
+  id?: string | number;
   title: string;
   authors: string;
   publisher: string;
@@ -76,7 +76,7 @@ export type ReferenceBook = {
 };
 
 export type ReviewerComment = {
-  id: number;
+  id: string | number;
   section_key: string;
   section_label: string;
   body: string;
@@ -89,7 +89,7 @@ export type ReviewerComment = {
 };
 
 export type CourseDraft = {
-  id: number;
+  id: string | number;
   code: string;
   title: string;
   course_type: "THEORY" | "LAB" | "THEORY_LAB" | "PROJECT" | "ELECTIVE" | "INTERDISCIPLINARY";

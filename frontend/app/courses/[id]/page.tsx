@@ -5,7 +5,7 @@ export default async function CourseEditorPage({ params }: { params: Promise<{ i
   const { id } = await params;
   return (
     <AppShell>
-      <CurriculumEditor courseId={Number(id)} />
+      <CurriculumEditor courseId={id} />
     </AppShell>
   );
 }

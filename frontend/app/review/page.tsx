@@ -82,7 +82,7 @@ function ReviewContent() {
     }
   };
 
-  const handleResolveComment = async (commentId: number) => {
+  const handleResolveComment = async (commentId: string | number) => {
     try {
       const resolved = await apiFetch<ReviewerComment>(`/reviewer-comments/${commentId}/resolve/`, {
         method: "POST",

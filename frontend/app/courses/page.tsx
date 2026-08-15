@@ -11,7 +11,7 @@ import type { Course, CourseStatus } from "@/types/curriculum";
 import { cn } from "@/lib/utils";
 
 type CourseListItem = {
-  id: number;
+  id: string | number;
   code: string;
   title: string;
   faculty_name: string | null;

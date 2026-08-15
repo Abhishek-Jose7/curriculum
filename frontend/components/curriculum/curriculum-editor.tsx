@@ -85,7 +85,7 @@ const MACRO_CATEGORIES: MacroCategory[] = [
   }
 ];
 
-export function CurriculumEditor({ courseId }: { courseId: number }) {
+export function CurriculumEditor({ courseId }: { courseId: string }) {
   const [active, setActive] = useState<TabKey>("basic");
   const [course, setCourse] = useState<CourseDraft | null>(null);
   const [version, setVersion] = useState(1);
