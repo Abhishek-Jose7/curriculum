@@ -44,7 +44,12 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
         c.*,
         trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name,
         ci.token AS invite_token,
-        ci.email AS invite_email
+        ci.email AS invite_email,
+        (SELECT count(*) FROM course_outcomes co WHERE co.course_id = c.id) AS outcomes_count,
+        (SELECT count(*) FROM modules m WHERE m.course_id = c.id) AS modules_count,
+        (SELECT count(*) FROM experiments e WHERE e.course_id = c.id) AS experiments_count,
+        (SELECT count(*) FROM assessment_schemes a WHERE a.course_id = c.id) AS assessments_count,
+        (SELECT count(*) FROM reference_books rb WHERE rb.course_id = c.id) AS reference_books_count
       FROM courses c
       JOIN semesters s ON c.semester_id = s.id
       LEFT JOIN profiles p ON c.faculty_user_id = p.id
@@ -58,7 +63,12 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
       faculty_name: (row.faculty_name as string) || "",
       invite_token: (row.invite_token as string) || null,
       invite_email: (row.invite_email as string) || null,
-    })) as CourseRow[];
+      outcomes: Array.from({ length: (row.outcomes_count as number) || 0 }, (_, i) => ({ code: `CO${i+1}` })),
+      modules: Array.from({ length: (row.modules_count as number) || 0 }, (_, i) => ({ number: i + 1 })),
+      experiments: Array.from({ length: (row.experiments_count as number) || 0 }, (_, i) => ({ number: i + 1 })),
+      assessments: Array.from({ length: (row.assessments_count as number) || 0 }, (_, i) => ({ component: `C${i+1}` })),
+      reference_books: Array.from({ length: (row.reference_books_count as number) || 0 }, (_, i) => ({ title: `B${i+1}` })),
+    })) as unknown as CourseRow[];
   }
 
   async detail(id: string) {
@@ -74,7 +84,10 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     ]);
     return serializeCourse({
       ...course,
-      outcomes: outcomes.results ?? [],
+      outcomes: (outcomes.results ?? []).map((o: any) => ({
+        ...o,
+        po_map: typeof o.po_map === "string" ? parseJson(o.po_map, {}) : (o.po_map || {})
+      })),
       modules,
       experiments: experiments.results ?? [],
       assessments: assessments.results ?? [],
@@ -91,10 +104,23 @@ export class ModulesRepository extends BaseRepository<Record<string, unknown>> {
 
   async forCourse(courseId: string) {
     const modules = (await this.db.prepare("SELECT * FROM modules WHERE course_id = ? ORDER BY number").bind(courseId).all()).results ?? [];
-    return await Promise.all(modules.map(async (module) => ({
+    if (modules.length === 0) return [];
+    const moduleIds = modules.map((m) => m.id);
+    const placeholders = moduleIds.map(() => "?").join(",");
+    const topicsResult = await this.db.prepare(`SELECT *, sort_order AS \`order\` FROM topics WHERE module_id IN (${placeholders}) ORDER BY sort_order`).bind(...moduleIds).all();
+    const topics = topicsResult.results ?? [];
+    
+    const topicsByModule: Record<string, any[]> = {};
+    for (const topic of topics) {
+      const mId = String(topic.module_id);
+      if (!topicsByModule[mId]) topicsByModule[mId] = [];
+      topicsByModule[mId].push(topic);
+    }
+
+    return modules.map((module) => ({
       ...module,
-      topics: (await this.db.prepare("SELECT *, sort_order AS `order` FROM topics WHERE module_id = ? ORDER BY sort_order").bind(module.id).all()).results ?? [],
-    })));
+      topics: topicsByModule[String(module.id)] ?? [],
+    }));
   }
 }
 
@@ -106,7 +132,7 @@ export class TopicsRepository extends BaseRepository<Record<string, unknown>> {
 
 export class OutcomesRepository extends BaseRepository<Record<string, unknown>> {
   constructor(db: D1Database) {
-    super(db, "course_outcomes", ["course_id", "code", "description", "bloom_level", "sort_order"], ["course_id"]);
+    super(db, "course_outcomes", ["course_id", "code", "description", "bloom_level", "sort_order", "po_map"], ["course_id"]);
   }
 }
 

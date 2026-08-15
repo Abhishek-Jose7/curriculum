@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS course_outcomes (
   description TEXT NOT NULL,
   bloom_level TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 1,
+  po_map TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (course_id, code)

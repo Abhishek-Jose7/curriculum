@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   FileText,
   GraduationCap,
   LayoutDashboard,
@@ -64,12 +65,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout, loading: authLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Wait for client hydration before rendering nav
-  // This prevents SSR/client mismatch since server can't access localStorage
   useEffect(() => {
     setMounted(true);
+    const saved = localStorage.getItem("sidebar-collapsed");
+    if (saved === "true") {
+      setIsCollapsed(true);
+    }
   }, []);
+
+  const toggleCollapse = () => {
+    const next = !isCollapsed;
+    setIsCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  };
 
   const nav = user ? getNavForRole(user.role) : [];
   const displayName =
@@ -81,72 +91,107 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background relative selection:bg-primary/20">
       {/* Sidebar */}
       {mounted && !authLoading && user && (
-        <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-border bg-background md:flex flex-col z-20">
-        {/* Brand Link to Home */}
-        <Link
-          href="/"
-          className="flex h-20 items-center gap-2.5 px-6 border-b border-border/60 shrink-0 hover:bg-secondary/20 transition-colors group cursor-pointer"
-          title="Return to Home Dashboard"
-        >
-          <GraduationCap className="h-5 w-5 text-primary shrink-0 group-hover:scale-105 transition-transform" />
-          <div>
-            <div className="text-xs font-serif font-bold uppercase tracking-widest text-foreground group-hover:text-primary transition-colors">Syllabus Press</div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Fr. CRCE Autonomous</div>
-          </div>
-        </Link>
+        <aside className={cn(
+          "fixed inset-y-0 left-0 hidden border-r border-border bg-background md:flex flex-col z-20 transition-all duration-200",
+          isCollapsed ? "w-16" : "w-60"
+        )}>
+          {/* Collapse Toggle Button */}
+          <button
+            onClick={toggleCollapse}
+            className="absolute bottom-20 -right-3 h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm cursor-pointer z-30 transition-transform hover:scale-105"
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+          </button>
 
-        {/* Nav */}
-        {mounted && user && (
-          <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
-            <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
-              Curriculum Portal
-            </div>
-            {nav.map((item) => {
-              const isActive =
-                item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "relative flex items-center gap-3 rounded-sm px-3.5 py-2.5 text-xs font-bold transition-all border border-transparent",
-                    isActive
-                      ? "text-primary bg-secondary/40"
-                      : "text-foreground/55 hover:text-foreground hover:bg-secondary/20"
-                  )}
+          {/* Brand Link to Home */}
+          <Link
+            href="/"
+            className={cn(
+              "flex h-20 items-center border-b border-border/60 shrink-0 hover:bg-secondary/20 transition-colors group cursor-pointer",
+              isCollapsed ? "justify-center px-0" : "gap-2.5 px-6"
+            )}
+            title="Return to Home Dashboard"
+          >
+            <GraduationCap className="h-5 w-5 text-primary shrink-0 group-hover:scale-105 transition-transform" />
+            {!isCollapsed && (
+              <div className="animate-fade-in text-left">
+                <div className="text-xs font-serif font-bold uppercase tracking-widest text-foreground group-hover:text-primary transition-colors">Syllabus Press</div>
+                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Fr. CRCE Autonomous</div>
+              </div>
+            )}
+          </Link>
+
+          {/* Nav */}
+          {mounted && user && (
+            <nav className="p-4 space-y-1 mt-4 flex-1 overflow-y-auto">
+              {!isCollapsed ? (
+                <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest px-3 mb-2 text-left animate-fade-in">
+                  Curriculum Portal
+                </div>
+              ) : (
+                <div className="h-px bg-border/60 mx-2 my-2" />
+              )}
+              {nav.map((item) => {
+                const isActive =
+                  item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.label}
+                    className={cn(
+                      "relative flex items-center rounded-sm text-xs font-bold transition-all border border-transparent",
+                      isCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5 text-left",
+                      isActive
+                        ? "text-primary bg-secondary/40"
+                        : "text-foreground/55 hover:text-foreground hover:bg-secondary/20"
+                    )}
+                  >
+                    {isActive && (
+                      <span className={cn("absolute top-0 bottom-0 bg-primary", isCollapsed ? "left-0 w-1" : "left-0 w-0.5")} />
+                    )}
+                    <item.icon className="h-3.5 w-3.5 opacity-65 shrink-0" />
+                    {!isCollapsed && <span className="animate-fade-in">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+
+          {/* User footer */}
+          {mounted && user && (
+            <div className={cn("border-t border-border/60 shrink-0", isCollapsed ? "p-3 flex flex-col items-center gap-3" : "p-4 space-y-0.5 text-left")}>
+              {!isCollapsed ? (
+                <>
+                  <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">
+                    {ROLE_LABELS[user.role]}
+                  </div>
+                  <div className="text-xs font-semibold text-foreground truncate px-1">{displayName}</div>
+                  <button
+                    onClick={() => void logout()}
+                    className="flex items-center gap-2 text-[11px] font-bold text-muted-foreground hover:text-red-500 transition-colors mt-2 px-1 cursor-pointer"
+                  >
+                    <LogOut className="h-3 w-3" />
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => void logout()}
+                  title="Sign out"
+                  className="flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-all cursor-pointer"
                 >
-                  {isActive && (
-                    <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary" />
-                  )}
-                  <item.icon className="h-3.5 w-3.5 opacity-65 shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        )}
-
-        {/* User footer */}
-        {mounted && user && (
-          <div className="border-t border-border/60 p-4 shrink-0 space-y-0.5">
-            <div className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest px-1">
-              {ROLE_LABELS[user.role]}
+                  <LogOut className="h-4 w-4" />
+                </button>
+              )}
             </div>
-            <div className="text-xs font-semibold text-foreground truncate px-1">{displayName}</div>
-            <button
-              onClick={() => void logout()}
-              className="flex items-center gap-2 text-[11px] font-bold text-muted-foreground hover:text-red-500 transition-colors mt-2 px-1"
-            >
-              <LogOut className="h-3 w-3" />
-              Sign out
-            </button>
-          </div>
-        )}
+          )}
         </aside>
       )}
 
       {/* Main */}
-      <main className={mounted && !authLoading && user ? "md:pl-60" : ""}>
+      <main className={mounted && !authLoading && user ? (isCollapsed ? "md:pl-16 transition-all duration-200" : "md:pl-60 transition-all duration-200") : ""}>
         <header className="sticky top-0 z-10 flex h-12 items-center justify-between border-b border-border/80 bg-background/95 px-4 md:px-6">
           <nav className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground overflow-x-auto py-1">
             <Link href="/" className="hover:text-primary transition-colors font-serif font-bold text-foreground">

@@ -783,30 +783,60 @@ function AdminContent() {
                     ) : (
                       <div className="space-y-6">
                         {YEAR_OF_STUDY.map((year) => {
-                          const groupSemesters = semesters.filter((s) => year.sems.includes(Number(s.number)));
+                          const yearSems = year.sems.map((semNum) => {
+                            const found = semesters.find((s) => Number(s.number) === semNum);
+                            if (found) return { ...found, isPlaceholder: false };
+                            return {
+                              id: `placeholder-${semNum}-${year.label}`,
+                              number: semNum,
+                              title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
+                              isPlaceholder: true,
+                            };
+                          });
+                          const configuredCount = yearSems.filter(s => !s.isPlaceholder).length;
                           return (
                             <div key={year.label} className="space-y-2">
                               <div className={cn("flex items-center justify-between px-3 py-1.5 rounded-sm bg-muted/40 border-l-4 font-bold text-xs text-foreground", yearBorderClasses[year.color])}>
                                 <div className="flex items-center gap-2">
                                   <span>{year.label} — {year.fullName}</span>
                                   <span className="text-[10px] text-muted-foreground/60 font-normal font-mono">
-                                    ({groupSemesters.length} {groupSemesters.length === 1 ? "semester" : "semesters"})
+                                    ({configuredCount} / 2 configured)
                                   </span>
                                 </div>
                               </div>
-                              {groupSemesters.length === 0 ? (
-                                <div className="text-[11px] font-medium text-muted-foreground/60 py-2.5 px-3 italic bg-background/50 rounded border border-dashed border-border/60">
-                                  No semesters configured for {year.label} ({year.fullName})
-                                </div>
-                              ) : (
-                                <ul className="space-y-2">
-                                  {groupSemesters.map((s) => {
-                                    const termTag = getTermTag(Number(s.number));
-                                    const yearInfo = getYearOfStudy(Number(s.number));
-                                    const isExpanded = expandedSemId === s.id;
-                                    const courses = semCourses[s.id] ?? [];
+                              <ul className="space-y-2">
+                                {yearSems.map((s) => {
+                                  if (s.isPlaceholder) {
                                     return (
-                                      <li key={s.id} className="bg-background rounded border border-border overflow-hidden shadow-sm hover:border-primary/20 transition-all duration-150">
+                                      <li key={s.id} className="bg-background rounded border border-dashed border-border/60 overflow-hidden p-3 flex justify-between items-center opacity-65 hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground border border-border/60">
+                                            Sem {s.number}
+                                          </span>
+                                          <span className="text-muted-foreground font-semibold text-xs">{s.title} (Not Configured)</span>
+                                        </div>
+                                        <Button
+                                          variant="secondary"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSemNumber(s.number);
+                                            setSemTitle(getSemesterTitle(s.number, semDept, departments));
+                                            document.getElementById("semester-form")?.scrollIntoView({ behavior: "smooth" });
+                                          }}
+                                          className="h-7 text-[9px] font-bold uppercase tracking-wider border-border"
+                                        >
+                                          Configure Alignment
+                                        </Button>
+                                      </li>
+                                    );
+                                  }
+
+                                  const termTag = getTermTag(Number(s.number));
+                                  const yearInfo = getYearOfStudy(Number(s.number));
+                                  const isExpanded = expandedSemId === s.id;
+                                  const courses = semCourses[s.id] ?? [];
+                                  return (
+                                    <li key={s.id} className="bg-background rounded border border-border overflow-hidden shadow-sm hover:border-primary/20 transition-all duration-150">
                                         <div className="p-3 flex justify-between items-center flex-wrap gap-2 group">
                                           <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-primary border border-border/60">
@@ -946,6 +976,7 @@ function AdminContent() {
                                                     >
                                                       <option value="THEORY">THEORY</option>
                                                       <option value="LAB">LAB</option>
+                                                      <option value="THEORY_LAB">THEORY + LAB</option>
                                                       <option value="PROJECT">PROJECT</option>
                                                     </select>
                                                     <input
@@ -990,10 +1021,9 @@ function AdminContent() {
                                           </div>
                                         )}
                                       </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
+                                  );
+                                })}
+                              </ul>
                             </div>
                           );
                         })}
@@ -1002,7 +1032,7 @@ function AdminContent() {
                   </div>
 
                   {/* Form Registration Block */}
-                  <form onSubmit={handleSaveSemester} className="rounded border border-border p-6 space-y-4 bg-card shadow-sm">
+                  <form id="semester-form" onSubmit={handleSaveSemester} className="rounded border border-border p-6 space-y-4 bg-card shadow-sm">
                     <div className="border-b border-border/60 pb-3.5 flex justify-between items-center">
                       <div>
                         <h3 className="text-base font-serif font-bold flex items-center gap-2">

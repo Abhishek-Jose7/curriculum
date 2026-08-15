@@ -132,14 +132,23 @@ export function HodCurriculumWorkspace() {
         
         // Filter by the selected Year of Study
         const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
-        const filteredSems = semList.filter(s => activeSems.includes(s.number));
 
-        // Load subjects for each semester
+        // Load subjects for each semester (with placeholders if not configured)
         const semsWithCourses = await Promise.all(
-          filteredSems.map(async (sem) => {
-            const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
-            const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
-            return { ...sem, courses };
+          activeSems.map(async (semNum) => {
+            const sem = semList.find(s => s.number === semNum);
+            if (sem) {
+              const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
+              const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
+              return { ...sem, courses };
+            } else {
+              return {
+                id: `placeholder-${semNum}`,
+                number: semNum,
+                title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
+                courses: []
+              };
+            }
           })
         );
         
@@ -174,15 +183,24 @@ export function HodCurriculumWorkspace() {
       
       // Reload sems
       const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
-      const semList = Array.isArray(semRes) ? semRes : semRes.results ?? [];
+      const semList: SemesterData[] = Array.isArray(semRes) ? semRes : semRes.results ?? [];
       const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
-      const filteredSems = semList.filter((s: any) => activeSems.includes(s.number));
 
       const semsWithCourses = await Promise.all(
-        filteredSems.map(async (sem: any) => {
-          const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
-          const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
-          return { ...sem, courses };
+        activeSems.map(async (semNum) => {
+          const sem = semList.find(s => s.number === semNum);
+          if (sem) {
+            const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
+            const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
+            return { ...sem, courses };
+          } else {
+            return {
+              id: `placeholder-${semNum}`,
+              number: semNum,
+              title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
+              courses: []
+            };
+          }
         })
       );
       setSemesters(semsWithCourses);
@@ -204,11 +222,30 @@ export function HodCurriculumWorkspace() {
     email: string
   ) => {
     try {
+      let actualSemId = semId;
+      if (semId.startsWith("placeholder-")) {
+        const semNum = Number(semId.split("-")[1]);
+        const semTitle = `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`;
+        const newSem = await apiFetch<any>("/semesters/", {
+          method: "POST",
+          body: JSON.stringify({
+            department: Number(selectedDeptId),
+            academic_year: Number(selectedYearId),
+            department_id: Number(selectedDeptId),
+            academic_year_id: Number(selectedYearId),
+            number: semNum,
+            title: semTitle,
+            ordinance: ""
+          })
+        });
+        actualSemId = String(newSem.id);
+      }
+
       // 1. Create course shell
       const newCourse = await apiFetch<any>("/courses/", {
         method: "POST",
         body: JSON.stringify({
-          semester_id: semId,
+          semester_id: actualSemId,
           code,
           title,
           course_type: type,
@@ -225,9 +262,28 @@ export function HodCurriculumWorkspace() {
         });
       }
 
-      // Reload courses for this semester
-      const updatedCourses = await apiFetch<any>(`/courses/?semester_id=${semId}`);
-      setSemesters(prev => prev.map(s => s.id === semId ? { ...s, courses: Array.isArray(updatedCourses) ? updatedCourses : updatedCourses.results ?? [] } : s));
+      // Reload sems and courses
+      const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
+      const semList: SemesterData[] = Array.isArray(semRes) ? semRes : semRes.results ?? [];
+      const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
+      const semsWithCourses = await Promise.all(
+        activeSems.map(async (semNum) => {
+          const sem = semList.find(s => s.number === semNum);
+          if (sem) {
+            const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
+            const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
+            return { ...sem, courses };
+          } else {
+            return {
+              id: `placeholder-${semNum}`,
+              number: semNum,
+              title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
+              courses: []
+            };
+          }
+        })
+      );
+      setSemesters(semsWithCourses);
       
       // Clear forms
       setCustomCode("");
@@ -415,7 +471,7 @@ export function HodCurriculumWorkspace() {
       </section>
 
       {/* Initialize Button if Semesters are missing */}
-      {semesters.length === 0 && selectedYearId && (
+      {semesters.every(s => s.id.startsWith("placeholder-")) && selectedYearId && (
         <div className="rounded border border-dashed border-border/80 p-12 text-center bg-card/10 space-y-4">
           <div className="flex justify-center">
             <Layers className="h-12 w-12 text-muted-foreground/30" />
@@ -441,7 +497,7 @@ export function HodCurriculumWorkspace() {
       )}
 
       {/* Main Semester Curriculum List */}
-      {semesters.length > 0 && (
+      {!semesters.every(s => s.id.startsWith("placeholder-")) && semesters.length > 0 && (
         <div className="space-y-12">
           {semesters.map((sem) => {
             const activeColor = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.color || "blue";

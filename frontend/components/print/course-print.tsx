@@ -27,7 +27,7 @@ export function InstitutionalHeader({ department }: { department: PrintDepartmen
 
 export function CoursePrint({ course, department, reviewerMode = false }: CoursePrintProps) {
   const isLab = course.course_type === "LAB";
-  const hasLab = Boolean(course.practical_hours) || course.course_type === "LAB" || course.course_type === "PROJECT";
+  const hasLab = Boolean(course.practical_hours) || course.course_type === "LAB" || course.course_type === "THEORY_LAB" || course.course_type === "PROJECT";
   const internal = course.internal_marks || 0;
   const mseVal = internal === 50 ? 30 : internal === 40 ? 20 : Math.round(internal * 0.6);
   const iseVal = internal - mseVal;
@@ -260,6 +260,13 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
           </tfoot>
         </table>
       ) : null}
+
+      <section className="references-block avoid-break">
+        <h2 className="section-label"><u>Self Learning:</u></h2>
+        <p style={{ margin: "4px 0", textAlign: "justify" }}>
+          Self learning hours per week: <strong>{course.self_learning_hours || 0} Hrs</strong>. Students are expected to study designated advanced topics independently using online resources, digital repositories, or recommended reference books. The assessment of self-learning components will be mapped to In-Semester Evaluation (ISE) formats (e.g., quizzes, technical presentations, or portfolio reviews) to measure outcome attainment.
+        </p>
+      </section>
 
       <section className="assessment-block avoid-break">
         <h2 className="section-label"><u>Course Assessment:</u>{isLab ? " (Lab)" : ""}</h2>
@@ -496,19 +503,23 @@ function CoPoMatrix({ course }: { course: CourseDraft }) {
           </tr>
         </thead>
         <tbody>
-          {course.outcomes.map((outcome, row) => (
-            <tr key={outcome.code}>
-              <td className="bold center">{outcome.code}</td>
-              {/* PO Mappings */}
-              {Array.from({ length: 12 }, (_, col) => {
-                const val = ((row + col) % 4) || "";
-                return <td className="center" key={`po-val-${col}`}>{val === 0 ? "" : val}</td>;
-              })}
-              {/* PSO Mappings */}
-              <td className="center">{((row + 1) % 3) || 1}</td>
-              <td className="center">{((row + 2) % 3) || ""}</td>
-            </tr>
-          ))}
+          {course.outcomes.map((outcome) => {
+            const poMap = outcome.po_map || {};
+            return (
+              <tr key={outcome.code}>
+                <td className="bold center">{outcome.code}</td>
+                {/* PO Mappings */}
+                {Array.from({ length: 12 }, (_, col) => {
+                  const colName = `PO${col + 1}`;
+                  const val = poMap[colName] !== undefined ? String(poMap[colName]) : "";
+                  return <td className="center" key={`po-val-${col}`}>{val}</td>;
+                })}
+                {/* PSO Mappings */}
+                <td className="center">{poMap["PSO1"] !== undefined ? String(poMap["PSO1"]) : ""}</td>
+                <td className="center">{poMap["PSO2"] !== undefined ? String(poMap["PSO2"]) : ""}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

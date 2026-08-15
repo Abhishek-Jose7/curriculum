@@ -23,7 +23,7 @@ export function A4Preview({
   onToggleFullScreen
 }: Props) {
   const isLab = course.course_type === "LAB";
-  const hasLab = (course.practical_hours || 0) > 0 || isLab;
+  const hasLab = (course.practical_hours || 0) > 0 || isLab || course.course_type === "THEORY_LAB";
   
   const totalMarks = (course.internal_marks || 0) + (course.external_marks || 0);
   const internal = course.internal_marks || 0;
@@ -207,47 +207,16 @@ export function A4Preview({
   };
 
   return (
-    <div className="h-full w-full overflow-auto bg-zinc-200 p-4 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
-      
-      {/* Document Control Toolbar */}
-      <div className="mx-auto mb-4 flex w-full items-center justify-between gap-3 rounded-md bg-white p-2.5 shadow-sm border border-border dark:bg-zinc-900 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Syllabus controls</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={downloadAsDoc}
-            className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-sm hover:bg-primary/95 transition-all cursor-pointer"
-          >
-            <FileDown className="h-3.5 w-3.5" />
-            Download Word
-          </button>
-          
-          <button
-            onClick={printSyllabus}
-            className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/50 transition-all cursor-pointer"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            Print Syllabus
-          </button>
-
-          {onToggleFullScreen && (
-            <button
-              onClick={onToggleFullScreen}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground hover:bg-muted/50 transition-all cursor-pointer"
-            >
-              {isFullScreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              {isFullScreen ? "Exit Fullscreen" : "Fullscreen"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="w-full">
+    <div className="h-full w-full overflow-auto bg-zinc-200 p-0 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
+      <div className="w-full flex justify-center overflow-auto p-4 bg-zinc-200 dark:bg-zinc-950/40">
         <div 
           ref={pageRef}
-          className="bg-white px-[20px] sm:px-[45px] pb-[68px] pt-[57px] text-black shadow-lg w-full font-serif" 
+          className="bg-white text-black shadow-lg font-serif border border-zinc-300 shrink-0 text-left" 
           style={{ 
+            width: '210mm',
+            minHeight: '297mm',
+            padding: '28mm 12mm 18mm',
+            boxSizing: 'border-box',
             fontSize: '10pt', 
             lineHeight: '1.2' 
           }}
@@ -459,6 +428,17 @@ export function A4Preview({
             </Selectable>
           )}
 
+          <Selectable id="self_learning" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
+            <div className="mb-2">
+              <p className="font-bold mt-[5pt] mb-[2.5pt] text-[10pt]" style={{ lineHeight: 1.15 }}>
+                <u>Self Learning:</u>
+              </p>
+              <p className="m-0 text-justify">
+                Self learning hours per week: <strong>{course.self_learning_hours || 0} Hrs</strong>. Students are expected to study designated advanced topics independently using online resources, digital repositories, or recommended reference books. The assessment of self-learning components will be mapped to In-Semester Evaluation (ISE) formats (e.g., quizzes, technical presentations, or portfolio reviews) to measure outcome attainment.
+              </p>
+            </div>
+          </Selectable>
+
           <Selectable id="assessments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <div className="mb-2">
               <p className="font-bold mt-[5pt] mb-[2.5pt] text-[10pt]" style={{ lineHeight: 1.15 }}>
@@ -592,19 +572,23 @@ export function A4Preview({
                   </tr>
                 </thead>
                 <tbody>
-                  {course.outcomes.map((outcome, row) => (
-                    <tr key={outcome.code}>
-                      <td className="font-bold text-center">{outcome.code}</td>
-                      {/* PO Mappings */}
-                      {Array.from({ length: 12 }, (_, col) => {
-                        const val = ((row + col) % 4) || "";
-                        return <td className="text-center" key={`po-val-prev-${col}`}>{val === 0 ? "" : val}</td>;
-                      })}
-                      {/* PSO Mappings */}
-                      <td className="text-center">{((row + 1) % 3) || 1}</td>
-                      <td className="text-center">{((row + 2) % 3) || ""}</td>
-                    </tr>
-                  ))}
+                  {course.outcomes.map((outcome) => {
+                    const poMap = outcome.po_map || {};
+                    return (
+                      <tr key={outcome.code}>
+                        <td className="font-bold text-center">{outcome.code}</td>
+                        {/* PO Mappings */}
+                        {Array.from({ length: 12 }, (_, col) => {
+                          const colName = `PO${col + 1}`;
+                          const val = poMap[colName] !== undefined ? String(poMap[colName]) : "";
+                          return <td className="text-center font-bold" key={`po-val-prev-${col}`}>{val}</td>;
+                        })}
+                        {/* PSO Mappings */}
+                        <td className="text-center font-bold">{poMap["PSO1"] !== undefined ? String(poMap["PSO1"]) : ""}</td>
+                        <td className="text-center font-bold">{poMap["PSO2"] !== undefined ? String(poMap["PSO2"]) : ""}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 

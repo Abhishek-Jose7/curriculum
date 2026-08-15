@@ -31,6 +31,7 @@ export type CourseOutcome = {
   description: string;
   bloom_level: string;
   order: number;
+  po_map?: Record<string, number | string | null | undefined>;
 };
 
 export type CourseModule = {
