@@ -43,8 +43,6 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
       SELECT 
         c.*,
         trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name,
-        ci.token AS invite_token,
-        ci.email AS invite_email,
         (SELECT count(*) FROM course_outcomes co WHERE co.course_id = c.id) AS outcomes_count,
         (SELECT count(*) FROM modules m WHERE m.course_id = c.id) AS modules_count,
         (SELECT count(*) FROM experiments e WHERE e.course_id = c.id) AS experiments_count,
@@ -53,7 +51,6 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
       FROM courses c
       JOIN semesters s ON c.semester_id = s.id
       LEFT JOIN profiles p ON c.faculty_user_id = p.id
-      LEFT JOIN course_invitations ci ON c.id = ci.course_id AND ci.accepted_at IS NULL
       ${where}
     `;
 
@@ -61,8 +58,6 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     return (result.results ?? []).map(row => ({
       ...row,
       faculty_name: (row.faculty_name as string) || "",
-      invite_token: (row.invite_token as string) || null,
-      invite_email: (row.invite_email as string) || null,
       outcomes: Array.from({ length: (row.outcomes_count as number) || 0 }, (_, i) => ({ code: `CO${i+1}` })),
       modules: Array.from({ length: (row.modules_count as number) || 0 }, (_, i) => ({ number: i + 1 })),
       experiments: Array.from({ length: (row.experiments_count as number) || 0 }, (_, i) => ({ number: i + 1 })),

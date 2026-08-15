@@ -11,8 +11,13 @@ const USER_STORAGE_KEY = "curriculum_user";
 
 const QUICK_LOGINS = [
   { label: "Administrator", role: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
-  { label: "Faculty (Coordinator)", role: "Faculty", email: "faculty@example.edu", password: "ChangeMe123!" },
   { label: "Head of Department (HOD)", role: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
+];
+
+const TEACHER_QUICK_LOGINS = [
+  { label: "Faculty (demo)", email: "faculty@example.edu", password: "ChangeMe123!" },
+  { label: "Rohan (CSE)", email: "rohan.faculty@example.edu", password: "ChangeMe123!" },
+  { label: "Meera (MECH)", email: "meera.faculty@example.edu", password: "ChangeMe123!" },
 ];
 
 export default function LoginPage() {
@@ -157,6 +162,29 @@ export default function LoginPage() {
                 </span>
               </button>
             ))}
+          </div>
+
+          {/* Teacher quick-login chips */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-center">
+              Quick Login as Teacher
+            </p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {TEACHER_QUICK_LOGINS.map((fill) => (
+                <button
+                  key={fill.email}
+                  type="button"
+                  onClick={() => {
+                    setEmail(fill.email);
+                    setPassword(fill.password);
+                  }}
+                  className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-[10px] font-bold text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-accent transition-all cursor-pointer"
+                  title={fill.email}
+                >
+                  {fill.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

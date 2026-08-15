@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { RoleGuard } from "@/components/layout/role-guard";
-import { InviteTeacherPanel } from "@/components/admin/invite-teacher-panel";
+import { CreateSubjectPanel } from "@/components/admin/create-subject-panel";
+import { ManageTeachersPanel } from "@/components/admin/manage-teachers-panel";
 import { HodCurriculumWorkspace } from "@/components/admin/hod-curriculum-workspace";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
@@ -21,10 +22,11 @@ import {
   Wrench,
   ShieldCheck,
   BookOpen,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ActiveTab = "invite" | "department" | "academic-year" | "semester" | "department-curriculum";
+type ActiveTab = "create-subject" | "department" | "academic-year" | "semester" | "department-curriculum" | "teachers";
 
 const YEAR_OF_STUDY = [
   { label: 'FE', fullName: 'First Year', sems: [1, 2], color: 'blue' },
@@ -135,7 +137,7 @@ function AdminContent() {
   }
 
   async function handleAddSubject(semId: string) {
-    if (!newSubjectCode.trim() || !newSubjectTitle.trim()) return;
+    if (!newSubjectCode.trim() || !newSubjectTitle.trim() || !newSubjectFaculty) return;
     setAddingSubject(true);
     try {
       await apiFetch("/courses/", {
@@ -147,7 +149,7 @@ function AdminContent() {
           title: newSubjectTitle.trim(),
           course_type: newSubjectType,
           credits: Number(newSubjectCredits) || 4,
-          faculty_user_id: newSubjectFaculty || null,
+          faculty_user_id: newSubjectFaculty,
           status: "DRAFT",
         }),
       });
@@ -156,7 +158,14 @@ function AdminContent() {
       setNewSubjectFaculty("");
       await loadSemesterCourses(semId);
     } catch (err: any) {
-      alert("Failed to add subject: " + (err?.message ?? "Error"));
+      const msg = err?.message ?? "Error";
+      if (msg.includes("TEACHER_REQUIRED")) {
+        alert("A teacher must be selected to create a subject.");
+      } else if (msg.includes("TEACHER_DEPARTMENT_MISMATCH") || msg.includes("TEACHER_INVALID")) {
+        alert("The selected teacher is no longer valid for this department. Refresh and try again.");
+      } else {
+        alert("Failed to add subject: " + msg);
+      }
     } finally {
       setAddingSubject(false);
     }
@@ -465,6 +474,16 @@ function AdminContent() {
                     Curriculum Setup
                   </button>
                   <button
+                    onClick={() => setActiveTab("teachers")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "teachers" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Manage Teachers
+                  </button>
+                  <button
                     onClick={() => setActiveTab("academic-year")}
                     className={cn(
                       "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
@@ -508,14 +527,24 @@ function AdminContent() {
                     Manage Semesters
                   </button>
                   <button
-                    onClick={() => setActiveTab("invite")}
+                    onClick={() => setActiveTab("create-subject")}
                     className={cn(
                       "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-dashed border-primary/20 active:scale-[0.98]",
-                      activeTab === "invite" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none border-transparent" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                      activeTab === "create-subject" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none border-transparent" : "hover:bg-muted text-foreground/75 hover:text-foreground"
                     )}
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Create Subject
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("teachers")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "teachers" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Manage Teachers
                   </button>
                 </>
               )}
@@ -525,7 +554,15 @@ function AdminContent() {
             <main className="space-y-6">
               {activeTab === "department-curriculum" && <HodCurriculumWorkspace />}
 
-              {activeTab === "invite" && <InviteTeacherPanel />}
+              {activeTab === "create-subject" && <CreateSubjectPanel onGoToTeachers={() => setActiveTab("teachers")} />}
+
+              {activeTab === "teachers" && (
+                <ManageTeachersPanel
+                  isHod={user?.role === "HOD"}
+                  hodDepartmentId={user?.department_id}
+                  hodDepartmentName={departments.find((d) => String(d.id) === String(user?.department_id))?.name}
+                />
+              )}
 
               {activeTab === "department" && (
                 <div className="space-y-6">
@@ -835,6 +872,7 @@ function AdminContent() {
                                   const yearInfo = getYearOfStudy(Number(s.number));
                                   const isExpanded = expandedSemId === s.id;
                                   const courses = semCourses[s.id] ?? [];
+                                  const semFaculty = facultyUsers.filter((f: any) => f.role === "FACULTY" && String(f.department_id) === String(s.department_id));
                                   return (
                                     <li key={s.id} className="bg-background rounded border border-border overflow-hidden shadow-sm hover:border-primary/20 transition-all duration-150">
                                         <div className="p-3 flex justify-between items-center flex-wrap gap-2 group">
@@ -937,9 +975,9 @@ function AdminContent() {
                                                             className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer max-w-[220px]"
                                                           >
                                                             <option value="">-- No Teacher Assigned --</option>
-                                                            {facultyUsers.map((f: any) => (
+                                                            {semFaculty.map((f: any) => (
                                                               <option key={f.id} value={f.id}>
-                                                                {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
+                                                                {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email} ({f.email})
                                                               </option>
                                                             ))}
                                                           </select>
@@ -988,22 +1026,39 @@ function AdminContent() {
                                                     />
                                                   </div>
                                                   <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                                                    <select
-                                                      value={newSubjectFaculty}
-                                                      onChange={(e) => setNewSubjectFaculty(e.target.value)}
-                                                      className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer flex-1"
-                                                    >
-                                                      <option value="">-- Select Teacher (Optional) --</option>
-                                                      {facultyUsers.map((f: any) => (
-                                                        <option key={f.id} value={f.id}>
-                                                          {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.username || f.email} ({f.email})
-                                                        </option>
-                                                      ))}
-                                                    </select>
+                                                    {semFaculty.length === 0 ? (
+                                                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1">
+                                                        <span className="text-[11px] font-semibold text-muted-foreground">
+                                                          No active teachers in this department yet.
+                                                        </span>
+                                                        <Button
+                                                          type="button"
+                                                          variant="outline"
+                                                          size="sm"
+                                                          onClick={() => setActiveTab("teachers")}
+                                                          className="h-8 px-3 text-[10px] font-bold uppercase tracking-wider shrink-0"
+                                                        >
+                                                          <Users className="h-3 w-3 mr-1" /> Add a Teacher
+                                                        </Button>
+                                                      </div>
+                                                    ) : (
+                                                      <select
+                                                        value={newSubjectFaculty}
+                                                        onChange={(e) => setNewSubjectFaculty(e.target.value)}
+                                                        className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer flex-1"
+                                                      >
+                                                        <option value="">-- Select Teacher (Required) --</option>
+                                                        {semFaculty.map((f: any) => (
+                                                          <option key={f.id} value={f.id}>
+                                                            {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email} ({f.email})
+                                                          </option>
+                                                        ))}
+                                                      </select>
+                                                    )}
                                                     <Button
                                                       type="button"
                                                       size="sm"
-                                                      disabled={addingSubject || !newSubjectCode.trim() || !newSubjectTitle.trim()}
+                                                      disabled={addingSubject || !newSubjectCode.trim() || !newSubjectTitle.trim() || !newSubjectFaculty}
                                                       onClick={() => void handleAddSubject(s.id)}
                                                       className="h-8 px-4 text-xs font-bold shrink-0"
                                                     >

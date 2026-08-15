@@ -3,10 +3,10 @@ import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { BaseRepository, normalizeValue } from "./repositories/base";
 import { CoursesRepository, ReviewerRepository, WorkflowRepository } from "./repositories/curriculum";
-import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole, requireCourseAccessForReview } from "./middleware/auth";
+import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole } from "./middleware/auth";
 import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
-import { generatePin, isLocked, lockoutSecondsRemaining, signReviewSession, verifyReviewSession, REVIEW_PIN_CONSTANTS } from "./services/reviewSession";
+import { generatePin, generateReviewLinkIfMissing, isLocked, lockoutSecondsRemaining, signReviewSession, verifyReviewSession, REVIEW_PIN_CONSTANTS } from "./services/reviewSession";
 import { crudRoute } from "./routes/generic";
 import type { Env, Variables, WorkflowDecision } from "./types";
 
@@ -246,48 +246,69 @@ api.post("/auth/logout/", async (c) => {
 });
 
 
-api.get("/course-invitations/:token/", async (c) => {
-  const token = c.req.param("token");
-  const invitation = await c.env.DB.prepare(`
-    SELECT ci.*, c.code AS course_code, c.title AS course_title
-    FROM course_invitations ci
-    JOIN courses c ON ci.course_id = c.id
-    WHERE ci.token = ?
-  `).bind(token).first<any>();
-
-  if (!invitation) {
-    return c.json({ detail: "Invitation not found." }, 404);
-  }
-
-  const isAccepted = invitation.accepted_at !== null;
-  const isExpired = new Date(invitation.expires_at) < new Date();
-
-  return c.json({
-    token: invitation.token,
-    email: invitation.email,
-    course_code: invitation.course_code,
-    course_title: invitation.course_title,
-    course_id: invitation.course_id,
-    is_accepted: isAccepted,
-    is_expired: isExpired,
-  });
-});
-
 api.use("*", requireAuth);
 
 api.get("/auth/me/", (c) => c.json(c.get("user")));
 
-api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
-  ).all();
+const handleListFaculty = async (c: any) => {
+  const roleFilter = c.req.query("role");
+  const deptFilter = c.req.query("department_id");
+  let query = "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1";
+  const params: any[] = [];
+  if (roleFilter) {
+    query += " AND role = ?";
+    params.push(roleFilter);
+  }
+  if (deptFilter) {
+    query += " AND department_id = ?";
+    params.push(deptFilter);
+  }
+  query += " ORDER BY first_name, last_name";
+  const rows = await c.env.DB.prepare(query).bind(...params).all();
   return c.json(rows.results ?? []);
+};
+
+api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), handleListFaculty);
+api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), handleListFaculty);
+
+api.post("/teachers/", requireRole("ADMIN", "HOD"), async (c) => {
+  const user = c.get("user");
+  const { name, email, password, department_id } = await c.req.json<any>();
+  if (!name || !email || !password) return c.json({ error: "TEACHER_FIELDS_REQUIRED" }, 400);
+  if (password.length < 8) return c.json({ error: "PASSWORD_TOO_SHORT" }, 400);
+
+  const targetDeptId = user.role === "HOD" ? user.department_id : department_id;
+  if (!targetDeptId) return c.json({ error: "TEACHER_FIELDS_REQUIRED" }, 400);
+
+  const existing = await c.env.DB.prepare("SELECT id FROM profiles WHERE email = ?").bind(email).first();
+  if (existing) return c.json({ error: "EMAIL_EXISTS" }, 400);
+
+  const passwordHash = await hashPassword(password);
+  const id = crypto.randomUUID();
+  // Split full name into first_name + last_name (last word → last_name, rest → first_name)
+  const nameTrimmed = name.trim();
+  const spaceIdx = nameTrimmed.lastIndexOf(" ");
+  const firstName = spaceIdx >= 0 ? nameTrimmed.slice(0, spaceIdx) : nameTrimmed;
+  const lastName = spaceIdx >= 0 ? nameTrimmed.slice(spaceIdx + 1) : "";
+  await c.env.DB.prepare(
+    `INSERT INTO profiles (id, email, username, password_hash, role, department_id, first_name, last_name, is_active, created_at)
+     VALUES (?, ?, ?, ?, 'FACULTY', ?, ?, ?, 1, ?)`
+  ).bind(id, email, email, passwordHash, targetDeptId, firstName, lastName, new Date().toISOString()).run();
+
+  return c.json({ id, name, email, department_id: targetDeptId, is_active: true }, 201);
 });
-api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1 ORDER BY first_name, last_name"
-  ).all();
-  return c.json(rows.results ?? []);
+
+api.patch("/teachers/:id/status/", requireRole("ADMIN", "HOD"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const { is_active } = await c.req.json<any>();
+  const teacher = await c.env.DB.prepare("SELECT department_id FROM profiles WHERE id = ? AND role = 'FACULTY'").bind(id).first<any>();
+  if (!teacher) return c.json({ detail: "Not found" }, 404);
+  if (user.role === "HOD" && teacher.department_id !== user.department_id) {
+    return c.json({ detail: "Forbidden" }, 403);
+  }
+  await c.env.DB.prepare("UPDATE profiles SET is_active = ? WHERE id = ?").bind(is_active ? 1 : 0, id).run();
+  return c.json({ id, is_active });
 });
 
 const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "university_name", "logo_url"], ["code"], true);
@@ -570,7 +591,14 @@ api.delete("/notifications/:id/", async (c) => {
 api.get("/courses/", async (c) => c.json(await new CoursesRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
 api.post("/courses/", async (c) => {
   if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const course = await new CoursesRepository(c.env.DB).create(await c.req.json());
+  const body = await c.req.json<any>();
+  if (!body.faculty_user_id) return c.json({ error: "TEACHER_REQUIRED" }, 400);
+  const semester = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(body.semester_id ?? body.semester).first<any>();
+  const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(body.faculty_user_id).first<any>();
+  if (!teacher || teacher.role !== "FACULTY" || !teacher.is_active) return c.json({ error: "TEACHER_INVALID" }, 400);
+  if (!semester || teacher.department_id !== semester.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
+  const course = await new CoursesRepository(c.env.DB).create(body);
+  await generateReviewLinkIfMissing(c.env.DB, course.id);
   await createCourseVersion(c.env.DB, course.id, c.get("user"), "Course created");
   return c.json(course, 201);
 });
@@ -584,23 +612,22 @@ api.patch("/courses/:id/", async (c) => updateCourse(c));
 const handleAssignFaculty = async (c: any) => {
   const body = await c.req.json().catch(() => ({}));
   const facultyUserId = body.faculty_user_id !== undefined ? body.faculty_user_id : null;
+  const courseId = c.req.param("id");
+  if (facultyUserId) {
+    const courseRow = await c.env.DB.prepare("SELECT semester_id FROM courses WHERE id = ?").bind(courseId).first();
+    const semester = courseRow ? await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind((courseRow as any).semester_id).first() : null;
+    const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(facultyUserId).first();
+    if (!teacher || teacher.role !== "FACULTY" || !teacher.is_active) return c.json({ error: "TEACHER_INVALID" }, 400);
+    if (!courseRow || !semester || teacher.department_id !== semester.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
+  }
   const course = (await c.env.DB
     .prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ? RETURNING *")
-    .bind(facultyUserId, c.req.param("id"))
+    .bind(facultyUserId, courseId)
     .first()) as any;
   if (!course) {
     return c.json({ detail: "Course not found." }, 404);
   }
-  if (!course.share_token) {
-    const shareToken = crypto.randomUUID();
-    const pin = generatePin();
-    await c.env.DB.prepare(
-      `UPDATE courses SET share_token = ?, review_pin = ?, review_link_generated_at = ?,
-       review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?`
-    ).bind(shareToken, pin, new Date().toISOString(), course.id).run();
-    course.share_token = shareToken;
-    course.review_pin = pin;
-  }
+  await generateReviewLinkIfMissing(c.env.DB, course.id);
   return c.json(course);
 };
 
@@ -660,55 +687,6 @@ const PREVIOUS_SUBJECTS: Record<string, Array<{ code: string; title: string; cou
   ]
 };
 
-api.post("/courses/:id/invite_teacher/", requireRole("ADMIN", "HOD"), async (c) => {
-  const courseId = c.req.param("id");
-  const { email } = await c.req.json<{ email: string }>();
-  if (!email) return c.json({ detail: "Email is required." }, 400);
-
-  const course = await c.env.DB.prepare("SELECT * FROM courses WHERE id = ?").bind(courseId).first<any>();
-  if (!course) return c.json({ detail: "Course not found." }, 404);
-
-  const token = crypto.randomUUID();
-  const invitationId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-
-  await c.env.DB.prepare(`
-    INSERT INTO course_invitations (id, course_id, email, token, invited_by_user_id, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(invitationId, courseId, email, token, c.get("user").id, expiresAt).run();
-
-  const frontendUrl = c.env.FRONTEND_URL ?? "http://localhost:3000";
-  const invitationUrl = `${frontendUrl}/invite/${token}`;
-
-  return c.json({ invitation_url: invitationUrl });
-});
-
-api.post("/course-invitations/:token/accept/", async (c) => {
-  const token = c.req.param("token");
-  const user = c.get("user");
-
-  const invitation = await c.env.DB.prepare("SELECT * FROM course_invitations WHERE token = ?").bind(token).first<any>();
-  if (!invitation) return c.json({ detail: "Invitation not found." }, 404);
-  if (invitation.accepted_at) return c.json({ detail: "Invitation already accepted." }, 400);
-  if (new Date(invitation.expires_at) < new Date()) return c.json({ detail: "Invitation has expired." }, 400);
-
-  await c.env.DB.prepare("UPDATE course_invitations SET accepted_at = CURRENT_TIMESTAMP, accepted_by_user_id = ? WHERE token = ?").bind(user.id, token).run();
-  await c.env.DB.prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ?").bind(user.id, invitation.course_id).run();
-
-  const course = await c.env.DB.prepare("SELECT share_token FROM courses WHERE id = ?").bind(invitation.course_id).first<any>();
-  if (course && !course.share_token) {
-    const shareToken = crypto.randomUUID();
-    const pin = generatePin();
-    await c.env.DB.prepare(
-      `UPDATE courses SET share_token = ?, review_pin = ?, review_link_generated_at = ?,
-       review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?`
-    ).bind(shareToken, pin, new Date().toISOString(), invitation.course_id).run();
-  }
-  
-  await createCourseVersion(c.env.DB, invitation.course_id, user, "Coordinator assigned via invite link");
-
-  return c.json({ status: "success" });
-});
 
 api.get("/departments/:id/previous-subjects/", async (c) => {
   const deptId = c.req.param("id");
@@ -765,22 +743,32 @@ api.post("/courses/:id/reopen/", async (c) => {
   return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
 });
 
-api.get("/courses/:id/review-link/", requireCourseAccessForReview((c) => c.req.param("id") as string), async (c) => {
+api.get("/courses/:id/review-link/", async (c) => {
   const id = c.req.param("id");
+  const user = c.get("user");
   const course = await c.env.DB.prepare(
-    "SELECT share_token, review_pin, review_link_generated_at FROM courses WHERE id = ?"
+    "SELECT share_token, review_pin, review_link_generated_at, faculty_user_id FROM courses WHERE id = ?"
   ).bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found" }, 404);
+  // Only ADMIN, HOD, or the course's assigned faculty may see the review link + PIN
+  if (user.role === "FACULTY" && course.faculty_user_id !== user.id) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
   const frontendUrl = c.env.FRONTEND_URL ?? "http://localhost:3000";
   const url = `${frontendUrl}/public/review/${course.share_token}`;
   return c.json({ url, pin: course.review_pin, generatedAt: course.review_link_generated_at });
 });
 
-api.post("/courses/:id/review-pin/reset/", requireCourseAccessForReview((c) => c.req.param("id") as string), async (c) => {
+api.post("/courses/:id/review-pin/reset/", async (c) => {
   const id = c.req.param("id");
-  const course = await c.env.DB.prepare("SELECT share_token FROM courses WHERE id = ?").bind(id).first<any>();
+  const user = c.get("user");
+  const course = await c.env.DB.prepare("SELECT share_token, faculty_user_id FROM courses WHERE id = ?").bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found" }, 404);
+  // Only ADMIN, HOD, or the course's assigned faculty may reset the PIN
+  if (user.role === "FACULTY" && course.faculty_user_id !== user.id) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
   const pin = generatePin();
   await c.env.DB.prepare(
@@ -1097,18 +1085,24 @@ app.get("/public/review/:token/comments/", requireReviewSession, async (c) => {
   return c.json(comments.results ?? []);
 });
 
+const VALID_SECTION_KEYS = new Set(["overview", "outcomes", "modules", "experiments", "assessment_references"]);
+
 app.post("/public/review/:token/comments/", requireReviewSession, async (c) => {
   const courseId = c.get("reviewCourseId") as string;
   const body = await c.req.json<any>();
   if (!body.reviewer_name || !body.body) {
     return c.json({ detail: "Name and comments are required.", code: "FEEDBACK_INVALID" }, 400);
   }
+  const sectionKey = body.section_key && VALID_SECTION_KEYS.has(body.section_key) ? body.section_key : null;
+  if (!sectionKey) {
+    return c.json({ detail: "Invalid or missing section_key.", code: "FEEDBACK_INVALID" }, 400);
+  }
   const id = crypto.randomUUID();
   await c.env.DB.prepare(`
     INSERT INTO reviewer_comments (id, course_id, section_key, section_label, body, is_external, status, reviewer_name, reviewer_email, created_at)
     VALUES (?, ?, ?, ?, ?, 1, 'DRAFT', ?, ?, ?)
   `).bind(
-    id, courseId, body.section_key || "General", body.section_label || "General", body.body, body.reviewer_name, body.reviewer_email ?? null, new Date().toISOString()
+    id, courseId, sectionKey, body.section_label || sectionKey, body.body, body.reviewer_name, body.reviewer_email ?? null, new Date().toISOString()
   ).run();
   const created = await c.env.DB.prepare("SELECT * FROM reviewer_comments WHERE id = ?").bind(id).first();
   return c.json(created, 201);

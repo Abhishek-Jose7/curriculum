@@ -8,9 +8,7 @@ import {
   BookOpen,
   Calendar,
   CheckCircle2,
-  Copy,
   Layers,
-  Link2,
   Loader2,
   Plus,
   ArrowRight,
@@ -19,7 +17,6 @@ import {
   GraduationCap,
   Sparkles,
   Search,
-  UserPlus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -69,11 +66,10 @@ export function HodCurriculumWorkspace() {
   const [customTitle, setCustomTitle] = useState("");
   const [customType, setCustomType] = useState<SubjectType>("THEORY");
   const [customCredits, setCustomCredits] = useState("3");
-  const [customEmail, setCustomEmail] = useState("");
+  const [customFacultyId, setCustomFacultyId] = useState("");
   
-  // Invite states
-  const [pendingEmail, setPendingEmail] = useState<Record<string, string>>({}); // courseId -> email
-  const [invitingCourseId, setInvitingCourseId] = useState<string | null>(null);
+  // Teacher selection for previous-subject quick adds (keyed by semester-number-index)
+  const [prevSubjectTeacher, setPrevSubjectTeacher] = useState<Record<string, string>>({});
   
   // Active Year creation
   const [showAddYear, setShowAddYear] = useState(false);
@@ -219,7 +215,7 @@ export function HodCurriculumWorkspace() {
     title: string, 
     type: string, 
     credits: number, 
-    email: string
+    facultyUserId: string
   ) => {
     try {
       let actualSemId = semId;
@@ -241,8 +237,8 @@ export function HodCurriculumWorkspace() {
         actualSemId = String(newSem.id);
       }
 
-      // 1. Create course shell
-      const newCourse = await apiFetch<any>("/courses/", {
+      // Create course shell with the teacher already attached
+      await apiFetch<any>("/courses/", {
         method: "POST",
         body: JSON.stringify({
           semester_id: actualSemId,
@@ -250,17 +246,10 @@ export function HodCurriculumWorkspace() {
           title,
           course_type: type,
           credits,
+          faculty_user_id: facultyUserId,
           status: "DRAFT"
         })
       });
-
-      // 2. If email is provided, create teacher invitation
-      if (email.trim()) {
-        await apiFetch(`/courses/${newCourse.id}/invite_teacher/`, {
-          method: "POST",
-          body: JSON.stringify({ email: email.trim() })
-        });
-      }
 
       // Reload sems and courses
       const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
@@ -288,40 +277,12 @@ export function HodCurriculumWorkspace() {
       // Clear forms
       setCustomCode("");
       setCustomTitle("");
-      setCustomEmail("");
+      setCustomFacultyId("");
       setAddingSubject(null);
       
       alert(`Subject "${title}" created successfully.`);
     } catch (err: any) {
       alert("Failed to create subject: " + (err?.message ?? "Error"));
-    }
-  };
-
-  // Generate Invite URL for existing subject
-  const handleInviteTeacher = async (courseId: string, semId: string) => {
-    const email = pendingEmail[courseId];
-    if (!email || !email.trim()) {
-      alert("Please enter a valid teacher email.");
-      return;
-    }
-    setInvitingCourseId(courseId);
-    try {
-      await apiFetch(`/courses/${courseId}/invite_teacher/`, {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim() })
-      });
-      // Reload courses
-      const updatedCourses = await apiFetch<any>(`/courses/?semester_id=${semId}`);
-      setSemesters(prev => prev.map(s => s.id === semId ? { ...s, courses: Array.isArray(updatedCourses) ? updatedCourses : updatedCourses.results ?? [] } : s));
-      setPendingEmail(prev => {
-        const copy = { ...prev };
-        delete copy[courseId];
-        return copy;
-      });
-    } catch (err: any) {
-      alert("Failed to generate invitation: " + (err?.message ?? "Error"));
-    } finally {
-      setInvitingCourseId(null);
     }
   };
 
@@ -358,6 +319,22 @@ export function HodCurriculumWorkspace() {
       </div>
     );
   }
+
+  // Teachers scoped to the currently selected department
+  const deptFaculty = facultyUsers.filter((f: any) => f.role === "FACULTY" && String(f.department_id) === String(selectedDeptId));
+
+  const handleAssignFaculty = async (courseId: string, facultyId: string | null, semId: string) => {
+    try {
+      await apiFetch(`/courses/${courseId}/assign-faculty/`, {
+        method: "PATCH",
+        body: JSON.stringify({ faculty_user_id: facultyId || null }),
+      });
+      const updatedCourses = await apiFetch<any>(`/courses/?semester_id=${semId}`);
+      setSemesters(prev => prev.map(s => s.id === semId ? { ...s, courses: Array.isArray(updatedCourses) ? updatedCourses : updatedCourses.results ?? [] } : s));
+    } catch (err: any) {
+      alert("Failed to assign faculty: " + (err?.message ?? "Error"));
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in text-left">
@@ -546,10 +523,6 @@ export function HodCurriculumWorkspace() {
                     ) : (
                       <div className="space-y-3">
                         {sem.courses?.map((course: any) => {
-                          const inviteToken = course.invite_token;
-                          // If invite url doesn't start with http, make it full url
-                          const inviteUrl = inviteToken ? `${window.location.origin}/invite/${inviteToken}` : null;
-
                           return (
                             <div key={course.id} className="p-4 bg-card rounded border border-border space-y-3.5 shadow-xs hover:border-primary/20 transition-all group">
                               <div className="flex items-start justify-between gap-3">
@@ -584,52 +557,27 @@ export function HodCurriculumWorkspace() {
                                     <span className="text-muted-foreground font-semibold">Coordinator Assigned:</span>
                                     <span className="font-bold text-foreground">{course.faculty_name}</span>
                                   </div>
-                                ) : inviteUrl ? (
-                                  <div className="space-y-2 bg-primary/5 rounded p-2.5 border border-primary/10">
-                                    <div className="flex justify-between items-center text-[10px] font-bold text-primary uppercase font-mono">
-                                      <span>Pending invite ({course.invite_email})</span>
-                                      <span className="text-[9px] font-normal font-sans italic bg-primary/10 px-1 py-0.2 rounded">Token Active</span>
-                                    </div>
-                                    <div className="flex gap-1.5">
-                                      <div className="h-8 flex-1 rounded border border-border bg-zinc-950 px-2 flex items-center min-w-0 font-mono text-[10px]">
-                                        <span className="text-zinc-300 truncate w-full">{inviteUrl}</span>
-                                      </div>
-                                      <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        className="h-8 px-2 text-[9px] font-bold uppercase shrink-0"
-                                        onClick={() => {
-                                          void navigator.clipboard.writeText(inviteUrl);
-                                          alert("Invite link copied to clipboard!");
-                                        }}
-                                      >
-                                        <Copy className="h-3 w-3 mr-1" /> Copy
-                                      </Button>
-                                    </div>
-                                  </div>
                                 ) : (
                                   <div className="space-y-2">
                                     <p className="text-[10px] font-semibold text-muted-foreground leading-relaxed">
                                       Assign a coordinator teacher to delegate syllabus drafting credentials.
                                     </p>
-                                    <div className="flex gap-2">
-                                      <input
-                                        type="email"
-                                        placeholder="teacher@college.edu"
-                                        value={pendingEmail[course.id] || ""}
-                                        onChange={(e) => setPendingEmail(prev => ({ ...prev, [course.id]: e.target.value }))}
-                                        className="h-8 flex-1 rounded border border-border bg-background px-2.5 text-xs font-semibold"
-                                      />
-                                      <Button
-                                        size="sm"
-                                        disabled={invitingCourseId === course.id}
-                                        onClick={() => void handleInviteTeacher(course.id, sem.id)}
-                                        className="h-8 px-3 text-[10px] font-bold uppercase shrink-0"
+                                    {deptFaculty.length === 0 ? (
+                                      <p className="text-[10px] font-bold text-amber-600">No active teachers in this department yet.</p>
+                                    ) : (
+                                      <select
+                                        value={course.faculty_user_id ?? ""}
+                                        onChange={(e) => void handleAssignFaculty(course.id, e.target.value || null, sem.id)}
+                                        className="h-8 w-full rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer"
                                       >
-                                        {invitingCourseId === course.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3.5 w-3.5 mr-1" />}
-                                        Invite
-                                      </Button>
-                                    </div>
+                                        <option value="">-- Assign Teacher --</option>
+                                        {deptFaculty.map((f: any) => (
+                                          <option key={f.id} value={f.id}>
+                                            {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email} ({f.email})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -711,18 +659,27 @@ export function HodCurriculumWorkspace() {
                           </label>
                         </div>
                         <label className="block space-y-1">
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Coordinator Teacher Email (Optional)</span>
-                          <input
-                            type="email"
-                            value={customEmail}
-                            onChange={(e) => setCustomEmail(e.target.value)}
-                            placeholder="teacher@college.edu"
-                            className="h-8 w-full rounded border border-border bg-background px-2"
-                          />
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Coordinator Teacher (Required)</span>
+                          {deptFaculty.length === 0 ? (
+                            <p className="text-[10px] font-bold text-amber-600">No active teachers in this department yet.</p>
+                          ) : (
+                            <select
+                              value={customFacultyId}
+                              onChange={(e) => setCustomFacultyId(e.target.value)}
+                              className="h-8 w-full rounded border border-border bg-background px-1.5 cursor-pointer"
+                            >
+                              <option value="">-- Select Teacher --</option>
+                              {deptFaculty.map((f: any) => (
+                                <option key={f.id} value={f.id}>
+                                  {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email} ({f.email})
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </label>
                         <Button
-                          disabled={!customCode.trim() || !customTitle.trim()}
-                          onClick={() => void handleCreateSubject(sem.id, customCode.trim(), customTitle.trim(), customType, Number(customCredits) || 3, customEmail)}
+                          disabled={!customCode.trim() || !customTitle.trim() || !customFacultyId}
+                          onClick={() => void handleCreateSubject(sem.id, customCode.trim(), customTitle.trim(), customType, Number(customCredits) || 3, customFacultyId)}
                           className="h-8 w-full text-xs font-bold uppercase tracking-wider mt-1"
                         >
                           Create Subject Shell
@@ -774,26 +731,31 @@ export function HodCurriculumWorkspace() {
                                 </span>
                               ) : (
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <input
-                                    type="email"
-                                    id={`email-prev-${sem.number}-${index}`}
-                                    placeholder="Teacher Email (Optional)"
-                                    className="h-8 w-36 rounded border border-border bg-background px-2 text-[10px] font-semibold hidden sm:inline"
-                                  />
+                                  <select
+                                    value={prevSubjectTeacher[`${sem.number}-${index}`] ?? ""}
+                                    onChange={(e) => setPrevSubjectTeacher(prev => ({ ...prev, [`${sem.number}-${index}`]: e.target.value }))}
+                                    className="h-8 w-40 rounded border border-border bg-background px-1.5 text-[10px] font-semibold cursor-pointer"
+                                  >
+                                    <option value="">-- Teacher --</option>
+                                    {deptFaculty.map((f: any) => (
+                                      <option key={f.id} value={f.id}>
+                                        {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email}
+                                      </option>
+                                    ))}
+                                  </select>
                                   <Button
                                     size="sm"
+                                    disabled={!prevSubjectTeacher[`${sem.number}-${index}`]}
                                     onClick={() => {
-                                      const emailInput = document.getElementById(`email-prev-${sem.number}-${index}`) as HTMLInputElement;
-                                      const emailVal = emailInput ? emailInput.value : "";
                                       void handleCreateSubject(
                                         sem.id, 
                                         prevSub.code, 
                                         prevSub.title, 
                                         prevSub.course_type, 
                                         prevSub.credits, 
-                                        emailVal
+                                        prevSubjectTeacher[`${sem.number}-${index}`] ?? ""
                                       );
-                                      if (emailInput) emailInput.value = "";
+                                      setPrevSubjectTeacher(prev => ({ ...prev, [`${sem.number}-${index}`]: "" }));
                                     }}
                                     className="h-8 px-2.5 text-[10px] font-bold uppercase"
                                   >

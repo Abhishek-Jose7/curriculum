@@ -54,4 +54,16 @@ export async function verifyReviewSession(
   }
 }
 
+export async function generateReviewLinkIfMissing(db: D1Database, courseId: string): Promise<void> {
+  const course = await db.prepare("SELECT share_token FROM courses WHERE id = ?").bind(courseId).first<{ share_token: string | null }>();
+  if (course && !course.share_token) {
+    const shareToken = crypto.randomUUID();
+    const pin = generatePin();
+    await db.prepare(
+      `UPDATE courses SET share_token = ?, review_pin = ?, review_link_generated_at = ?,
+       review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?`
+    ).bind(shareToken, pin, new Date().toISOString(), courseId).run();
+  }
+}
+
 export const REVIEW_PIN_CONSTANTS = { MAX_ATTEMPTS, LOCKOUT_MINUTES };

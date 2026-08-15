@@ -732,9 +732,12 @@ function ReviewerLinkPanel({ course }: { course: CourseDraft }) {
   const [resetting, setResetting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Backend serializes faculty_user_id into the `faculty` alias on the course detail payload.
-  const facultyUserId = String((course as any).faculty ?? "");
-  const canAccess = !!user && (user.role === "ADMIN" || user.role === "HOD" || user.id === facultyUserId);
+  // Only ADMIN, HOD, or the course's own assigned faculty may manage the reviewer link.
+  const canAccess = !!user && (
+    user.role === "ADMIN" ||
+    user.role === "HOD" ||
+    (user.role === "FACULTY" && String(user.id) === String(course.faculty_user_id))
+  );
 
   const loadLink = useCallback(async () => {
     if (!canAccess) return;

@@ -75,28 +75,6 @@ export function requireRole(...roles: Role[]) {
   };
 }
 
-export function requireCourseAccessForReview(getCourseId: (c: Context<any>) => string) {
-  return async (
-    c: Context<{ Bindings: Env; Variables: Variables }>,
-    next: Next
-  ) => {
-    const user = c.get("user");
-    if (user.role === "ADMIN" || user.role === "HOD") {
-      await next();
-      return;
-    }
-    const row = await c.env.DB.prepare(
-      "SELECT faculty_user_id FROM courses WHERE id = ?"
-    )
-      .bind(getCourseId(c))
-      .first<{ faculty_user_id: string | null }>();
-    if (!row || row.faculty_user_id !== user.id) {
-      return c.json({ detail: "Permission denied." }, 403);
-    }
-    await next();
-  };
-}
-
 export function requireSameDepartment(getCourseId: (c: Context<any>) => string) {
   return async (
     c: Context<{ Bindings: Env; Variables: Variables }>,

@@ -95,6 +95,7 @@ export type CourseDraft = {
   course_type: "THEORY" | "LAB" | "THEORY_LAB" | "PROJECT" | "ELECTIVE" | "INTERDISCIPLINARY";
   status: CourseStatus;
   faculty_name: string;
+  faculty_user_id?: string | null;
   last_modified: string;
   objectives: string;
   pre_requisites: string;
