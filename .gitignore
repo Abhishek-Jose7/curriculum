@@ -9,6 +9,7 @@ build/
 .venv
 .wrangler/
 **/.wrangler/
+.claude/
 *.sqlite*
 *.db
 curriculum/
