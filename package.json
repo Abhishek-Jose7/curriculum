@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "install:all": "npm install --prefix backend-worker && npm install --prefix frontend",
-    "dev": "npm run dev --prefix frontend",
+    "dev": "concurrently --names \"WORKER,FRONTEND\" --prefix-colors \"cyan,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm run dev --prefix backend-worker",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev:full": "concurrently --names \"WORKER,FRONTEND\" --prefix-colors \"cyan,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:full": "npm run dev",
     "db:schema": "npx --prefix backend-worker wrangler d1 execute curriculum-db --remote --file=./schema.sql --yes",
     "db:seed": "npx --prefix backend-worker wrangler d1 execute curriculum-db --remote --file=./seed.sql --yes",
     "db:init": "npm run db:schema && npm run db:seed",

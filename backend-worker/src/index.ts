@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { BaseRepository, normalizeValue } from "./repositories/base";
 import { CoursesRepository, ReviewerRepository, WorkflowRepository } from "./repositories/curriculum";
-import { requireAuth, signJwt, isAcademicAdmin, isReviewerOrAdmin, verifyJwt, requireRole } from "./middleware/auth";
+import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole, requireCourseAccessForReview } from "./middleware/auth";
 import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
+import { generatePin, isLocked, lockoutSecondsRemaining, signReviewSession, verifyReviewSession, REVIEW_PIN_CONSTANTS } from "./services/reviewSession";
 import { crudRoute } from "./routes/generic";
 import type { Env, Variables, WorkflowDecision } from "./types";
 
@@ -589,6 +591,16 @@ const handleAssignFaculty = async (c: any) => {
   if (!course) {
     return c.json({ detail: "Course not found." }, 404);
   }
+  if (!course.share_token) {
+    const shareToken = crypto.randomUUID();
+    const pin = generatePin();
+    await c.env.DB.prepare(
+      `UPDATE courses SET share_token = ?, review_pin = ?, review_link_generated_at = ?,
+       review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?`
+    ).bind(shareToken, pin, new Date().toISOString(), course.id).run();
+    course.share_token = shareToken;
+    course.review_pin = pin;
+  }
   return c.json(course);
 };
 
@@ -682,6 +694,16 @@ api.post("/course-invitations/:token/accept/", async (c) => {
 
   await c.env.DB.prepare("UPDATE course_invitations SET accepted_at = CURRENT_TIMESTAMP, accepted_by_user_id = ? WHERE token = ?").bind(user.id, token).run();
   await c.env.DB.prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ?").bind(user.id, invitation.course_id).run();
+
+  const course = await c.env.DB.prepare("SELECT share_token FROM courses WHERE id = ?").bind(invitation.course_id).first<any>();
+  if (course && !course.share_token) {
+    const shareToken = crypto.randomUUID();
+    const pin = generatePin();
+    await c.env.DB.prepare(
+      `UPDATE courses SET share_token = ?, review_pin = ?, review_link_generated_at = ?,
+       review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?`
+    ).bind(shareToken, pin, new Date().toISOString(), invitation.course_id).run();
+  }
   
   await createCourseVersion(c.env.DB, invitation.course_id, user, "Coordinator assigned via invite link");
 
@@ -743,12 +765,29 @@ api.post("/courses/:id/reopen/", async (c) => {
   return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
 });
 
-api.post("/courses/:id/share/", async (c) => {
-  if (!isReviewerOrAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const token = crypto.randomUUID();
-  const course = await c.env.DB.prepare("UPDATE courses SET share_token = ? WHERE id = ? RETURNING *").bind(token, c.req.param("id")).first<any>();
-  if (!course) return c.json({ detail: "Not found." }, 404);
-  return c.json({ share_token: course.share_token });
+api.get("/courses/:id/review-link/", requireCourseAccessForReview((c) => c.req.param("id") as string), async (c) => {
+  const id = c.req.param("id");
+  const course = await c.env.DB.prepare(
+    "SELECT share_token, review_pin, review_link_generated_at FROM courses WHERE id = ?"
+  ).bind(id).first<any>();
+  if (!course) return c.json({ detail: "Not found" }, 404);
+  if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
+  const frontendUrl = c.env.FRONTEND_URL ?? "http://localhost:3000";
+  const url = `${frontendUrl}/public/review/${course.share_token}`;
+  return c.json({ url, pin: course.review_pin, generatedAt: course.review_link_generated_at });
+});
+
+api.post("/courses/:id/review-pin/reset/", requireCourseAccessForReview((c) => c.req.param("id") as string), async (c) => {
+  const id = c.req.param("id");
+  const course = await c.env.DB.prepare("SELECT share_token FROM courses WHERE id = ?").bind(id).first<any>();
+  if (!course) return c.json({ detail: "Not found" }, 404);
+  if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
+  const pin = generatePin();
+  await c.env.DB.prepare(
+    `UPDATE courses SET review_pin = ?, review_pin_failed_attempts = 0,
+     review_pin_locked_until = NULL WHERE id = ?`
+  ).bind(pin, id).run();
+  return c.json({ pin });
 });
 
 api.get("/courses/:id/versions/", async (c) => {
@@ -844,9 +883,15 @@ api.post("/courses/:id/autosave/", async (c) => {
   return c.json({ status: "saved", course: await new CoursesRepository(c.env.DB).detail(id) });
 });
 
-api.get("/reviewer-comments/", async (c) => c.json(await new ReviewerRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+api.get("/reviewer-comments/", async (c) => {
+  const query = Object.fromEntries(new URL(c.req.url).searchParams);
+  const rows = await new ReviewerRepository(c.env.DB).list(query);
+  // Unsubmitted external-review drafts are only visible through the PIN-gated public link.
+  const visible = query.status ? rows : rows.filter((r: any) => r.status !== "DRAFT");
+  return c.json(visible);
+});
 api.post("/reviewer-comments/", async (c) => {
-  if (!isReviewerOrAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
+  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
   const row = await new ReviewerRepository(c.env.DB).create({ ...(await c.req.json()), reviewer_user_id: c.get("user").id });
   return c.json(row, 201);
 });
@@ -854,7 +899,7 @@ api.post("/reviewer-comments/:id/resolve/", async (c) => c.json(await new Review
 
 api.get("/approval-workflows/", async (c) => c.json(await new WorkflowRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
 api.post("/approval-workflows/", async (c) => {
-  if (!isReviewerOrAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
+  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
   const body = await c.req.json<{ course: string; decision: WorkflowDecision; note?: string }>();
   const transitions: Record<WorkflowDecision, string> = { REQUEST_CHANGES: "CHANGES_REQUESTED", APPROVE: "APPROVED", REJECT: "CHANGES_REQUESTED", PUBLISH: "PUBLISHED" };
   const course = await c.env.DB.prepare("SELECT * FROM courses WHERE id = ?").bind(body.course).first<any>();
@@ -984,35 +1029,152 @@ api.post('/published-curricula/:id/hod-approve/', requireRole('HOD', 'ADMIN'), a
   return c.json({ status: 'approved' });
 });
 
-app.get("/public/review/:token/", async (c) => {
-  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
-  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
-  if (row.status === "DRAFT") return c.json({ detail: "This syllabus is not yet ready for review.", code: "SYLLABUS_DRAFT" }, 400);
-  const course = await new CoursesRepository(c.env.DB).detail(row.id);
+async function requireReviewSession(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  next: Next
+) {
+  const token = c.req.param("token") as string;
+  const auth = c.req.header("Authorization") || "";
+  const sessionToken = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  const course = await c.env.DB.prepare("SELECT id, share_token FROM courses WHERE share_token = ?")
+    .bind(token).first<any>();
+  if (!course) return c.json({ error: "TOKEN_INVALID" }, 404);
+  if (!sessionToken || !(await verifyReviewSession(c.env.AUTH_JWT_SECRET, sessionToken, course.id, course.share_token))) {
+    return c.json({ error: "SESSION_INVALID" }, 401);
+  }
+  c.set("reviewCourseId", course.id);
+  await next();
+}
+
+app.post("/public/review/:token/verify/", async (c) => {
+  const token = c.req.param("token");
+  const { pin } = await c.req.json<any>();
+  const course = await c.env.DB.prepare(
+    `SELECT id, code, title, review_pin, review_pin_failed_attempts, review_pin_locked_until
+     FROM courses WHERE share_token = ?`
+  ).bind(token).first<any>();
+  if (!course) return c.json({ error: "TOKEN_INVALID" }, 404);
+
+  if (isLocked(course)) {
+    return c.json({ error: "LOCKED", retryAfterSeconds: lockoutSecondsRemaining(course) }, 429);
+  }
+
+  if (pin !== course.review_pin) {
+    const attempts = (course.review_pin_failed_attempts ?? 0) + 1;
+    const lockedUntil =
+      attempts >= REVIEW_PIN_CONSTANTS.MAX_ATTEMPTS
+        ? new Date(Date.now() + REVIEW_PIN_CONSTANTS.LOCKOUT_MINUTES * 60000).toISOString()
+        : null;
+    await c.env.DB.prepare(
+      "UPDATE courses SET review_pin_failed_attempts = ?, review_pin_locked_until = ? WHERE id = ?"
+    ).bind(attempts, lockedUntil, course.id).run();
+    if (lockedUntil) return c.json({ error: "LOCKED", retryAfterSeconds: REVIEW_PIN_CONSTANTS.LOCKOUT_MINUTES * 60 }, 429);
+    return c.json({ error: "PIN_INVALID", attemptsRemaining: REVIEW_PIN_CONSTANTS.MAX_ATTEMPTS - attempts }, 401);
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE courses SET review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?"
+  ).bind(course.id).run();
+
+  const sessionToken = await signReviewSession(c.env.AUTH_JWT_SECRET, course.id, token);
+  return c.json({
+    sessionToken,
+    expiresAt: new Date(Date.now() + 4 * 3600_000).toISOString(),
+    course: { code: course.code, title: course.title },
+  });
+});
+
+app.get("/public/review/:token/", requireReviewSession, async (c) => {
+  const course = await new CoursesRepository(c.env.DB).detail(c.get("reviewCourseId") as string);
+  if (!course) return c.json({ detail: "Not found" }, 404);
   return c.json(course);
 });
 
-app.get("/public/review/:token/comments/", async (c) => {
-  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
-  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
-  const comments = await c.env.DB.prepare("SELECT * FROM reviewer_comments WHERE course_id = ? ORDER BY created_at DESC").bind(row.id).all();
+app.get("/public/review/:token/comments/", requireReviewSession, async (c) => {
+  const comments = await c.env.DB.prepare(
+    "SELECT * FROM reviewer_comments WHERE course_id = ? ORDER BY created_at DESC"
+  ).bind(c.get("reviewCourseId") as string).all();
   return c.json(comments.results ?? []);
 });
 
-app.post("/public/review/:token/comments/", async (c) => {
-  const body = await c.req.json<{ section_key: string, section_label: string, body: string, reviewer_name: string, reviewer_email?: string }>();
-  const row = await c.env.DB.prepare("SELECT id, status FROM courses WHERE share_token = ?").bind(c.req.param("token")).first<{ id: string, status: string }>();
-  if (!row) return c.json({ detail: "This review link is invalid or has expired.", code: "TOKEN_INVALID" }, 404);
-  if (row.status === "DRAFT") return c.json({ detail: "This syllabus is not yet ready for review.", code: "SYLLABUS_DRAFT" }, 400);
-  if (!body.reviewer_name || !body.body) return c.json({ detail: "Name and comments are required.", code: "FEEDBACK_INVALID" }, 400);
-  
-  const comment = await c.env.DB.prepare(`
-    INSERT INTO reviewer_comments (id, course_id, section_key, section_label, body, is_external, reviewer_name, reviewer_email)
-    VALUES (?, ?, ?, ?, ?, 1, ?, ?) RETURNING *
+app.post("/public/review/:token/comments/", requireReviewSession, async (c) => {
+  const courseId = c.get("reviewCourseId") as string;
+  const body = await c.req.json<any>();
+  if (!body.reviewer_name || !body.body) {
+    return c.json({ detail: "Name and comments are required.", code: "FEEDBACK_INVALID" }, 400);
+  }
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(`
+    INSERT INTO reviewer_comments (id, course_id, section_key, section_label, body, is_external, status, reviewer_name, reviewer_email, created_at)
+    VALUES (?, ?, ?, ?, ?, 1, 'DRAFT', ?, ?, ?)
   `).bind(
-    crypto.randomUUID(), row.id, body.section_key || "General", body.section_label || "General", body.body, body.reviewer_name, body.reviewer_email ?? null
-  ).first();
-  return c.json(comment, 201);
+    id, courseId, body.section_key || "General", body.section_label || "General", body.body, body.reviewer_name, body.reviewer_email ?? null, new Date().toISOString()
+  ).run();
+  const created = await c.env.DB.prepare("SELECT * FROM reviewer_comments WHERE id = ?").bind(id).first();
+  return c.json(created, 201);
+});
+
+app.patch("/public/review/:token/comments/:commentId/", requireReviewSession, async (c) => {
+  const courseId = c.get("reviewCourseId") as string;
+  const commentId = c.req.param("commentId");
+  const { body } = await c.req.json<any>();
+  const existing = await c.env.DB.prepare(
+    "SELECT * FROM reviewer_comments WHERE id = ? AND course_id = ?"
+  ).bind(commentId, courseId).first<any>();
+  if (!existing) return c.json({ detail: "Not found" }, 404);
+  if (existing.status !== "DRAFT") return c.json({ error: "COMMENT_LOCKED" }, 400);
+  await c.env.DB.prepare("UPDATE reviewer_comments SET body = ? WHERE id = ?").bind(body, commentId).run();
+  return c.json({ ...existing, body });
+});
+
+app.delete("/public/review/:token/comments/:commentId/", requireReviewSession, async (c) => {
+  const courseId = c.get("reviewCourseId") as string;
+  const commentId = c.req.param("commentId");
+  const existing = await c.env.DB.prepare(
+    "SELECT * FROM reviewer_comments WHERE id = ? AND course_id = ?"
+  ).bind(commentId, courseId).first<any>();
+  if (!existing) return c.json({ detail: "Not found" }, 404);
+  if (existing.status !== "DRAFT") return c.json({ error: "COMMENT_LOCKED" }, 400);
+  await c.env.DB.prepare("DELETE FROM reviewer_comments WHERE id = ?").bind(commentId).run();
+  return c.json({ deleted: true });
+});
+
+app.post("/public/review/:token/submit/", requireReviewSession, async (c) => {
+  const courseId = c.get("reviewCourseId") as string;
+  const drafts = await c.env.DB.prepare(
+    "SELECT id FROM reviewer_comments WHERE course_id = ? AND status = 'DRAFT'"
+  ).bind(courseId).all();
+  if (!drafts.results.length) return c.json({ error: "NOTHING_TO_SUBMIT" }, 400);
+
+  const now = new Date().toISOString();
+  await c.env.DB.prepare(
+    "UPDATE reviewer_comments SET status = 'SUBMITTED', submitted_at = ? WHERE course_id = ? AND status = 'DRAFT'"
+  ).bind(now, courseId).run();
+
+  const course = await c.env.DB.prepare(
+    `SELECT c.code, c.title, c.faculty_user_id, s.department_id
+     FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE c.id = ?`
+  ).bind(courseId).first<any>();
+
+  const notifyUserIds: string[] = [];
+  if (course?.faculty_user_id) notifyUserIds.push(course.faculty_user_id);
+  const hods = await c.env.DB.prepare(
+    "SELECT id FROM profiles WHERE role = 'HOD' AND department_id = ? AND is_active = 1"
+  ).bind(course?.department_id).all<any>();
+  for (const h of hods.results ?? []) notifyUserIds.push(h.id);
+
+  const title = `New reviewer comments on ${course?.code ?? ""} — ${course?.title ?? ""}`;
+  const bodyText = `${drafts.results.length} review comment(s) submitted.`;
+  for (const userId of new Set(notifyUserIds)) {
+    await c.env.DB.prepare(`
+      INSERT INTO notifications (id, user_id, title, body, link, is_read, created_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?)
+    `).bind(
+      crypto.randomUUID(), userId, title, bodyText, `/courses/${courseId}`, now
+    ).run();
+  }
+
+  return c.json({ submittedCount: drafts.results.length });
 });
 
 app.onError((err, c) => {

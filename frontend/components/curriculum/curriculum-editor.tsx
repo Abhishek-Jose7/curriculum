@@ -1,12 +1,13 @@
 "use client";
 
-import { BookOpen, Check, ClipboardList, Eye, FlaskConical, Library, MessageSquare, Plus, Save, ScrollText, Trash2, Calendar, AlertTriangle, FileCode, CheckCircle2, Loader2, FileSearch } from "lucide-react";
+import { BookOpen, Check, ClipboardList, Copy, Eye, FlaskConical, Library, MessageSquare, Plus, RefreshCw, Save, ScrollText, Trash2, Calendar, AlertTriangle, FileCode, CheckCircle2, Loader2, FileSearch } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { A4Preview } from "@/components/curriculum/a4-preview";
 import { useAutosave } from "@/hooks/use-autosave";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/context";
 import { cn } from "@/lib/utils";
 import type { Assessment, CourseDraft, CourseModule, CourseOutcome, Experiment, ReferenceBook } from "@/types/curriculum";
 
@@ -21,6 +22,7 @@ export type TabKey =
   | "assessments"
   | "references"
   | "comments"
+  | "reviewer-link"
   | "versions"
   | "compare_previous"
   | "preview";
@@ -75,6 +77,7 @@ const MACRO_CATEGORIES: MacroCategory[] = [
     icon: Eye,
     tabs: [
       { key: "comments", label: "Comments", icon: MessageSquare },
+      { key: "reviewer-link", label: "Reviewer Link", icon: Copy },
       { key: "versions", label: "History", icon: ClipboardList },
       { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch },
       { key: "preview", label: "Live Preview", icon: Eye }
@@ -370,6 +373,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
             </div>
           )}
           {active === "comments" && <CommentsPanel course={course} />}
+          {active === "reviewer-link" && <ReviewerLinkPanel course={course} />}
           {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
           {active === "compare_previous" && <ComparePreviousPanel course={course} />}
           {active === "preview" && (
@@ -714,6 +718,114 @@ function CommentsPanel({ course }: { course: CourseDraft }) {
               <div className="mt-2 text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">Reviewer: {comment.reviewer_name}</div>
             </div>
           ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ReviewerLinkPanel({ course }: { course: CourseDraft }) {
+  const { user } = useAuth();
+  const [linkData, setLinkData] = useState<{ url: string; pin: string; generatedAt: string | null } | null>(null);
+  const [noLink, setNoLink] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Backend serializes faculty_user_id into the `faculty` alias on the course detail payload.
+  const facultyUserId = String((course as any).faculty ?? "");
+  const canAccess = !!user && (user.role === "ADMIN" || user.role === "HOD" || user.id === facultyUserId);
+
+  const loadLink = useCallback(async () => {
+    if (!canAccess) return;
+    setLoading(true);
+    try {
+      const data = await apiFetch<{ url: string; pin: string; generatedAt: string | null }>(`/courses/${course.id}/review-link/`);
+      setLinkData(data);
+      setNoLink(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("NO_REVIEW_LINK")) {
+        setLinkData(null);
+        setNoLink(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [course.id, canAccess]);
+
+  useEffect(() => {
+    void loadLink();
+  }, [loadLink]);
+
+  const handleCopy = async () => {
+    if (!linkData) return;
+    try {
+      await navigator.clipboard.writeText(linkData.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      alert("Could not copy the link. Copy it manually: " + linkData.url);
+    }
+  };
+
+  const handleResetPin = async () => {
+    if (!linkData) return;
+    const ok = window.confirm("Reset the reviewer PIN? Anyone who reloads the reviewer page will need the new PIN. Already-open reviewer tabs keep working until they reload.");
+    if (!ok) return;
+    setResetting(true);
+    try {
+      const data = await apiFetch<{ pin: string }>(`/courses/${course.id}/review-pin/reset/`, { method: "POST" });
+      setLinkData((prev) => (prev ? { ...prev, pin: data.pin } : prev));
+    } catch (err) {
+      alert("Failed to reset PIN: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <Panel title="Reviewer Link" description="Share this link with external reviewers. They must enter the PIN to view the syllabus and leave comments.">
+      {!canAccess ? (
+        <div className="py-8 text-center text-xs font-semibold text-muted-foreground border border-dashed border-border rounded bg-muted/20">
+          You do not have permission to manage this course's reviewer link.
+        </div>
+      ) : loading ? (
+        <div className="py-8 text-center text-xs font-bold text-muted-foreground/50">Loading reviewer link...</div>
+      ) : noLink || !linkData ? (
+        <div className="py-8 text-center text-xs font-semibold text-muted-foreground border border-dashed border-border rounded bg-muted/20">
+          A reviewer link is generated automatically once a faculty coordinator is assigned to this course.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider">Review URL</label>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={linkData.url}
+                onFocus={(e) => e.currentTarget.select()}
+                className="flex-1 h-10 min-w-0 rounded border border-border bg-background px-3 text-xs font-mono text-foreground focus:outline-none focus:border-primary/50"
+              />
+              <Button variant="secondary" size="sm" className="h-10 px-3 text-[10px] font-bold uppercase tracking-wider shrink-0" onClick={() => void handleCopy()}>
+                {copied ? <Check className="h-3 w-3 mr-1 text-emerald-500" /> : <Copy className="h-3 w-3 mr-1" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded border border-border bg-muted/20 p-4">
+            <div>
+              <div className="text-[10px] font-bold text-foreground/70 uppercase tracking-wider mb-1">Current PIN</div>
+              <div className="text-2xl font-mono font-bold tracking-[0.35em] text-primary">{linkData.pin}</div>
+            </div>
+            <Button variant="outline" size="sm" className="h-9 text-[10px] font-bold uppercase tracking-wider shrink-0" onClick={() => void handleResetPin()} disabled={resetting}>
+              {resetting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+              Reset PIN
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            The link never changes. Reviewers must enter the PIN every time they open the link; resetting the PIN stops the old one from working for any new entry attempt.
+          </p>
         </div>
       )}
     </Panel>

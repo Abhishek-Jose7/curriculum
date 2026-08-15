@@ -13,7 +13,6 @@ const QUICK_LOGINS = [
   { label: "Administrator", role: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
   { label: "Faculty (Coordinator)", role: "Faculty", email: "faculty@example.edu", password: "ChangeMe123!" },
   { label: "Head of Department (HOD)", role: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
-  { label: "Reviewer", role: "Reviewer", email: "reviewer@example.edu", password: "ChangeMe123!" },
 ];
 
 export default function LoginPage() {

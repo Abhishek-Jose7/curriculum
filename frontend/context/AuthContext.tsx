@@ -34,6 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchMe = useCallback(async () => {
+    // Public pages (e.g. the PIN-gated external reviewer portal) must not be
+    // redirected to /login when no session exists.
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/public/")) {
+      setLoading(false);
+      return;
+    }
     try {
       const token = typeof window !== "undefined" ? window.localStorage.getItem("accessToken") : null;
       

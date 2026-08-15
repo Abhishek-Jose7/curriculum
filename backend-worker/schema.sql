@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT NOT NULL UNIQUE,
   username TEXT UNIQUE,
   password_hash TEXT,
-  role TEXT NOT NULL DEFAULT 'FACULTY' CHECK (role IN ('ADMIN', 'HOD', 'FACULTY', 'REVIEWER', 'PUBLIC')),
+  role TEXT NOT NULL DEFAULT 'FACULTY' CHECK (role IN ('ADMIN', 'HOD', 'FACULTY', 'PUBLIC')),
   department_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
   first_name TEXT NOT NULL DEFAULT '',
   last_name TEXT NOT NULL DEFAULT '',
@@ -82,6 +82,10 @@ CREATE TABLE IF NOT EXISTS courses (
   approved_by_user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   approved_at TEXT,
   share_token TEXT UNIQUE,
+  review_pin TEXT,
+  review_pin_failed_attempts INTEGER NOT NULL DEFAULT 0,
+  review_pin_locked_until TEXT,
+  review_link_generated_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (semester_id, code)
@@ -207,6 +211,8 @@ CREATE TABLE IF NOT EXISTS reviewer_comments (
   is_external INTEGER NOT NULL DEFAULT 0,
   reviewer_name TEXT,
   reviewer_email TEXT,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED')),
+  submitted_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Loader2, MessageSquare, Send, X, ShieldAlert, FileText, CheckSquare, CornerDownRight, AlignLeft, Share2 } from "lucide-react";
+import { Check, Loader2, MessageSquare, Send, X, ShieldAlert, FileText, CheckSquare, CornerDownRight, AlignLeft } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { RoleGuard } from "@/components/layout/role-guard";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,6 @@ function ReviewContent() {
   const [deciding, setDeciding] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
 
   const fetchCourse = useCallback(async () => {
     setLoading(true);
@@ -119,23 +118,6 @@ function ReviewContent() {
     }
   };
 
-  const handleShareLink = async () => {
-    if (!course) return;
-    setSharing(true);
-    try {
-      const data = await apiFetch<{ share_token: string }>(`/courses/${course.id}/share/`, {
-        method: "POST",
-      });
-      const url = `${window.location.origin}/public/review/${data.share_token}`;
-      await navigator.clipboard.writeText(url);
-      alert("Share link copied to clipboard:\n" + url);
-    } catch (err) {
-      alert("Failed to generate share link: " + (err instanceof Error ? err.message : "Unknown error"));
-    } finally {
-      setSharing(false);
-    }
-  };
-
   if (loading) {
     return (
       <AppShell>
@@ -199,15 +181,6 @@ function ReviewContent() {
             </div>
             
             <div className="flex gap-2 shrink-0">
-              <Button
-                variant="outline"
-                disabled={sharing}
-                onClick={() => void handleShareLink()}
-                className="h-9 text-xs font-bold uppercase tracking-wider rounded-sm"
-              >
-                {sharing ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Share2 className="h-3 w-3 mr-1.5" />}
-                Share Link
-              </Button>
               <Button
                 variant="secondary"
                 disabled={deciding}

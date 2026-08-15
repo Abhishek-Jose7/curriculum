@@ -80,7 +80,7 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
       this.db.prepare("SELECT *, number AS `order` FROM experiments WHERE course_id = ? ORDER BY number").bind(id).all(),
       this.db.prepare("SELECT *, sort_order AS `order` FROM assessment_schemes WHERE course_id = ? ORDER BY sort_order").bind(id).all(),
       this.db.prepare("SELECT *, sort_order AS `order` FROM reference_books WHERE course_id = ? ORDER BY is_textbook, sort_order").bind(id).all(),
-      this.db.prepare("SELECT rc.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS reviewer_name FROM reviewer_comments rc LEFT JOIN profiles p ON p.id = rc.reviewer_user_id WHERE rc.course_id = ? ORDER BY rc.section_key, rc.created_at DESC").bind(id).all(),
+      this.db.prepare("SELECT rc.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS reviewer_name FROM reviewer_comments rc LEFT JOIN profiles p ON p.id = rc.reviewer_user_id WHERE rc.course_id = ? AND rc.status = 'SUBMITTED' ORDER BY rc.section_key, rc.created_at DESC").bind(id).all(),
     ]);
     return serializeCourse({
       ...course,
@@ -156,7 +156,7 @@ export class ReferenceBooksRepository extends BaseRepository<Record<string, unkn
 
 export class ReviewerRepository extends BaseRepository<Record<string, unknown>> {
   constructor(db: D1Database) {
-    super(db, "reviewer_comments", ["course_id", "reviewer_user_id", "section_key", "section_label", "body", "is_resolved", "resolved_by_user_id", "resolved_at"], ["course_id", "section_key", "is_resolved"]);
+    super(db, "reviewer_comments", ["course_id", "reviewer_user_id", "section_key", "section_label", "body", "is_resolved", "resolved_by_user_id", "resolved_at", "status", "submitted_at"], ["course_id", "section_key", "is_resolved", "status"]);
   }
 }
 

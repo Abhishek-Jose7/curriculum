@@ -30,10 +30,6 @@ export function isAcademicAdmin(user: AuthUser) {
   return user.is_superuser === 1 || user.role === "ADMIN" || user.role === "HOD";
 }
 
-export function isReviewerOrAdmin(user: AuthUser) {
-  return isAcademicAdmin(user) || user.role === "REVIEWER";
-}
-
 export async function signJwt(payload: Record<string, unknown>, secret: string, ttlSeconds = 60 * 60) {
   const now = Math.floor(Date.now() / 1000);
   const body = { ...payload, iat: now, exp: now + ttlSeconds };
@@ -73,6 +69,28 @@ export function requireRole(...roles: Role[]) {
   ) => {
     const user = c.get("user");
     if (!user || !roles.includes(user.role as Role)) {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
+    await next();
+  };
+}
+
+export function requireCourseAccessForReview(getCourseId: (c: Context<any>) => string) {
+  return async (
+    c: Context<{ Bindings: Env; Variables: Variables }>,
+    next: Next
+  ) => {
+    const user = c.get("user");
+    if (user.role === "ADMIN" || user.role === "HOD") {
+      await next();
+      return;
+    }
+    const row = await c.env.DB.prepare(
+      "SELECT faculty_user_id FROM courses WHERE id = ?"
+    )
+      .bind(getCourseId(c))
+      .first<{ faculty_user_id: string | null }>();
+    if (!row || row.faculty_user_id !== user.id) {
       return c.json({ detail: "Permission denied." }, 403);
     }
     await next();

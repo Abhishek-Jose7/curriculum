@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context";
 import { cn } from "@/lib/utils";
@@ -225,6 +226,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </>
             )}
           </nav>
+          {mounted && user && <NotificationsBell />}
           <Button
             variant="secondary"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

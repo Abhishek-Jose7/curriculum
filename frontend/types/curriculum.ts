@@ -84,6 +84,8 @@ export type ReviewerComment = {
   reviewer_email?: string;
   is_external?: boolean;
   is_resolved: boolean;
+  status?: "DRAFT" | "SUBMITTED";
+  submitted_at?: string;
 };
 
 export type CourseDraft = {

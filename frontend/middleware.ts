@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Paths accessible without authentication
-// /invite/* = reviewer read-only course link (no login required for reviewers)
-// /print/*   = print-preview (public)
+// /invite/*   = reviewer read-only course link (no login required for reviewers)
+// /print/*    = print-preview (public)
+// /public/*   = external reviewer portal (PIN-gated, no login required)
 const PUBLIC_PREFIXES = [
   "/login",
   "/invite",
   "/print",
+  "/public",
   "/_next",
   "/favicon.ico",
 ];

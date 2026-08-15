@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "HOD" | "FACULTY" | "REVIEWER" | "PUBLIC";
+export type Role = "ADMIN" | "HOD" | "FACULTY" | "PUBLIC";
 export type CourseStatus = "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "CHANGES_REQUESTED" | "APPROVED" | "PUBLISHED" | "LOCKED";
 export type WorkflowDecision = "REQUEST_CHANGES" | "APPROVE" | "REJECT" | "PUBLISH";
 
@@ -24,6 +24,7 @@ export type AuthUser = {
 
 export type Variables = {
   user: AuthUser;
+  reviewCourseId?: string;
 };
 
 export type CourseRow = {
