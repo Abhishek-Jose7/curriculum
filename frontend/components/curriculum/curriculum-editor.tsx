@@ -314,7 +314,7 @@ export function CurriculumEditor({ courseId }: { courseId: number }) {
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Subject Code" value={course.code} onChange={(value) => updateCourse("code", value)} error={!course.code ? "Required" : undefined} />
                 <Field label="Subject Name" value={course.title} onChange={(value) => updateCourse("title", value)} error={!course.title ? "Required" : undefined} />
-                <Select label="Course Type" value={course.course_type} onChange={(value) => updateCourse("course_type", value as CourseDraft["course_type"])} options={["THEORY", "LAB", "PROJECT", "ELECTIVE", "INTERDISCIPLINARY"]} />
+                <Select label="Course Type" value={course.course_type} onChange={(value) => updateCourse("course_type", value as CourseDraft["course_type"])} options={["THEORY", "LAB", "THEORY_LAB", "PROJECT", "ELECTIVE", "INTERDISCIPLINARY"]} />
                 <Field label="Faculty Coordinator Assigned" value={course.faculty_name} onChange={(value) => updateCourse("faculty_name", value)} />
                 <TextArea label="Prerequisites Coursework" value={course.pre_requisites} onChange={(value) => updateCourse("pre_requisites", value)} />
                 <TextArea label="Syllabus Preamble / Introduction" value={course.syllabus_intro} onChange={(value) => updateCourse("syllabus_intro", value)} />
@@ -492,12 +492,29 @@ function OutcomeEditor({
   outcomes: CourseOutcome[];
   onChange: (items: CourseOutcome[]) => void;
 }) {
+  const updateOutcomeMap = (index: number, key: string, val: string) => {
+    const cleanVal = val.replace(/[^1-3]/g, "");
+    const outcome = outcomes[index];
+    const newPoMap = { ...(outcome.po_map || {}) };
+    if (cleanVal === "") {
+      delete newPoMap[key];
+    } else {
+      newPoMap[key] = Number(cleanVal);
+    }
+    const updated = outcomes.map((o, idx) => idx === index ? { ...o, po_map: newPoMap } : o);
+    onChange(updated);
+  };
+
+  const pos = Array.from({ length: 12 }, (_, i) => `PO${i + 1}`);
+  const psos = ["PSO1", "PSO2"];
+  const cols = [...pos, ...psos];
+
   return (
     <Panel title="Course Outcomes" description="Outcomes must represent clear intellectual competencies, mapped directly to Bloom cognitive domains.">
       <Rows
         items={outcomes || []}
         addLabel="Add Course Outcome"
-        newItem={{ code: `CO${(outcomes || []).length + 1}`, description: "", bloom_level: "", order: (outcomes || []).length + 1 }}
+        newItem={{ code: `CO${(outcomes || []).length + 1}`, description: "", bloom_level: "", order: (outcomes || []).length + 1, po_map: {} }}
         onChange={onChange}
         render={(item, index, update) => (
           <div className="grid gap-4 md:grid-cols-[90px_1fr_auto] items-start p-4 rounded-sm border border-border/80 bg-card shadow-xs">
@@ -507,6 +524,49 @@ function OutcomeEditor({
           </div>
         )}
       />
+
+      {(outcomes || []).length > 0 && (
+        <div className="mt-8 border-t border-border/80 pt-6 space-y-4">
+          <div className="pb-2">
+            <h4 className="text-sm font-serif font-bold text-foreground">Suggested CO-PO Articulation Matrix</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Map each Course Outcome (CO) to Program Outcomes (PO1-12) and Program Specific Outcomes (PSO1-2) with weight levels (1: Low, 2: Medium, 3: High).</p>
+          </div>
+          <div className="overflow-x-auto border border-border rounded-sm bg-background">
+            <table className="w-full border-collapse text-xs table-fixed min-w-[600px]">
+              <thead>
+                <tr className="bg-muted/80 divide-x divide-border border-b border-border">
+                  <th className="w-16 py-2 text-center font-bold font-mono">CO</th>
+                  {cols.map((col) => (
+                    <th key={col} className="py-2 text-center font-mono font-bold">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {outcomes.map((outcome, oIdx) => (
+                  <tr key={outcome.code} className="divide-x divide-border hover:bg-secondary/5 transition-colors">
+                    <td className="py-2 text-center font-bold font-mono bg-muted/20">{outcome.code}</td>
+                    {cols.map((col) => {
+                      const val = outcome.po_map?.[col] !== undefined ? String(outcome.po_map[col]) : "";
+                      return (
+                        <td key={col} className="p-1 text-center">
+                          <input
+                            type="text"
+                            maxLength={1}
+                            className="h-8 w-full border border-border/80 bg-background text-center font-bold rounded-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            placeholder="-"
+                            value={val}
+                            onChange={(e) => updateOutcomeMap(oIdx, col, e.target.value)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }

@@ -1035,38 +1035,94 @@ async function updateCourse(c: any) {
 
 async function syncCourse(db: D1Database, courseId: string, data: any) {
   await new CoursesRepository(db).update(courseId, data);
-  await syncChildren(db, "course_outcomes", "course_id", courseId, data.outcomes, ["code", "description", "bloom_level", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-  await syncChildren(db, "experiments", "course_id", courseId, data.experiments, ["number", "title", "description", "hours"]);
-  await syncChildren(db, "assessment_schemes", "course_id", courseId, data.assessments, ["component", "marks", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-  await syncChildren(db, "reference_books", "course_id", courseId, data.reference_books ?? data.references, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-  if (data.modules) {
-    await syncChildren(db, "modules", "course_id", courseId, data.modules, ["number", "title", "contact_hours", "content", "references"], undefined, async (module, row) => {
-      await syncChildren(db, "topics", "module_id", String(row.id), module.topics, ["title", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-    });
-  }
-}
 
-async function syncChildren(db: D1Database, table: string, parentColumn: string, parentId: string, items: any[] | undefined, fields: string[], mapItem = (item: any, _i: number) => item, afterUpsert?: (item: any, row: any) => Promise<void>) {
-  if (!items) return;
-  const existing = await db.prepare(`SELECT id FROM ${table} WHERE ${parentColumn} = ?`).bind(parentId).all<any>();
-  const seen = new Set<string>();
-  for (let i = 0; i < items.length; i++) {
-    const item = mapItem(items[i], i);
-    const columns = [parentColumn, ...fields].filter((field) => field === parentColumn || item[field] !== undefined);
-    const values = columns.map((field) => field === parentColumn ? parentId : normalizeValue(item[field]));
-    let row: any;
-    if (item.id) {
-      const assignments = columns.filter((field) => field !== parentColumn).map((field) => `"${field}" = ?`).join(", ");
-      row = await db.prepare(`UPDATE ${table} SET ${assignments} WHERE id = ? RETURNING *`).bind(...values.slice(1), item.id).first();
-    } else {
-      const quotedCols = columns.map((c) => `"${c}"`).join(", ");
-      row = await db.prepare(`INSERT INTO ${table} (${quotedCols}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING *`).bind(...values).first();
+  const statements: D1PreparedStatement[] = [];
+
+  const collectSyncStatements = async (
+    table: string,
+    parentColumn: string,
+    parentId: string,
+    items: any[] | undefined,
+    fields: string[],
+    mapItem = (item: any, _i: number) => item
+  ) => {
+    if (!items) return;
+    const existing = await db.prepare(`SELECT id FROM ${table} WHERE ${parentColumn} = ?`).bind(parentId).all<any>();
+    const existingIds = new Set((existing.results ?? []).map((r) => String(r.id)));
+    const seen = new Set<string>();
+
+    for (let i = 0; i < items.length; i++) {
+      const item = mapItem({ ...items[i] }, i);
+      item.id = item.id || crypto.randomUUID();
+      seen.add(String(item.id));
+
+      const columns = [parentColumn, ...fields].filter((field) => field === parentColumn || item[field] !== undefined);
+      const values = columns.map((field) => field === parentColumn ? parentId : normalizeValue(item[field]));
+
+      if (existingIds.has(String(item.id))) {
+        const assignments = columns.filter((field) => field !== parentColumn).map((field) => `"${field}" = ?`).join(", ");
+        statements.push(db.prepare(`UPDATE ${table} SET ${assignments} WHERE id = ?`).bind(...values.slice(1), item.id));
+      } else {
+        const quotedCols = columns.map((c) => `"${c}"`).join(", ");
+        const placeholders = columns.map(() => "?").join(", ");
+        statements.push(db.prepare(`INSERT INTO ${table} (id, ${quotedCols}) VALUES (?, ${placeholders})`).bind(item.id, ...values));
+      }
     }
-    if (row?.id) seen.add(String(row.id));
-    if (afterUpsert && row) await afterUpsert(item, row);
+
+    for (const id of existingIds) {
+      if (!seen.has(id)) {
+        statements.push(db.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id));
+      }
+    }
+  };
+
+  await collectSyncStatements("course_outcomes", "course_id", courseId, data.outcomes, ["code", "description", "bloom_level", "sort_order", "po_map"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
+  await collectSyncStatements("experiments", "course_id", courseId, data.experiments, ["number", "title", "description", "hours"]);
+  await collectSyncStatements("assessment_schemes", "course_id", courseId, data.assessments, ["component", "marks", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
+  await collectSyncStatements("reference_books", "course_id", courseId, data.reference_books ?? data.references, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
+
+  if (data.modules) {
+    const table = "modules";
+    const parentColumn = "course_id";
+    const parentId = courseId;
+    const items = data.modules;
+    const fields = ["number", "title", "contact_hours", "content", "references"];
+
+    const existing = await db.prepare(`SELECT id FROM ${table} WHERE ${parentColumn} = ?`).bind(parentId).all<any>();
+    const existingIds = new Set((existing.results ?? []).map((r) => String(r.id)));
+    const seen = new Set<string>();
+
+    for (let i = 0; i < items.length; i++) {
+      const item = { ...items[i] };
+      item.id = item.id || crypto.randomUUID();
+      seen.add(String(item.id));
+
+      const columns = [parentColumn, ...fields].filter((field) => field === parentColumn || item[field] !== undefined);
+      const values = columns.map((field) => field === parentColumn ? parentId : normalizeValue(item[field]));
+
+      if (existingIds.has(String(item.id))) {
+        const assignments = columns.filter((field) => field !== parentColumn).map((field) => `"${field}" = ?`).join(", ");
+        statements.push(db.prepare(`UPDATE ${table} SET ${assignments} WHERE id = ?`).bind(...values.slice(1), item.id));
+      } else {
+        const quotedCols = columns.map((c) => `"${c}"`).join(", ");
+        const placeholders = columns.map(() => "?").join(", ");
+        statements.push(db.prepare(`INSERT INTO ${table} (id, ${quotedCols}) VALUES (?, ${placeholders})`).bind(item.id, ...values));
+      }
+
+      if (item.topics) {
+        await collectSyncStatements("topics", "module_id", item.id, item.topics, ["title", "description", "sort_order"], (topic, tIdx) => ({ ...topic, sort_order: topic.sort_order ?? topic.order ?? tIdx + 1 }));
+      }
+    }
+
+    for (const id of existingIds) {
+      if (!seen.has(id)) {
+        statements.push(db.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id));
+      }
+    }
   }
-  for (const row of existing.results ?? []) {
-    if (!seen.has(String(row.id))) await db.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(row.id).run();
+
+  if (statements.length > 0) {
+    await db.batch(statements);
   }
 }
 
