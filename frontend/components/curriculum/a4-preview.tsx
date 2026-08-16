@@ -207,15 +207,15 @@ export function A4Preview({
   };
 
   return (
-    <div className="h-full w-full overflow-auto bg-zinc-200 p-0 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
-      <div className="w-full flex justify-center overflow-auto p-4 bg-zinc-200 dark:bg-zinc-950/40">
+    <div className="h-full w-full overflow-auto bg-zinc-300/60 p-6 sm:p-8 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
+      <div className="w-full flex justify-center items-center overflow-auto p-4 sm:p-6 bg-transparent">
         <div 
           ref={pageRef}
-          className="bg-white text-black shadow-lg font-serif border border-zinc-300 shrink-0 text-left" 
+          className="bg-white text-black shadow-2xl font-serif border border-zinc-400/70 shrink-0 text-left my-2 rounded-xs" 
           style={{ 
             width: '210mm',
             minHeight: '297mm',
-            padding: '20mm 15mm 20mm',
+            padding: '22mm 18mm 22mm',
             boxSizing: 'border-box',
             fontSize: '10pt', 
             lineHeight: '1.2' 

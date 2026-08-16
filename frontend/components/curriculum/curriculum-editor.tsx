@@ -376,6 +376,8 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
             <BloomsLevelEditor
               value={course.bloom_level || ""}
               onChange={(val) => updateCourse("bloom_level", val)}
+              outcomes={course.outcomes}
+              onOutcomesChange={(outcomes) => updateCourse("outcomes", outcomes)}
               disabled={isAcceptedState}
             />
           )}
@@ -489,34 +491,7 @@ function BloomLevelPicker({ value, onChange, disabled }: { value: string; onChan
   );
 }
 
-function BloomsLevelEditor({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  onChange: (val: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Panel
-      title="Bloom's Taxonomy Levels"
-      description="Select the cognitive domain levels (Remember, Understand, Apply, Analyze, Evaluate, Create) that apply to this subject."
-    >
-      <div className="p-6 rounded-sm border border-border bg-card shadow-xs space-y-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-foreground">
-          Subject Cognitive Domains
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Select one or multiple Bloom&apos;s levels below. Checked levels will be formatted bold with a tick mark in the official curriculum document and live preview.
-        </p>
-        <BloomLevelPicker value={value || "Apply"} onChange={onChange} disabled={disabled} />
-      </div>
-    </Panel>
-  );
-}
-
-function OutcomeEditor({
+function CoPoMatrixGrid({
   outcomes,
   onChange,
   disabled,
@@ -534,7 +509,7 @@ function OutcomeEditor({
     } else {
       newPoMap[key] = Number(cleanVal);
     }
-    const updated = outcomes.map((o, idx) => idx === index ? { ...o, po_map: newPoMap } : o);
+    const updated = outcomes.map((o, idx) => (idx === index ? { ...o, po_map: newPoMap } : o));
     onChange(updated);
   };
 
@@ -542,6 +517,123 @@ function OutcomeEditor({
   const psos = ["PSO1", "PSO2"];
   const cols = [...pos, ...psos];
 
+  if (!outcomes || outcomes.length === 0) {
+    return (
+      <div className="p-4 rounded border border-dashed border-border text-center text-xs font-semibold text-muted-foreground/70">
+        No course outcomes added yet. Add outcomes under the Course Outcomes tab to map POs/PSOs.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-xs font-serif font-bold text-foreground flex items-center gap-2">
+            Suggested CO - PO Articulation Matrix
+          </h4>
+          <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+            Map each Course Outcome (CO1, CO2...) to Program Outcomes (PO1-12) &amp; PSOs with weight levels (1: Low, 2: Medium, 3: High).
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 font-mono text-[9px] text-muted-foreground font-bold uppercase">
+          <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">1 = Low</span>
+          <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">2 = Med</span>
+          <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">3 = High</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto border border-border rounded-sm bg-background">
+        <table className="w-full border-collapse text-xs table-fixed min-w-[620px]">
+          <thead>
+            <tr className="bg-muted/80 divide-x divide-border border-b border-border">
+              <th className="w-20 py-2 text-center font-bold font-mono">CO</th>
+              {cols.map((col) => (
+                <th key={col} className="py-2 text-center font-mono font-bold text-[10px]">{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {outcomes.map((outcome, oIdx) => (
+              <tr key={outcome.code || oIdx} className="divide-x divide-border hover:bg-secondary/5 transition-colors">
+                <td className="py-2 px-1 text-center bg-muted/20">
+                  <span className="font-bold font-mono text-xs">{outcome.code || `CO${oIdx + 1}`}</span>
+                  {outcome.bloom_level && (
+                    <span className="block text-[8px] font-mono text-muted-foreground font-semibold uppercase">{outcome.bloom_level}</span>
+                  )}
+                </td>
+                {cols.map((col) => {
+                  const val = outcome.po_map?.[col] !== undefined ? String(outcome.po_map[col]) : "";
+                  return (
+                    <td key={col} className="p-1 text-center">
+                      <input
+                        type="text"
+                        maxLength={1}
+                        className="h-8 w-full border border-border/80 bg-background text-center font-bold rounded-sm text-xs transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        placeholder="-"
+                        value={val}
+                        onChange={(e) => updateOutcomeMap(oIdx, col, e.target.value)}
+                        disabled={disabled}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BloomsLevelEditor({
+  value,
+  onChange,
+  outcomes,
+  onOutcomesChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  outcomes?: CourseOutcome[];
+  onOutcomesChange?: (items: CourseOutcome[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Panel
+      title="Bloom's Taxonomy & CO-PO Articulation Matrix"
+      description="Select cognitive domain levels and map Course Outcomes to Program Outcomes (PO1-12) & PSOs."
+    >
+      <div className="p-6 rounded-sm border border-border bg-card shadow-xs space-y-6">
+        <div className="space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-foreground">
+            Subject Cognitive Domains
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Select one or multiple Bloom&apos;s levels below. Checked levels will be formatted bold with a tick mark in the official curriculum document and live preview.
+          </p>
+          <BloomLevelPicker value={value || "Apply"} onChange={onChange} disabled={disabled} />
+        </div>
+
+        {outcomes && onOutcomesChange && (
+          <div className="pt-6 border-t border-border space-y-3">
+            <CoPoMatrixGrid outcomes={outcomes} onChange={onOutcomesChange} disabled={disabled} />
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function OutcomeEditor({
+  outcomes,
+  onChange,
+  disabled,
+}: {
+  outcomes: CourseOutcome[];
+  onChange: (items: CourseOutcome[]) => void;
+  disabled?: boolean;
+}) {
   return (
     <Panel title="Course Outcomes" description="Outcomes must represent clear intellectual competencies, mapped directly to Bloom cognitive domains.">
       <Rows
@@ -560,46 +652,8 @@ function OutcomeEditor({
       />
 
       {(outcomes || []).length > 0 && (
-        <div className="mt-8 border-t border-border/80 pt-6 space-y-4">
-          <div className="pb-2">
-            <h4 className="text-sm font-serif font-bold text-foreground">Suggested CO-PO Articulation Matrix</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Map each Course Outcome (CO) to Program Outcomes (PO1-12) and Program Specific Outcomes (PSO1-2) with weight levels (1: Low, 2: Medium, 3: High).</p>
-          </div>
-          <div className="overflow-x-auto border border-border rounded-sm bg-background">
-            <table className="w-full border-collapse text-xs table-fixed min-w-[600px]">
-              <thead>
-                <tr className="bg-muted/80 divide-x divide-border border-b border-border">
-                  <th className="w-16 py-2 text-center font-bold font-mono">CO</th>
-                  {cols.map((col) => (
-                    <th key={col} className="py-2 text-center font-mono font-bold">{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {outcomes.map((outcome, oIdx) => (
-                  <tr key={outcome.code} className="divide-x divide-border hover:bg-secondary/5 transition-colors">
-                    <td className="py-2 text-center font-bold font-mono bg-muted/20">{outcome.code}</td>
-                    {cols.map((col) => {
-                      const val = outcome.po_map?.[col] !== undefined ? String(outcome.po_map[col]) : "";
-                      return (
-                        <td key={col} className="p-1 text-center">
-                          <input
-                            type="text"
-                            maxLength={1}
-                            className="h-8 w-full border border-border/80 bg-background text-center font-bold rounded-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                            placeholder="-"
-                            value={val}
-                            onChange={(e) => updateOutcomeMap(oIdx, col, e.target.value)}
-                            disabled={disabled}
-                          />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="mt-8 border-t border-border/80 pt-6">
+          <CoPoMatrixGrid outcomes={outcomes} onChange={onChange} disabled={disabled} />
         </div>
       )}
     </Panel>
