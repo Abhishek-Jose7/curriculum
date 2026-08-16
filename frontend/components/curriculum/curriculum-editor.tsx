@@ -79,8 +79,7 @@ const MACRO_CATEGORIES: MacroCategory[] = [
       { key: "comments", label: "Comments", icon: MessageSquare },
       { key: "reviewer-link", label: "Reviewer Link", icon: Copy },
       { key: "versions", label: "History", icon: ClipboardList },
-      { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch },
-      { key: "preview", label: "Live Preview", icon: Eye }
+      { key: "compare_previous", label: "Compare Previous Year", icon: FileSearch }
     ]
   }
 ];
@@ -207,13 +206,13 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
 
   return (
     <div className={cn(
-      "grid min-h-[calc(100vh-80px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
+      "grid h-[calc(100vh-110px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
       isExpanded ? "grid-cols-1" : "xl:grid-cols-2"
     )}>
       {/* Left Column Form Editor */}
-      <section className={cn("min-w-0 overflow-hidden bg-card", isExpanded ? "hidden" : "flex flex-col")}>
+      <section className={cn("min-w-0 h-full overflow-hidden bg-card flex flex-col", isExpanded && "hidden")}>
         {/* Course identity header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 p-5 bg-background/10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 p-5 bg-background/10 shrink-0">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-serif font-bold text-foreground flex items-center gap-1.5">
@@ -224,29 +223,35 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
               <span className={cn(
                 "inline-flex items-center rounded-sm px-2 py-0.5 font-mono text-[9px] font-bold border", 
                 validation.missing.length 
-                  ? "bg-amber-500/5 text-amber-600 dark:text-amber-400 border-amber-500/20" 
-                  : "bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  ? "bg-amber-500/10 text-amber-600 border-amber-500/20" 
+                  : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
               )}>
-                {validation.missing.length ? `${validation.missing.length} missing` : "Compliant"}
+                {validation.missing.length ? `${validation.missing.length} fields missing` : "Complete"}
               </span>
             </div>
-            <div className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-2 flex-wrap">
-              <span>Autosave: <strong className="text-foreground/70">{autosaveState}</strong></span>
-              <span>·</span>
-              <span>Revision {version}</span>
-              <span>·</span>
-              <span>Modified: {course.last_modified}</span>
-            </div>
+            <p className="text-xs text-muted-foreground/80 font-medium">
+              Academic Version {version} · Department ID #{course.department_id || "ENG"}
+            </p>
           </div>
-          
-          <div className="flex gap-2 self-start sm:self-center">
+          <div className="flex items-center gap-2">
             {!isAcceptedState ? (
               <>
-                <Button variant="secondary" onClick={() => void save(course)} className="h-8 text-[10px] font-bold tracking-tight uppercase border-border">
-                  <Save className="h-3 w-3 mr-1" /> Save draft
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => save(course)}
+                  className="h-9 px-3 text-xs font-bold border-border"
+                >
+                  Save Draft
                 </Button>
-                <Button onClick={() => void handleSubmitForReview()} disabled={submitting} className="h-8 text-[10px] font-bold tracking-tight uppercase">
-                  Submit review
+                <Button 
+                  size="sm" 
+                  onClick={() => void handleSubmitForReview()}
+                  disabled={submitting || validation.missing.length > 0}
+                  className="h-9 px-3 text-xs font-bold"
+                >
+                  {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Submit for Review
                 </Button>
               </>
             ) : (
@@ -258,7 +263,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         </div>
 
         {isAcceptedState && (
-          <div className="bg-emerald-500/10 border-b border-emerald-500/20 p-4 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-3">
+          <div className="bg-emerald-500/10 border-b border-emerald-500/20 p-4 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-3 shrink-0">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <div>
               <div className="font-serif font-bold text-sm">Syllabus Approved (Accepted State)</div>
@@ -272,7 +277,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         {/* Inline Submission Status Banner */}
         {submitStatus && (
           <div className={cn(
-            "p-3 text-xs font-semibold flex items-center justify-between border-b transition-all",
+            "p-3 text-xs font-semibold flex items-center justify-between border-b transition-all shrink-0",
             submitStatus.type === "success" 
               ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" 
               : "bg-destructive/10 text-destructive border-destructive/20"
@@ -291,7 +296,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         )}
 
         {/* Level 1: Macro Category Selector Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 bg-muted/40 border-b border-border/80 p-1.5 gap-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 bg-muted/40 border-b border-border/80 p-1.5 gap-1 shrink-0">
           {MACRO_CATEGORIES.map(cat => {
             const isCatActive = cat.id === activeCategory.id;
             return (
@@ -313,7 +318,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         </div>
 
         {/* Level 2: Sub-Section Chapter Tabs */}
-        <div className="flex flex-wrap gap-1.5 bg-secondary/10 p-2 border-b border-border/60">
+        <div className="flex flex-wrap gap-1.5 bg-secondary/10 p-2 border-b border-border/60 shrink-0">
           {activeCategory.tabs.map(tab => (
             <button 
               key={tab.key} 
@@ -332,7 +337,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         </div>
 
         {/* Sub-Editor Panels Workspace */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 max-h-[calc(100vh-270px)] scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
           {active === "basic" && (
             <Panel title="Basic Details" description="Official catalogue identification and course syllabus preamble.">
               <div className="grid gap-5 md:grid-cols-2">
@@ -401,21 +406,12 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
           {active === "reviewer-link" && <ReviewerLinkPanel course={course} />}
           {active === "versions" && <VersionsPanel course={course} onRestore={(newCourse) => setCourse(newCourse)} />}
           {active === "compare_previous" && <ComparePreviousPanel course={course} />}
-          {active === "preview" && (
-            <div className="h-full w-full overflow-hidden rounded border border-border shadow-sm">
-              <A4Preview 
-                course={course} 
-                isFullScreen={isExpanded}
-                onToggleFullScreen={() => setIsExpanded(prev => !prev)}
-              />
-            </div>
-          )}
         </div>
       </section>
  
       {/* Right Column Realistic Print Desk Preview */}
       <aside className={cn(
-        "min-w-0 border-l border-border bg-zinc-200 dark:bg-zinc-950/60",
+        "min-w-0 h-full border-l border-border bg-zinc-200 dark:bg-zinc-950/60 overflow-hidden",
         isExpanded ? "flex flex-col w-full h-full" : "hidden xl:flex xl:flex-col"
       )}>
         <div className="flex h-20 items-center justify-between border-b border-border px-5 bg-card shrink-0">
@@ -674,8 +670,7 @@ function ModuleEditor({ modules, onChange, disabled }: { modules: CourseModule[]
               <NumberField label="L-T Hours" value={module.contact_hours} onChange={(value) => updateModule(index, { contact_hours: value })} disabled={disabled} />
               <RemoveButton onClick={() => onChange(modules.filter((_, i) => i !== index))} disabled={disabled} />
             </div>
-            <TextArea label="Module Content Synopsis" value={module.content} onChange={(value) => updateModule(index, { content: value })} error={module.content.length < 20 ? "Syllabus content is too brief for official publication" : undefined} disabled={disabled} />
-            
+
             <div className="pt-3.5 space-y-3 border-t border-border/60">
               <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sub-Topic Sections</div>
               <div className="space-y-2">

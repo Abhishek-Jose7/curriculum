@@ -55,7 +55,12 @@ export default function LoginPage() {
         headers: tokenData.access ? { Authorization: `Bearer ${tokenData.access}` } : {}
       });
       if (meRes.ok) {
-        window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(await meRes.json()));
+        const userObj = await meRes.json();
+        window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userObj));
+        if (userObj.role === "ADMIN" || userObj.role === "HOD") {
+          window.location.href = "/admin";
+          return;
+        }
       }
       window.location.href = "/";
     } catch {

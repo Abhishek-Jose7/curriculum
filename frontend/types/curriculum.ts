@@ -92,6 +92,8 @@ export type CourseDraft = {
   id: string | number;
   code: string;
   title: string;
+  department_id?: string | number;
+  semester_id?: string | number;
   course_type: "THEORY" | "LAB" | "THEORY_LAB" | "PROJECT" | "ELECTIVE" | "INTERDISCIPLINARY";
   status: CourseStatus;
   faculty_name: string;
