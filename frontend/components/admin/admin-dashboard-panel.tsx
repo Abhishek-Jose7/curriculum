@@ -532,8 +532,9 @@ export function AdminDashboardPanel() {
                   const isApproved = ["APPROVED", "PUBLISHED", "LOCKED"].includes(c.status);
                   const isSubmitted = c.status === "SUBMITTED";
 
-                  // Faculty dropdown choices (faculty in this subject's department)
+                  // Faculty dropdown choices (faculty in this subject's department or all faculty fallback)
                   const deptFaculty = facultyList.filter(f => f.role === "FACULTY" && String(f.department_id) === String(c.department_id));
+                  const availableFaculty = deptFaculty.length > 0 ? deptFaculty : facultyList.filter(f => f.role === "FACULTY");
 
                   return (
                     <tr key={c.id} className="hover:bg-secondary/10 transition-colors">
@@ -565,7 +566,7 @@ export function AdminDashboardPanel() {
                           className="h-8 rounded border border-border bg-background px-2 text-xs font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer max-w-[200px]"
                         >
                           <option value="">-- No Teacher Assigned --</option>
-                          {deptFaculty.map((f) => (
+                          {availableFaculty.map((f) => (
                             <option key={f.id} value={f.id}>
                               {f.first_name || f.last_name ? `${f.first_name} ${f.last_name}` : f.email}
                             </option>

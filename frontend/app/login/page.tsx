@@ -11,13 +11,16 @@ const USER_STORAGE_KEY = "curriculum_user";
 
 const QUICK_LOGINS = [
   { label: "Administrator", role: "Admin", email: "admin@example.edu", password: "ChangeMe123!" },
-  { label: "Head of Department (HOD)", role: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
+  { label: "HOD (ECS)", role: "HOD", email: "hod_ecs@example.edu", password: "ChangeMe123!" },
+  { label: "HOD (COMP)", role: "HOD", email: "hod@example.edu", password: "ChangeMe123!" },
+  { label: "HOD (CSE)", role: "HOD", email: "hod_cse@example.edu", password: "ChangeMe123!" },
+  { label: "HOD (MECH)", role: "HOD", email: "hod_mech@example.edu", password: "ChangeMe123!" },
 ];
 
 const TEACHER_QUICK_LOGINS = [
-  { label: "Faculty (demo)", email: "faculty@example.edu", password: "ChangeMe123!" },
-  { label: "Rohan (CSE)", email: "rohan.faculty@example.edu", password: "ChangeMe123!" },
-  { label: "Meera (MECH)", email: "meera.faculty@example.edu", password: "ChangeMe123!" },
+  { label: "ECS Faculty (Prof. Rohan)", email: "rohan.faculty@example.edu", password: "ChangeMe123!" },
+  { label: "COMP Faculty (demo)", email: "faculty@example.edu", password: "ChangeMe123!" },
+  { label: "MECH Faculty (Prof. Meera)", email: "meera.faculty@example.edu", password: "ChangeMe123!" },
 ];
 
 export default function LoginPage() {
