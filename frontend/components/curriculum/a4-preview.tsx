@@ -2,7 +2,7 @@
 
 import type { CourseDraft } from "@/types/curriculum";
 import { cn } from "@/lib/utils";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { FileDown, Printer, Maximize2, Minimize2 } from "lucide-react";
 
 type Props = {
@@ -14,14 +14,18 @@ type Props = {
   onToggleFullScreen?: () => void;
 };
 
-export function A4Preview({ 
+export interface A4PreviewRef {
+  downloadAsDoc: () => void;
+}
+
+export const A4Preview = forwardRef<A4PreviewRef, Props>(function A4Preview({ 
   course, 
   selectedSection, 
   onSelectSection, 
   reviewMode = false,
   isFullScreen = false,
   onToggleFullScreen
-}: Props) {
+}, ref) {
   const isLab = course.course_type === "LAB";
   const hasLab = (course.practical_hours || 0) > 0 || isLab || course.course_type === "THEORY_LAB";
   
@@ -201,6 +205,8 @@ export function A4Preview({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  useImperativeHandle(ref, () => ({ downloadAsDoc }));
 
   const printSyllabus = () => {
     window.open(`/print/course/${course.id}/`, "_blank");
@@ -609,7 +615,7 @@ export function A4Preview({
       ` }} />
     </div>
   );
-}
+});
 
 function Selectable({ id, selected, onSelect, reviewMode, children }: { id: string; selected?: string; onSelect?: (id: string) => void; reviewMode: boolean; children: React.ReactNode }) {
   return (

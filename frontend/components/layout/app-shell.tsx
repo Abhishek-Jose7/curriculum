@@ -76,6 +76,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    // Auto-collapse sidebar when viewing a specific subject (but not the /courses listing itself)
+    if (pathname?.match(/^\/courses\/[^/]+$/)) {
+      setIsCollapsed(true);
+      localStorage.setItem("sidebar-collapsed", "true");
+    }
+  }, [pathname]);
+
   const toggleCollapse = () => {
     const next = !isCollapsed;
     setIsCollapsed(next);
