@@ -52,16 +52,16 @@ export function A4Preview({
   const getExperiments = (experiments: any[]) => {
     if (!experiments || experiments.length === 0) {
       return [
-        { number: 1, title: "Construction of Merkle tree and verification of transaction", references: "1,3", coMapped: "CO1", description: "" },
-        { number: 2, title: "MetaMask installation and transfer of ethers", references: "Useful Links: 6", coMapped: "CO3", description: "" },
-        { number: 3, title: "Solidity program: voting application", references: "Useful Links: 5", coMapped: "CO4", description: "" },
-        { number: 4, title: "Solidity program: crowd funding", references: "Useful Links: 5", coMapped: "CO4", description: "" },
-        { number: 5, title: "Solidity program: Transactions using Remix IDE and MetaMask", references: "Useful Links: 5", coMapped: "CO4", description: "" },
+        { number: 1, title: "Construction of Merkle tree and verification of transaction", references: "1, 3", coMapped: "CO1", description: "" },
+        { number: 2, title: "MetaMask installation and transfer of ethers", references: "1, 4", coMapped: "CO3", description: "" },
+        { number: 3, title: "Solidity program: voting application", references: "1, 2, 4", coMapped: "CO4", description: "" },
+        { number: 4, title: "Solidity program: crowd funding", references: "1, 4", coMapped: "CO4", description: "" },
+        { number: 5, title: "Solidity program: Transactions using Remix IDE and MetaMask", references: "1, 4", coMapped: "CO4", description: "" },
         { number: 6, title: "Implementation of PAXOS/PBFT algorithm", references: "6", coMapped: "CO5", description: "" },
         { number: 7, title: "Block mining and reward transfer to the account", references: "2", coMapped: "CO2", description: "" },
-        { number: 8, title: "Smart contract execution using Ganache", references: "Useful Links: 5", coMapped: "CO6", description: "" },
-        { number: 9, title: "Genesis block creation using Geth", references: "Useful Links: 8", coMapped: "CO5", description: "" },
-        { number: 10, title: "Hyperledger installation", references: "6 and Useful Links: 7", coMapped: "CO5", description: "" },
+        { number: 8, title: "Smart contract execution using Ganache", references: "1, 2", coMapped: "CO6", description: "" },
+        { number: 9, title: "Genesis block creation using Geth", references: "1, 3", coMapped: "CO5", description: "" },
+        { number: 10, title: "Hyperledger installation", references: "3, 4", coMapped: "CO5", description: "" },
         { number: 11, title: "Mini project – Development of smart contract for Dapps", references: "-", coMapped: "CO6", description: "" }
       ];
     }
@@ -215,7 +215,7 @@ export function A4Preview({
           style={{ 
             width: '210mm',
             minHeight: '297mm',
-            padding: '28mm 12mm 18mm',
+            padding: '20mm 15mm 20mm',
             boxSizing: 'border-box',
             fontSize: '10pt', 
             lineHeight: '1.2' 
@@ -255,27 +255,25 @@ export function A4Preview({
               <colgroup>
                 <col style={{ width: "15%" }} />
                 <col style={{ width: "23%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "7%" }} />
                 <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "11%" }} />
               </colgroup>
               <tbody>
                 <tr>
                   <td rowSpan={4} className="font-bold text-center">Course Code<br /><br />{course.code}</td>
                   <td rowSpan={4} className="font-bold text-center">Course Name<br /><br /><span className="font-bold">{course.title}</span></td>
-                  <td colSpan={4} className="font-bold text-center">Teaching Scheme<br />(Hrs/week)</td>
+                  <td colSpan={3} className="font-bold text-center">Teaching Scheme<br />(Hrs/week)</td>
                   <td colSpan={4} className="font-bold text-center">Credits Assigned</td>
                 </tr>
                 <tr>
                   <td className="font-bold text-center">L</td>
                   <td className="font-bold text-center">T</td>
                   <td className="font-bold text-center">P</td>
-                  <td className="font-bold text-center">SL</td>
                   <td className="font-bold text-center">L</td>
                   <td className="font-bold text-center">T</td>
                   <td className="font-bold text-center">P</td>
@@ -285,14 +283,13 @@ export function A4Preview({
                   <td className="text-center">{!isLab ? formatValue(course.lecture_hours) : "--"}</td>
                   <td className="text-center">{!isLab ? formatValue(course.tutorial_hours) : "--"}</td>
                   <td className="text-center">{formatValue(course.practical_hours)}</td>
-                  <td className="text-center">{!isLab ? formatValue(course.self_learning_hours) : "--"}</td>
                   <td className="text-center">{!isLab ? formatValue(course.lecture_credits) : "--"}</td>
                   <td className="text-center">{!isLab ? formatValue(course.tutorial_credits) : "--"}</td>
                   <td className="text-center">{formatValue(course.practical_credits)}</td>
                   <td className="text-center">{formatValue(course.credits)}</td>
                 </tr>
                 <tr>
-                  <td colSpan={8} style={{ padding: 0 }}>
+                  <td colSpan={7} style={{ padding: 0 }}>
                     <Selectable id="examination" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
                       <table className="w-full border-collapse m-0 exam-tbl" style={{ fontSize: "9pt", lineHeight: 1.1 }}>
                         <tbody>
@@ -310,44 +307,22 @@ export function A4Preview({
                             <td className="col-hdr" style={{ borderTop: "0.75pt solid #000" }}>Min</td>
                             <td className="col-hdr" style={{ borderTop: "0.75pt solid #000" }}>Max</td>
                           </tr>
-                          {isLab ? (
-                            <tr>
-                              <td className="text-center font-bold">Lab</td>
-                              <td className="text-center">{formatValue(course.internal_marks)}</td>
-                              <td className="text-center">--</td>
-                              <td className="text-center">--</td>
-                              <td className="text-center">--</td>
-                              <td className="text-center">{formatValue(course.internal_marks)}</td>
-                            </tr>
-                          ) : !hasLab ? (
-                            <tr>
-                              <td className="text-center font-bold">Theory</td>
-                              <td className="text-center">{formatValue(iseVal)}</td>
-                              <td className="text-center">{formatValue(mseVal)}</td>
-                              <td className="text-center">{formatValue(eseMinVal)}</td>
-                              <td className="text-center">{formatValue(eseMaxVal)}</td>
-                              <td className="text-center">{formatValue(theoryTotalVal)}</td>
-                            </tr>
-                          ) : (
-                            <>
-                              <tr>
-                                <td className="font-bold">Theory</td>
-                                <td className="text-center">{formatValue(iseVal)}</td>
-                                <td className="text-center">{formatValue(mseVal)}</td>
-                                <td className="text-center">{formatValue(eseMinVal)}</td>
-                                <td className="text-center">{formatValue(eseMaxVal)}</td>
-                                <td className="text-center">{formatValue(theoryTotalVal)}</td>
-                              </tr>
-                              <tr>
-                                <td className="font-bold">Lab</td>
-                                <td className="text-center">50</td>
-                                <td className="text-center">--</td>
-                                <td className="text-center">--</td>
-                                <td className="text-center">--</td>
-                                <td className="text-center">50</td>
-                              </tr>
-                            </>
-                          )}
+                          <tr>
+                            <td className="font-bold">Theory</td>
+                            <td className="text-center">{!isLab ? formatValue(iseVal) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(mseVal) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(eseMinVal) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(eseMaxVal) : "--"}</td>
+                            <td className="text-center">{!isLab ? formatValue(theoryTotalVal) : "--"}</td>
+                          </tr>
+                          <tr>
+                            <td className="font-bold">Lab</td>
+                            <td className="text-center">{hasLab ? formatValue(isLab ? course.internal_marks : 50) : "--"}</td>
+                            <td className="text-center">--</td>
+                            <td className="text-center">--</td>
+                            <td className="text-center">--</td>
+                            <td className="text-center">{hasLab ? formatValue(isLab ? course.internal_marks : 50) : "--"}</td>
+                          </tr>
                         </tbody>
                       </table>
                     </Selectable>
@@ -359,17 +334,22 @@ export function A4Preview({
 
           <Selectable id="outcomes" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
             <table className="preview-table">
-              <colgroup><col style={{ width: "28%" }} /><col style={{ width: "72%" }} /></colgroup>
+              <colgroup>
+                <col style={{ width: "28%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "62%" }} />
+              </colgroup>
               <tbody>
                 <tr>
-                  <td className="font-bold">Pre-requisite Course Codes</td>
+                  <td colSpan={2} className="font-bold">Pre-requisite Course Codes</td>
                   <td>{course.pre_requisites || "--"}</td>
                 </tr>
-                <tr><td colSpan={2}>After the successful completion students should be able to:</td></tr>
+                <tr><td colSpan={3}>After the successful completion students should be able to:</td></tr>
                 {(course.outcomes || []).map((outcome, idx) => (
                   <tr key={outcome.code}>
-                    {idx === 0 && <td className="font-bold" rowSpan={(course.outcomes || []).length || 1}>Course Outcomes</td>}
-                    <td><span className="font-bold">{outcome.code}</span>&ensp;{outcome.description}</td>
+                    {idx === 0 ? <td className="font-bold text-center" rowSpan={(course.outcomes || []).length || 1}>Course Outcomes</td> : null}
+                    <td className="font-bold text-center">{outcome.code}</td>
+                    <td>{outcome.description}</td>
                   </tr>
                 ))}
               </tbody>
@@ -485,7 +465,7 @@ export function A4Preview({
             const experimentsList = getExperiments(course.experiments);
             const expHeader = isTheoryOrTheoryLab 
               ? "Suggested List of Laboratory Experiments (Optional)" 
-              : "To be Taught in laboratory";
+              : "Suggested List of Experiments";
 
             return (
               <Selectable id="experiments" selected={selectedSection} onSelect={onSelectSection} reviewMode={reviewMode}>
@@ -499,10 +479,10 @@ export function A4Preview({
                   <tbody>
                     <tr><td colSpan={4} className="font-bold">{expHeader}</td></tr>
                     <tr>
-                      <th className="font-bold text-center">Exp. No.</th>
-                      <th style={{ textAlign: "left" }} className="font-bold">Topics</th>
-                      <th className="text-center font-bold">References</th>
-                      <th className="text-center font-bold">CO Mapped</th>
+                      <th className="font-bold text-center">Sr. No.</th>
+                      <th style={{ textAlign: "left" }} className="font-bold">Labs</th>
+                      <th className="text-center font-bold">Ref.</th>
+                      <th className="text-center font-bold">COs</th>
                     </tr>
                     {experimentsList.map((exp) => (
                       <tr key={exp.number}>

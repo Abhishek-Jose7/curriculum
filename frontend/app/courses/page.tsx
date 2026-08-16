@@ -162,7 +162,7 @@ export default function CoursesPage() {
                         <td className="px-4 py-4 text-center">
                           <div className="flex items-center justify-center gap-3">
                             <Link href={`/courses/${course.id}`} className="text-primary hover:underline font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                              <Eye className="h-3 w-3" /> Draft
+                              <Eye className="h-3 w-3" /> {["APPROVED", "PUBLISHED", "LOCKED"].includes(course.status) ? "View" : "Draft"}
                             </Link>
                             <Link href={`/review?course=${course.id}`} className="text-foreground/60 hover:text-primary hover:underline font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                               <FileSearch className="h-3 w-3" /> Review

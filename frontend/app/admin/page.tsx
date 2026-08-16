@@ -9,6 +9,7 @@ import { HodCurriculumWorkspace } from "@/components/admin/hod-curriculum-worksp
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context";
+import { AdminDashboardPanel } from "@/components/admin/admin-dashboard-panel";
 import {
   GraduationCap,
   Building2,
@@ -23,10 +24,11 @@ import {
   ShieldCheck,
   BookOpen,
   Users,
+  LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ActiveTab = "create-subject" | "department" | "academic-year" | "semester" | "department-curriculum" | "teachers";
+type ActiveTab = "dashboard" | "create-subject" | "department" | "academic-year" | "semester" | "department-curriculum" | "teachers";
 
 const YEAR_OF_STUDY = [
   { label: 'FE', fullName: 'First Year', sems: [1, 2], color: 'blue' },
@@ -61,7 +63,7 @@ const yearChipClasses: Record<string, string> = {
 
 function AdminContent() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<ActiveTab>("department");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
 
   useEffect(() => {
     if (user?.role === "HOD") {
@@ -497,6 +499,16 @@ function AdminContent() {
               ) : (
                 <>
                   <button
+                    onClick={() => setActiveTab("dashboard")}
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
+                      activeTab === "dashboard" ? "bg-secondary/40 text-primary font-serif-editorial text-[13px] border-l-primary rounded-l-none" : "hover:bg-muted text-foreground/75 hover:text-foreground"
+                    )}
+                  >
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    Overview Dashboard
+                  </button>
+                  <button
                     onClick={() => setActiveTab("department")}
                     className={cn(
                       "flex w-full items-center gap-3 px-3 py-2.5 rounded-sm text-xs font-bold transition-all text-left border border-transparent active:scale-[0.98]",
@@ -552,6 +564,8 @@ function AdminContent() {
 
             {/* Main content ledger views */}
             <main className="space-y-6">
+              {activeTab === "dashboard" && <AdminDashboardPanel />}
+
               {activeTab === "department-curriculum" && <HodCurriculumWorkspace />}
 
               {activeTab === "create-subject" && <CreateSubjectPanel onGoToTeachers={() => setActiveTab("teachers")} />}

@@ -203,6 +203,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
   }
 
   const updateCourse = <K extends keyof CourseDraft>(key: K, value: CourseDraft[K]) => setCourse((current) => current ? ({ ...current, [key]: value } as CourseDraft) : null);
+  const isAcceptedState = course.status === "APPROVED" || course.status === "PUBLISHED" || course.status === "LOCKED";
 
   return (
     <div className={cn(
@@ -239,14 +240,34 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
           </div>
           
           <div className="flex gap-2 self-start sm:self-center">
-            <Button variant="secondary" onClick={() => void save(course)} className="h-8 text-[10px] font-bold tracking-tight uppercase border-border">
-              <Save className="h-3 w-3 mr-1" /> Save draft
-            </Button>
-            <Button onClick={() => void handleSubmitForReview()} disabled={submitting} className="h-8 text-[10px] font-bold tracking-tight uppercase">
-              Submit review
-            </Button>
+            {!isAcceptedState ? (
+              <>
+                <Button variant="secondary" onClick={() => void save(course)} className="h-8 text-[10px] font-bold tracking-tight uppercase border-border">
+                  <Save className="h-3 w-3 mr-1" /> Save draft
+                </Button>
+                <Button onClick={() => void handleSubmitForReview()} disabled={submitting} className="h-8 text-[10px] font-bold tracking-tight uppercase">
+                  Submit review
+                </Button>
+              </>
+            ) : (
+              <span className="inline-flex items-center rounded-sm bg-emerald-500/10 text-emerald-600 border border-emerald-500/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+                Accepted Syllabus
+              </span>
+            )}
           </div>
         </div>
+
+        {isAcceptedState && (
+          <div className="bg-emerald-500/10 border-b border-emerald-500/20 p-4 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div>
+              <div className="font-serif font-bold text-sm">Syllabus Approved (Accepted State)</div>
+              <p className="mt-0.5 font-medium text-emerald-700/80 dark:text-emerald-300/80">
+                This course syllabus has been signed off and approved by the HOD/Admin. It is now locked in read-only accepted mode.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Inline Submission Status Banner */}
         {submitStatus && (
@@ -315,13 +336,13 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
           {active === "basic" && (
             <Panel title="Basic Details" description="Official catalogue identification and course syllabus preamble.">
               <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Subject Code" value={course.code} onChange={(value) => updateCourse("code", value)} error={!course.code ? "Required" : undefined} />
-                <Field label="Subject Name" value={course.title} onChange={(value) => updateCourse("title", value)} error={!course.title ? "Required" : undefined} />
-                <Select label="Course Type" value={course.course_type} onChange={(value) => updateCourse("course_type", value as CourseDraft["course_type"])} options={["THEORY", "LAB", "THEORY_LAB", "PROJECT", "ELECTIVE", "INTERDISCIPLINARY"]} />
-                <Field label="Faculty Coordinator Assigned" value={course.faculty_name} onChange={(value) => updateCourse("faculty_name", value)} />
-                <TextArea label="Prerequisites Coursework" value={course.pre_requisites} onChange={(value) => updateCourse("pre_requisites", value)} />
-                <TextArea label="Syllabus Preamble / Introduction" value={course.syllabus_intro} onChange={(value) => updateCourse("syllabus_intro", value)} />
-                <TextArea className="md:col-span-2" label="Course Learning Objectives" value={course.objectives} onChange={(value) => updateCourse("objectives", value)} error={course.objectives.length < 20 ? "Objective definitions too brief" : undefined} />
+                <Field label="Subject Code" value={course.code} onChange={(value) => updateCourse("code", value)} error={!course.code ? "Required" : undefined} disabled={isAcceptedState} />
+                <Field label="Subject Name" value={course.title} onChange={(value) => updateCourse("title", value)} error={!course.title ? "Required" : undefined} disabled={isAcceptedState} />
+                <Select label="Course Type" value={course.course_type} onChange={(value) => updateCourse("course_type", value as CourseDraft["course_type"])} options={["THEORY", "LAB", "THEORY_LAB", "PROJECT", "ELECTIVE", "INTERDISCIPLINARY"]} disabled={isAcceptedState} />
+                <Field label="Faculty Coordinator Assigned" value={course.faculty_name} onChange={(value) => updateCourse("faculty_name", value)} disabled={isAcceptedState} />
+                <TextArea label="Prerequisites Coursework" value={course.pre_requisites} onChange={(value) => updateCourse("pre_requisites", value)} disabled={isAcceptedState} />
+                <TextArea label="Syllabus Preamble / Introduction" value={course.syllabus_intro} onChange={(value) => updateCourse("syllabus_intro", value)} disabled={isAcceptedState} />
+                <TextArea className="md:col-span-2" label="Course Learning Objectives" value={course.objectives} onChange={(value) => updateCourse("objectives", value)} error={course.objectives.length < 20 ? "Objective definitions too brief" : undefined} disabled={isAcceptedState} />
               </div>
             </Panel>
           )}
@@ -329,14 +350,14 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
           {active === "teaching" && (
             <Panel title="Teaching Scheme" description="Lecture, tutorial, and practical contact loads, with cumulative credit definitions.">
               <div className="grid gap-5 md:grid-cols-4">
-                <NumberField label="Lecture Hours/Week" value={course.lecture_hours} onChange={(value) => updateCourse("lecture_hours", value)} />
-                <NumberField label="Tutorial Hours/Week" value={course.tutorial_hours} onChange={(value) => updateCourse("tutorial_hours", value)} />
-                <NumberField label="Practical Hours/Week" value={course.practical_hours} onChange={(value) => updateCourse("practical_hours", value)} />
-                <NumberField label="Self Learning Hours/Week" value={course.self_learning_hours || 0} onChange={(value) => updateCourse("self_learning_hours", value)} />
-                <NumberField label="Lecture Credits" value={course.lecture_credits} step="0.5" onChange={(value) => updateCourse("lecture_credits", value)} />
-                <NumberField label="Tutorial Credits" value={course.tutorial_credits} step="0.5" onChange={(value) => updateCourse("tutorial_credits", value)} />
-                <NumberField label="Practical Credits" value={course.practical_credits} step="0.5" onChange={(value) => updateCourse("practical_credits", value)} />
-                <NumberField label="Total Assigned Credits" value={course.credits} step="0.5" onChange={(value) => updateCourse("credits", value)} />
+                <NumberField label="Lecture Hours/Week" value={course.lecture_hours} onChange={(value) => updateCourse("lecture_hours", value)} disabled={isAcceptedState} />
+                <NumberField label="Tutorial Hours/Week" value={course.tutorial_hours} onChange={(value) => updateCourse("tutorial_hours", value)} disabled={isAcceptedState} />
+                <NumberField label="Practical Hours/Week" value={course.practical_hours} onChange={(value) => updateCourse("practical_hours", value)} disabled={isAcceptedState} />
+                <NumberField label="Self Learning Hours/Week" value={course.self_learning_hours || 0} onChange={(value) => updateCourse("self_learning_hours", value)} disabled={isAcceptedState} />
+                <NumberField label="Lecture Credits" value={course.lecture_credits} step="0.5" onChange={(value) => updateCourse("lecture_credits", value)} disabled={isAcceptedState} />
+                <NumberField label="Tutorial Credits" value={course.tutorial_credits} step="0.5" onChange={(value) => updateCourse("tutorial_credits", value)} disabled={isAcceptedState} />
+                <NumberField label="Practical Credits" value={course.practical_credits} step="0.5" onChange={(value) => updateCourse("practical_credits", value)} disabled={isAcceptedState} />
+                <NumberField label="Total Assigned Credits" value={course.credits} step="0.5" onChange={(value) => updateCourse("credits", value)} disabled={isAcceptedState} />
               </div>
             </Panel>
           )}
@@ -344,9 +365,9 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
           {active === "exam" && (
             <Panel title="Examination Scheme" description="Assessment scheme marks, external test durations, and official passing rules.">
               <div className="grid gap-5 md:grid-cols-3">
-                <NumberField label="Internal Marks" value={course.internal_marks} onChange={(value) => updateCourse("internal_marks", value)} />
-                <NumberField label="External Exam Marks" value={course.external_marks} onChange={(value) => updateCourse("external_marks", value)} />
-                <NumberField label="ESE Duration (Hours)" value={course.duration_hours} step="0.5" onChange={(value) => updateCourse("duration_hours", value)} />
+                <NumberField label="Internal Marks" value={course.internal_marks} onChange={(value) => updateCourse("internal_marks", value)} disabled={isAcceptedState} />
+                <NumberField label="External Exam Marks" value={course.external_marks} onChange={(value) => updateCourse("external_marks", value)} disabled={isAcceptedState} />
+                <NumberField label="ESE Duration (Hours)" value={course.duration_hours} step="0.5" onChange={(value) => updateCourse("duration_hours", value)} disabled={isAcceptedState} />
               </div>
             </Panel>
           )}
@@ -355,21 +376,23 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
             <BloomsLevelEditor
               value={course.bloom_level || ""}
               onChange={(val) => updateCourse("bloom_level", val)}
+              disabled={isAcceptedState}
             />
           )}
           {active === "outcomes" && (
             <OutcomeEditor 
               outcomes={course.outcomes} 
               onChange={(outcomes) => updateCourse("outcomes", outcomes)} 
+              disabled={isAcceptedState}
             />
           )}
-          {active === "modules" && <ModuleEditor modules={course.modules} onChange={(modules) => updateCourse("modules", modules)} />}
-          {active === "experiments" && <ExperimentEditor experiments={course.experiments} onChange={(experiments) => updateCourse("experiments", experiments)} />}
-          {active === "assessments" && <AssessmentEditor assessments={course.assessments} onChange={(assessments) => updateCourse("assessments", assessments)} />}
+          {active === "modules" && <ModuleEditor modules={course.modules} onChange={(modules) => updateCourse("modules", modules)} disabled={isAcceptedState} />}
+          {active === "experiments" && <ExperimentEditor experiments={course.experiments} onChange={(experiments) => updateCourse("experiments", experiments)} disabled={isAcceptedState} />}
+          {active === "assessments" && <AssessmentEditor assessments={course.assessments} onChange={(assessments) => updateCourse("assessments", assessments)} disabled={isAcceptedState} />}
           {active === "references" && (
             <div className="space-y-6">
-              <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} />
-              <OnlineResourcesEditor resources={course.online_resources || []} onChange={(resources) => updateCourse("online_resources", resources)} />
+              <ReferenceEditor references={course.reference_books || []} onChange={(references) => updateCourse("reference_books", references)} disabled={isAcceptedState} />
+              <OnlineResourcesEditor resources={course.online_resources || []} onChange={(resources) => updateCourse("online_resources", resources)} disabled={isAcceptedState} />
             </div>
           )}
           {active === "comments" && <CommentsPanel course={course} />}
@@ -416,7 +439,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
 
 const BLOOMS_LEVELS = ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"] as const;
 
-function BloomLevelPicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+function BloomLevelPicker({ value, onChange, disabled }: { value: string; onChange: (val: string) => void; disabled?: boolean }) {
   const currentLevels = (value || "").split(",").map((s) => s.trim()).filter(Boolean);
 
   const toggleLevel = (level: string) => {
@@ -447,11 +470,13 @@ function BloomLevelPicker({ value, onChange }: { value: string; onChange: (val: 
               key={level}
               type="button"
               onClick={() => toggleLevel(level)}
+              disabled={disabled}
               className={cn(
-                "px-3 py-1.5 text-xs transition-colors select-none font-medium cursor-pointer flex items-center gap-1",
+                "px-3 py-1.5 text-xs transition-colors select-none font-medium flex items-center gap-1",
                 isSelected
                   ? "bg-primary/10 text-primary font-bold"
-                  : "bg-background text-muted-foreground hover:bg-muted/50"
+                  : "bg-background text-muted-foreground hover:bg-muted/50",
+                disabled && "opacity-50 cursor-not-allowed pointer-events-none"
               )}
             >
               <span>{level}</span>
@@ -467,9 +492,11 @@ function BloomLevelPicker({ value, onChange }: { value: string; onChange: (val: 
 function BloomsLevelEditor({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (val: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <Panel
@@ -483,7 +510,7 @@ function BloomsLevelEditor({
         <p className="text-xs text-muted-foreground leading-relaxed">
           Select one or multiple Bloom&apos;s levels below. Checked levels will be formatted bold with a tick mark in the official curriculum document and live preview.
         </p>
-        <BloomLevelPicker value={value || "Apply"} onChange={onChange} />
+        <BloomLevelPicker value={value || "Apply"} onChange={onChange} disabled={disabled} />
       </div>
     </Panel>
   );
@@ -492,9 +519,11 @@ function BloomsLevelEditor({
 function OutcomeEditor({
   outcomes,
   onChange,
+  disabled,
 }: {
   outcomes: CourseOutcome[];
   onChange: (items: CourseOutcome[]) => void;
+  disabled?: boolean;
 }) {
   const updateOutcomeMap = (index: number, key: string, val: string) => {
     const cleanVal = val.replace(/[^1-3]/g, "");
@@ -520,11 +549,12 @@ function OutcomeEditor({
         addLabel="Add Course Outcome"
         newItem={{ code: `CO${(outcomes || []).length + 1}`, description: "", bloom_level: "", order: (outcomes || []).length + 1, po_map: {} }}
         onChange={onChange}
+        disabled={disabled}
         render={(item, index, update) => (
           <div className="grid gap-4 md:grid-cols-[90px_1fr_auto] items-start p-4 rounded-sm border border-border/80 bg-card shadow-xs">
-            <Field label="CO" value={item.code} onChange={(value) => update({ code: value })} />
-            <TextArea label="Description of Competency" value={item.description} onChange={(value) => update({ description: value })} error={item.description.length < 12 ? "Outcome description is too short" : undefined} />
-            <RemoveButton onClick={() => onChange((outcomes || []).filter((_, i) => i !== index))} />
+            <Field label="CO" value={item.code} onChange={(value) => update({ code: value })} disabled={disabled} />
+            <TextArea label="Description of Competency" value={item.description} onChange={(value) => update({ description: value })} error={item.description.length < 12 ? "Outcome description is too short" : undefined} disabled={disabled} />
+            <RemoveButton onClick={() => onChange((outcomes || []).filter((_, i) => i !== index))} disabled={disabled} />
           </div>
         )}
       />
@@ -556,10 +586,11 @@ function OutcomeEditor({
                           <input
                             type="text"
                             maxLength={1}
-                            className="h-8 w-full border border-border/80 bg-background text-center font-bold rounded-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20"
+                            className="h-8 w-full border border-border/80 bg-background text-center font-bold rounded-sm transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                             placeholder="-"
                             value={val}
                             onChange={(e) => updateOutcomeMap(oIdx, col, e.target.value)}
+                            disabled={disabled}
                           />
                         </td>
                       );
@@ -575,7 +606,7 @@ function OutcomeEditor({
   );
 }
 
-function ModuleEditor({ modules, onChange }: { modules: CourseModule[]; onChange: (items: CourseModule[]) => void }) {
+function ModuleEditor({ modules, onChange, disabled }: { modules: CourseModule[]; onChange: (items: CourseModule[]) => void; disabled?: boolean }) {
   const updateModule = (index: number, patch: Partial<CourseModule>) => onChange(modules.map((item, i) => i === index ? { ...item, ...patch } : item));
   return (
     <Panel title="Modules" description="Structured modules detailing lecture units, contact durations, and specific syllabus sub-topics.">
@@ -583,85 +614,89 @@ function ModuleEditor({ modules, onChange }: { modules: CourseModule[]; onChange
         {modules.map((module, index) => (
           <div key={index} className="rounded border border-border bg-card p-5 space-y-4 shadow-sm hover:border-primary/20 transition-all duration-150">
             <div className="grid gap-4 md:grid-cols-[90px_1fr_120px_120px_auto] items-end">
-              <NumberField label="§ Module No." value={module.number} onChange={(value) => updateModule(index, { number: value })} />
-              <Field label="Module Heading Title" value={module.title} onChange={(value) => updateModule(index, { title: value })} />
-              <Field label="References (e.g. 1,2)" value={module.references || ""} onChange={(value) => updateModule(index, { references: value })} />
-              <NumberField label="L-T Hours" value={module.contact_hours} onChange={(value) => updateModule(index, { contact_hours: value })} />
-              <RemoveButton onClick={() => onChange(modules.filter((_, i) => i !== index))} />
+              <NumberField label="§ Module No." value={module.number} onChange={(value) => updateModule(index, { number: value })} disabled={disabled} />
+              <Field label="Module Heading Title" value={module.title} onChange={(value) => updateModule(index, { title: value })} disabled={disabled} />
+              <Field label="References (e.g. 1,2)" value={module.references || ""} onChange={(value) => updateModule(index, { references: value })} disabled={disabled} />
+              <NumberField label="L-T Hours" value={module.contact_hours} onChange={(value) => updateModule(index, { contact_hours: value })} disabled={disabled} />
+              <RemoveButton onClick={() => onChange(modules.filter((_, i) => i !== index))} disabled={disabled} />
             </div>
-            <TextArea label="Module Content Synopsis" value={module.content} onChange={(value) => updateModule(index, { content: value })} error={module.content.length < 20 ? "Syllabus content is too brief for official publication" : undefined} />
+            <TextArea label="Module Content Synopsis" value={module.content} onChange={(value) => updateModule(index, { content: value })} error={module.content.length < 20 ? "Syllabus content is too brief for official publication" : undefined} disabled={disabled} />
             
             <div className="pt-3.5 space-y-3 border-t border-border/60">
               <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sub-Topic Sections</div>
               <div className="space-y-2">
                 {(module.topics ?? []).map((topic, topicIndex) => (
                   <div key={topicIndex} className="grid gap-3 md:grid-cols-[200px_1fr_auto] items-end p-4 rounded-sm bg-background border border-border/60">
-                    <Field label="Topic Title" value={topic.title} onChange={(value) => updateModule(index, { topics: (module.topics ?? []).map((t, i) => i === topicIndex ? { ...t, title: value } : t) })} />
-                    <Field label="Detail Description" value={topic.description} onChange={(value) => updateModule(index, { topics: (module.topics ?? []).map((t, i) => i === topicIndex ? { ...t, description: value } : t) })} />
-                    <RemoveButton onClick={() => updateModule(index, { topics: (module.topics ?? []).filter((_, i) => i !== topicIndex) })} />
+                    <Field label="Topic Title" value={topic.title} onChange={(value) => updateModule(index, { topics: (module.topics ?? []).map((t, i) => i === topicIndex ? { ...t, title: value } : t) })} disabled={disabled} />
+                    <Field label="Detail Description" value={topic.description} onChange={(value) => updateModule(index, { topics: (module.topics ?? []).map((t, i) => i === topicIndex ? { ...t, description: value } : t) })} disabled={disabled} />
+                    <RemoveButton onClick={() => updateModule(index, { topics: (module.topics ?? []).filter((_, i) => i !== topicIndex) })} disabled={disabled} />
                   </div>
                 ))}
               </div>
-              <Button variant="outline" size="sm" onClick={() => updateModule(index, { topics: [...(module.topics ?? []), { title: "", description: "" }] })} className="h-8 text-[10px]">
-                <Plus className="h-3 w-3 mr-1" /> Add Sub-Topic
-              </Button>
+              {!disabled && (
+                <Button variant="outline" size="sm" onClick={() => updateModule(index, { topics: [...(module.topics ?? []), { title: "", description: "" }] })} className="h-8 text-[10px]">
+                  <Plus className="h-3 w-3 mr-1" /> Add Sub-Topic
+                </Button>
+              )}
             </div>
           </div>
         ))}
-        <Button variant="secondary" onClick={() => onChange([...modules, { number: modules.length + 1, title: "", contact_hours: 0, content: "", topics: [] }])} className="w-full">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add Syllabus Module Block
-        </Button>
+        {!disabled && (
+          <Button variant="secondary" onClick={() => onChange([...modules, { number: modules.length + 1, title: "", contact_hours: 0, content: "", topics: [] }])} className="w-full">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Syllabus Module Block
+          </Button>
+        )}
       </div>
     </Panel>
   );
 }
 
-function ExperimentEditor({ experiments, onChange }: { experiments: Experiment[]; onChange: (items: Experiment[]) => void }) {
+function ExperimentEditor({ experiments, onChange, disabled }: { experiments: Experiment[]; onChange: (items: Experiment[]) => void; disabled?: boolean }) {
   return (
     <Panel title="Experiments/Tutorials" description="Practical laboratory exercises or numeric tutorial chapters.">
-      <Rows items={experiments} addLabel="Add Experiment Block" newItem={{ number: experiments.length + 1, title: "", description: "", hours: 2 }} onChange={onChange} render={(item, index, update) => (
+      <Rows items={experiments} addLabel="Add Experiment Block" newItem={{ number: experiments.length + 1, title: "", description: "", hours: 2 }} onChange={onChange} disabled={disabled} render={(item, index, update) => (
         <div className="grid gap-3 md:grid-cols-[90px_1fr_120px_auto] items-end">
-          <NumberField label="No." value={item.number} onChange={(value) => update({ number: value })} />
-          <TextArea label="Experiment Title &amp; Practical Objective (New line separates title/details)" value={`${item.title}\n${item.description}`} onChange={(value) => { const [title, ...rest] = value.split("\n"); update({ title, description: rest.join("\n") }); }} />
-          <NumberField label="Contact Hours" value={item.hours} onChange={(value) => update({ hours: value })} />
-          <RemoveButton onClick={() => onChange(experiments.filter((_, i) => i !== index))} />
+          <NumberField label="No." value={item.number} onChange={(value) => update({ number: value })} disabled={disabled} />
+          <TextArea label="Experiment Title &amp; Practical Objective (New line separates title/details)" value={`${item.title}\n${item.description}`} onChange={(value) => { const [title, ...rest] = value.split("\n"); update({ title, description: rest.join("\n") }); }} disabled={disabled} />
+          <NumberField label="Contact Hours" value={item.hours} onChange={(value) => update({ hours: value })} disabled={disabled} />
+          <RemoveButton onClick={() => onChange(experiments.filter((_, i) => i !== index))} disabled={disabled} />
         </div>
       )} />
     </Panel>
   );
 }
 
-function AssessmentEditor({ assessments, onChange }: { assessments: Assessment[]; onChange: (items: Assessment[]) => void }) {
+function AssessmentEditor({ assessments, onChange, disabled }: { assessments: Assessment[]; onChange: (items: Assessment[]) => void; disabled?: boolean }) {
   return (
     <Panel title="Assessments" description="Detailed evaluation mechanisms and marks structures.">
-      <Rows items={assessments} addLabel="Add Assessment Component" newItem={{ component: "", marks: 0, description: "" }} onChange={onChange} render={(item, index, update) => (
+      <Rows items={assessments} addLabel="Add Assessment Component" newItem={{ component: "", marks: 0, description: "" }} onChange={onChange} disabled={disabled} render={(item, index, update) => (
         <div className="grid gap-3 md:grid-cols-[220px_120px_1fr_auto] items-end">
-          <Field label="Assessment Category" value={item.component} onChange={(value) => update({ component: value })} />
-          <NumberField label="Maximum Marks" value={item.marks} onChange={(value) => update({ marks: value })} />
-          <Field label="Component Description" value={item.description} onChange={(value) => update({ description: value })} />
-          <RemoveButton onClick={() => onChange(assessments.filter((_, i) => i !== index))} />
+          <Field label="Assessment Category" value={item.component} onChange={(value) => update({ component: value })} disabled={disabled} />
+          <NumberField label="Maximum Marks" value={item.marks} onChange={(value) => update({ marks: value })} disabled={disabled} />
+          <Field label="Component Description" value={item.description} onChange={(value) => update({ description: value })} disabled={disabled} />
+          <RemoveButton onClick={() => onChange(assessments.filter((_, i) => i !== index))} disabled={disabled} />
         </div>
       )} />
     </Panel>
   );
 }
 
-function ReferenceEditor({ references, onChange }: { references: ReferenceBook[]; onChange: (items: ReferenceBook[]) => void }) {
+function ReferenceEditor({ references, onChange, disabled }: { references: ReferenceBook[]; onChange: (items: ReferenceBook[]) => void; disabled?: boolean }) {
   return (
     <Panel title="References" description="Official textbooks, recommended reference books, and technical library resources.">
-      <Rows items={references} addLabel="Add Reference Resource" newItem={{ title: "", authors: "", publisher: "", edition: "", year: "", is_textbook: false }} onChange={onChange} render={(item, index, update) => (
+      <Rows items={references} addLabel="Add Reference Resource" newItem={{ title: "", authors: "", publisher: "", edition: "", year: "", is_textbook: false }} onChange={onChange} disabled={disabled} render={(item, index, update) => (
         <div className="grid gap-4 md:grid-cols-3 items-end">
-          <Field label="Resource Book Title" value={item.title} onChange={(value) => update({ title: value })} />
-          <Field label="Authors" value={item.authors} onChange={(value) => update({ authors: value })} />
-          <Field label="Publisher House" value={item.publisher} onChange={(value) => update({ publisher: value })} />
-          <Field label="Edition" value={item.edition} onChange={(value) => update({ edition: value })} />
-          <Field label="Year" value={item.year} onChange={(value) => update({ year: value })} />
+          <Field label="Resource Book Title" value={item.title} onChange={(value) => update({ title: value })} disabled={disabled} />
+          <Field label="Authors" value={item.authors} onChange={(value) => update({ authors: value })} disabled={disabled} />
+          <Field label="Publisher House" value={item.publisher} onChange={(value) => update({ publisher: value })} disabled={disabled} />
+          <Field label="Edition" value={item.edition} onChange={(value) => update({ edition: value })} disabled={disabled} />
+          <Field label="Year" value={item.year} onChange={(value) => update({ year: value })} disabled={disabled} />
           <div className="flex items-center justify-between gap-3 h-10 border border-border bg-background px-3.5 rounded-sm">
             <label className="flex items-center gap-2 text-[10px] font-bold text-foreground/75 uppercase tracking-wider select-none cursor-pointer">
-              <input type="checkbox" checked={item.is_textbook} onChange={(event) => update({ is_textbook: event.target.checked })} className="rounded text-primary border-border cursor-pointer" />
+              <input type="checkbox" checked={item.is_textbook} onChange={(event) => update({ is_textbook: event.target.checked })} className="rounded text-primary border-border cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={disabled} />
               Core Textbook
             </label>
-            <RemoveButton onClick={() => onChange(references.filter((_, i) => i !== index))} />
+            <RemoveButton onClick={() => onChange(references.filter((_, i) => i !== index))} disabled={disabled} />
           </div>
         </div>
       )} />
@@ -955,7 +990,7 @@ function VersionsPanel({ course, onRestore }: { course: CourseDraft; onRestore: 
   );
 }
 
-function Rows<T>({ items, newItem, addLabel, onChange, render }: { items: T[]; newItem: T; addLabel: string; onChange: (items: T[]) => void; render: (item: T, index: number, update: (patch: Partial<T>) => void) => React.ReactNode }) {
+function Rows<T>({ items, newItem, addLabel, onChange, render, disabled }: { items: T[]; newItem: T; addLabel: string; onChange: (items: T[]) => void; render: (item: T, index: number, update: (patch: Partial<T>) => void) => React.ReactNode; disabled?: boolean }) {
   return (
     <div className="space-y-3.5">
       {items.map((item, index) => (
@@ -963,9 +998,11 @@ function Rows<T>({ items, newItem, addLabel, onChange, render }: { items: T[]; n
           {render(item, index, (patch) => onChange(items.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row)))}
         </div>
       ))}
-      <Button variant="secondary" onClick={() => onChange([...items, newItem])} className="w-full h-10 border-border">
-        <Plus className="h-3.5 w-3.5 mr-1.5" />{addLabel}
-      </Button>
+      {!disabled && (
+        <Button variant="secondary" onClick={() => onChange([...items, newItem])} className="w-full h-10 border-border">
+          <Plus className="h-3.5 w-3.5 mr-1.5" />{addLabel}
+        </Button>
+      )}
     </div>
   );
 }
@@ -982,17 +1019,18 @@ function Panel({ title, description, children }: { title: string; description: s
   );
 }
 
-function Field({ label, value, onChange, error }: { label: string; value: string; onChange: (value: string) => void; error?: string }) {
+function Field({ label, value, onChange, error, disabled }: { label: string; value: string; onChange: (value: string) => void; error?: string; disabled?: boolean }) {
   return (
     <label className="block space-y-1.5 w-full">
       <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">{label}</span>
       <input 
         className={cn(
-          "h-10 w-full rounded-sm border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5", 
+          "h-10 w-full rounded-sm border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-muted/50", 
           error ? "border-amber-500 focus:ring-amber-500/10 focus:border-amber-500" : "border-border"
         )} 
         value={value} 
         onChange={(event) => onChange(event.target.value)} 
+        disabled={disabled}
       />
       {error && <span className="block text-[9px] font-bold text-amber-600">{error}</span>}
     </label>
@@ -1000,7 +1038,7 @@ function Field({ label, value, onChange, error }: { label: string; value: string
 }
 
 // Fixed Loader2 type dependency inside editor layout
-function NumberField({ label, value, onChange, step = "1" }: { label: string; value: number | string; onChange: (value: number) => void; step?: string }) {
+function NumberField({ label, value, onChange, step = "1", disabled }: { label: string; value: number | string; onChange: (value: number) => void; step?: string; disabled?: boolean }) {
   const [localVal, setLocalVal] = useState<string>(value !== undefined && value !== null ? String(value) : "");
 
   useEffect(() => {
@@ -1036,25 +1074,27 @@ function NumberField({ label, value, onChange, step = "1" }: { label: string; va
     <label className="block space-y-1.5 w-full">
       <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">{label}</span>
       <input 
-        className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5" 
+        className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-muted/50" 
         type="number" 
         step={step} 
         value={localVal} 
         onChange={(event) => handleChange(event.target.value)} 
         onBlur={handleBlur}
+        disabled={disabled}
       />
     </label>
   );
 }
 
-function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
+function Select({ label, value, options, onChange, disabled }: { label: string; value: string; options: string[]; onChange: (value: string) => void; disabled?: boolean }) {
   return (
     <label className="block space-y-1.5 w-full">
       <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">{label}</span>
       <select 
-        className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5 cursor-pointer" 
+        className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-muted/50" 
         value={value} 
         onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
       >
         {options.map((option) => <option key={option} className="bg-card text-foreground">{option}</option>)}
       </select>
@@ -1062,24 +1102,26 @@ function Select({ label, value, options, onChange }: { label: string; value: str
   );
 }
 
-function TextArea({ label, value, onChange, error, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; className?: string }) {
+function TextArea({ label, value, onChange, error, className, disabled }: { label: string; value: string; onChange: (value: string) => void; error?: string; className?: string; disabled?: boolean }) {
   return (
     <label className={cn("block space-y-1.5 w-full", className)}>
       <span className="text-[10px] font-bold text-foreground/75 uppercase tracking-wider">{label}</span>
       <textarea 
         className={cn(
-          "min-h-24 w-full rounded-sm border bg-background p-3 text-xs leading-relaxed transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5", 
+          "min-h-24 w-full rounded-sm border bg-background p-3 text-xs leading-relaxed transition-all focus-visible:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary focus:bg-primary/5 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-muted/50", 
           error ? "border-amber-500 focus:ring-amber-500/10 focus:border-amber-500" : "border-border"
         )} 
         value={value} 
         onChange={(event) => onChange(event.target.value)} 
+        disabled={disabled}
       />
       {error && <span className="block text-[9px] font-bold text-amber-600">{error}</span>}
     </label>
   );
 }
 
-function RemoveButton({ onClick }: { onClick: () => void }) {
+function RemoveButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  if (disabled) return null;
   return (
     <Button 
       type="button" 
@@ -1184,19 +1226,21 @@ function ComparePreviousPanel({ course }: { course: CourseDraft }) {
   );
 }
 
-function OnlineResourcesEditor({ resources, onChange }: { resources: string[]; onChange: (items: string[]) => void }) {
+function OnlineResourcesEditor({ resources, onChange, disabled }: { resources: string[]; onChange: (items: string[]) => void; disabled?: boolean }) {
   return (
     <Panel title="Video Lectures / Online Resources" description="Links to external video lectures (NPTEL, YouTube, etc.) or study materials.">
       <div className="space-y-3">
         {resources.map((resource, index) => (
           <div key={index} className="flex items-end gap-3">
-            <Field label={`Resource Link #${index + 1}`} value={resource} onChange={(value) => onChange(resources.map((r, i) => i === index ? value : r))} />
-            <RemoveButton onClick={() => onChange(resources.filter((_, i) => i !== index))} />
+            <Field label={`Resource Link #${index + 1}`} value={resource} onChange={(value) => onChange(resources.map((r, i) => i === index ? value : r))} disabled={disabled} />
+            <RemoveButton onClick={() => onChange(resources.filter((_, i) => i !== index))} disabled={disabled} />
           </div>
         ))}
-        <Button variant="secondary" onClick={() => onChange([...resources, ""])} className="w-full h-10 border-border">
-          <Plus className="h-3.5 w-3.5 mr-1.5" />Add Resource Link
-        </Button>
+        {!disabled && (
+          <Button variant="secondary" onClick={() => onChange([...resources, ""])} className="w-full h-10 border-border">
+            <Plus className="h-3.5 w-3.5 mr-1.5" />Add Resource Link
+          </Button>
+        )}
       </div>
     </Panel>
   );

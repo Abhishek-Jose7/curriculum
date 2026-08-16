@@ -39,16 +39,16 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
   const getExperiments = (experiments: any[]) => {
     if (!experiments || experiments.length === 0) {
       return [
-        { number: 1, title: "Construction of Merkle tree and verification of transaction", references: "1,3", coMapped: "CO1", description: "" },
-        { number: 2, title: "MetaMask installation and transfer of ethers", references: "Useful Links: 6", coMapped: "CO3", description: "" },
-        { number: 3, title: "Solidity program: voting application", references: "Useful Links: 5", coMapped: "CO4", description: "" },
-        { number: 4, title: "Solidity program: crowd funding", references: "Useful Links: 5", coMapped: "CO4", description: "" },
-        { number: 5, title: "Solidity program: Transactions using Remix IDE and MetaMask", references: "Useful Links: 5", coMapped: "CO4", description: "" },
+        { number: 1, title: "Construction of Merkle tree and verification of transaction", references: "1, 3", coMapped: "CO1", description: "" },
+        { number: 2, title: "MetaMask installation and transfer of ethers", references: "1, 4", coMapped: "CO3", description: "" },
+        { number: 3, title: "Solidity program: voting application", references: "1, 2, 4", coMapped: "CO4", description: "" },
+        { number: 4, title: "Solidity program: crowd funding", references: "1, 4", coMapped: "CO4", description: "" },
+        { number: 5, title: "Solidity program: Transactions using Remix IDE and MetaMask", references: "1, 4", coMapped: "CO4", description: "" },
         { number: 6, title: "Implementation of PAXOS/PBFT algorithm", references: "6", coMapped: "CO5", description: "" },
         { number: 7, title: "Block mining and reward transfer to the account", references: "2", coMapped: "CO2", description: "" },
-        { number: 8, title: "Smart contract execution using Ganache", references: "Useful Links: 5", coMapped: "CO6", description: "" },
-        { number: 9, title: "Genesis block creation using Geth", references: "Useful Links: 8", coMapped: "CO5", description: "" },
-        { number: 10, title: "Hyperledger installation", references: "6 and Useful Links: 7", coMapped: "CO5", description: "" },
+        { number: 8, title: "Smart contract execution using Ganache", references: "1, 2", coMapped: "CO6", description: "" },
+        { number: 9, title: "Genesis block creation using Geth", references: "1, 3", coMapped: "CO5", description: "" },
+        { number: 10, title: "Hyperledger installation", references: "3, 4", coMapped: "CO5", description: "" },
         { number: 11, title: "Mini project – Development of smart contract for Dapps", references: "-", coMapped: "CO6", description: "" }
       ];
     }
@@ -84,27 +84,25 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
         <colgroup>
           <col style={{ width: "15%" }} />
           <col style={{ width: "23%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
-          <col style={{ width: "7%" }} />
           <col style={{ width: "8%" }} />
+          <col style={{ width: "8%" }} />
+          <col style={{ width: "8%" }} />
+          <col style={{ width: "9%" }} />
+          <col style={{ width: "9%" }} />
+          <col style={{ width: "9%" }} />
+          <col style={{ width: "11%" }} />
         </colgroup>
         <tbody>
           <tr>
             <td rowSpan={4} className="bold center">Course Code<br /><br />{course.code}</td>
             <td rowSpan={4} className="bold center">Course Name<br /><br />{course.title}</td>
-            <td colSpan={4} className="bold center">Teaching Scheme<br />(Hrs/week)</td>
+            <td colSpan={3} className="bold center">Teaching Scheme<br />(Hrs/week)</td>
             <td colSpan={4} className="bold center">Credits Assigned</td>
           </tr>
           <tr>
             <td className="bold center">L</td>
             <td className="bold center">T</td>
             <td className="bold center">P</td>
-            <td className="bold center">SL</td>
             <td className="bold center">L</td>
             <td className="bold center">T</td>
             <td className="bold center">P</td>
@@ -114,14 +112,13 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
             <td className="center">{formatValue(isLab ? 0 : course.lecture_hours)}</td>
             <td className="center">{formatValue(isLab ? 0 : course.tutorial_hours)}</td>
             <td className="center">{formatValue(course.practical_hours)}</td>
-            <td className="center">{formatValue(isLab ? 0 : course.self_learning_hours)}</td>
             <td className="center">{formatValue(isLab ? 0 : course.lecture_credits)}</td>
             <td className="center">{formatValue(isLab ? 0 : course.tutorial_credits)}</td>
             <td className="center">{formatValue(course.practical_credits)}</td>
             <td className="center">{formatValue(course.credits)}</td>
           </tr>
           <tr>
-            <td colSpan={8} style={{ padding: 0 }}>
+            <td colSpan={7} style={{ padding: 0 }}>
               <table className="official-table nested-table exam-table">
                 <tbody>
                   <tr>
@@ -138,44 +135,22 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
                     <td className="bold center">Min</td>
                     <td className="bold center">Max</td>
                   </tr>
-                  {isLab ? (
-                    <tr>
-                      <td className="bold center">Lab</td>
-                      <td className="center">{formatValue(course.internal_marks)}</td>
-                      <td className="center">--</td>
-                      <td className="center">--</td>
-                      <td className="center">--</td>
-                      <td className="center">{formatValue(course.internal_marks)}</td>
-                    </tr>
-                  ) : !hasLab ? (
-                    <tr>
-                      <td className="bold center">Theory</td>
-                      <td className="center">{formatValue(iseVal)}</td>
-                      <td className="center">{formatValue(mseVal)}</td>
-                      <td className="center">{formatValue(eseMinVal)}</td>
-                      <td className="center">{formatValue(eseMaxVal)}</td>
-                      <td className="center">{formatValue(theoryTotalVal)}</td>
-                    </tr>
-                  ) : (
-                    <>
-                      <tr>
-                        <td className="bold">Theory</td>
-                        <td className="center">{formatValue(iseVal)}</td>
-                        <td className="center">{formatValue(mseVal)}</td>
-                        <td className="center">{formatValue(eseMinVal)}</td>
-                        <td className="center">{formatValue(eseMaxVal)}</td>
-                        <td className="center">{formatValue(theoryTotalVal)}</td>
-                      </tr>
-                      <tr>
-                        <td className="bold">Lab</td>
-                        <td className="center">50</td>
-                        <td className="center">--</td>
-                        <td className="center">--</td>
-                        <td className="center">--</td>
-                        <td className="center">50</td>
-                      </tr>
-                    </>
-                  )}
+                  <tr>
+                    <td className="bold">Theory</td>
+                    <td className="center">{!isLab ? formatValue(iseVal) : "--"}</td>
+                    <td className="center">{!isLab ? formatValue(mseVal) : "--"}</td>
+                    <td className="center">{!isLab ? formatValue(eseMinVal) : "--"}</td>
+                    <td className="center">{!isLab ? formatValue(eseMaxVal) : "--"}</td>
+                    <td className="center">{!isLab ? formatValue(theoryTotalVal) : "--"}</td>
+                  </tr>
+                  <tr>
+                    <td className="bold">Lab</td>
+                    <td className="center">{hasLab ? formatValue(isLab ? course.internal_marks : 50) : "--"}</td>
+                    <td className="center">--</td>
+                    <td className="center">--</td>
+                    <td className="center">--</td>
+                    <td className="center">{hasLab ? formatValue(isLab ? course.internal_marks : 50) : "--"}</td>
+                  </tr>
                 </tbody>
               </table>
             </td>
@@ -323,10 +298,10 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
             <tbody>
               <tr><td colSpan={4} className="bold">{expHeader}</td></tr>
               <tr>
-                <th className="center bold">Exp. No.</th>
-                <th className="left bold">Topics</th>
-                <th className="center bold">References</th>
-                <th className="center bold">CO Mapped</th>
+                <th className="center bold">Sr. No.</th>
+                <th className="left bold">Labs</th>
+                <th className="center bold">Ref.</th>
+                <th className="center bold">COs</th>
               </tr>
               {experimentsList.map((exp) => (
                 <tr key={exp.number}>
