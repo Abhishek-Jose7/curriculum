@@ -88,6 +88,22 @@ export const A4Preview = forwardRef<A4PreviewRef, Props>(function A4Preview({
   const totalModuleHours = (course.modules || []).reduce((sum, module) => sum + (module.contact_hours || 0), 0);
 
   const pageRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.7);
+
+  useEffect(() => {
+    const A4_PX = 794; // 210mm @ 96dpi
+    const computeScale = () => {
+      if (!containerRef.current) return;
+      const available = containerRef.current.offsetWidth - 16; // 8px each side
+      setScale(Math.min(1, available / A4_PX));
+    };
+    computeScale();
+    const ro = new ResizeObserver(computeScale);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
 
   const downloadAsDoc = async () => {
     if (!pageRef.current) return;
@@ -213,8 +229,11 @@ export const A4Preview = forwardRef<A4PreviewRef, Props>(function A4Preview({
   };
 
   return (
-    <div className="h-full w-full overflow-auto bg-zinc-300/60 p-6 sm:p-8 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
-      <div className="w-full flex justify-center items-center overflow-auto p-4 sm:p-6 bg-transparent">
+    <div className="h-full w-full overflow-auto bg-zinc-300/60 dark:bg-zinc-950 flex flex-col justify-start items-center scrollbar-thin">
+      <div ref={containerRef} className="w-full flex justify-center items-start bg-transparent py-6 px-2">
+        {/* Scale A4 (210mm≈794px) down to fit container */}
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', minHeight: `calc(297mm * ${scale})` }}>
+          <div style={{ transform: `scale(${scale})`, transformOrigin: 'top center', width: '210mm', flexShrink: 0 }}>
         <div 
           ref={pageRef}
           className="bg-white text-black shadow-2xl font-serif border border-zinc-400/70 shrink-0 text-left my-2 rounded-xs" 
@@ -596,8 +615,10 @@ export const A4Preview = forwardRef<A4PreviewRef, Props>(function A4Preview({
             </div>
           </Selectable>
           </main>
-        </div>
-      </div>
+        </div>{/* end A4 page */}
+          </div>{/* end scale inner */}
+        </div>{/* end scale outer */}
+      </div>{/* end justify-center row */}
       <style dangerouslySetInnerHTML={{ __html: `
         .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; table-layout: fixed; }
         .preview-table td, .preview-table th { border: 0.75pt solid #000; padding: 1.5pt 3pt 1.5pt 4pt; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
