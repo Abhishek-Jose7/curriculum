@@ -155,7 +155,7 @@ function PinGate({
               pattern="[0-9]*"
               maxLength={4}
               placeholder="••••"
-              className="h-14 w-32 rounded border border-border bg-background px-4 text-center text-2xl font-mono tracking-[0.5em] focus-visible:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50 mx-auto"
+              className="h-14 w-40 rounded border border-border bg-background px-4 text-center text-2xl font-mono tracking-[0.35em] focus-visible:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50 mx-auto"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
               onKeyDown={(e) => e.key === "Enter" && void handleSubmit()}
