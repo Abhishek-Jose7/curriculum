@@ -1,0 +1,3 @@
+-- Theory Subject: Electronic Devices & Applications (EC)
+INSERT INTO courses (id, semester_id, faculty_user_id, code, title, course_type, status, lecture_hours, tutorial_hours, practical_hours, self_learning_hours, credits, internal_marks, external_marks, objectives, pre_requisites, syllabus_intro)
+VALUES (4, 1, 8, '25PCC12EC05', 'Electronic Devices & Applications', 'THEORY', 'DRAFT', 2, 0, 2, 2, 3, 50, 50, 'Study of semiconductor devices, characteristics, and applications.', 'Basic Electrical and Electronics Engineering, Fundamentals of Electromagnetics & Semiconductor Devices', 'Covers Diode circuits, BJT, FET, and MOS Transistors.');
