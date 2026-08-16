@@ -45,7 +45,7 @@ function ReviewContent() {
       setCourse(courseData);
 
       const commentsData = await apiFetch<{ results?: ReviewerComment[] } | ReviewerComment[]>(
-        `/reviewer-comments/?course=${courseId}`
+        `/reviewer-comments/?course_id=${courseId}`
       );
       const commentsList = Array.isArray(commentsData) ? commentsData : commentsData.results ?? [];
       setComments(commentsList);

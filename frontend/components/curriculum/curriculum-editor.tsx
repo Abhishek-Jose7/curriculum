@@ -763,7 +763,7 @@ function CommentsPanel({ course }: { course: CourseDraft }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<any>(`/reviewer-comments/?course=${course.id}`)
+    apiFetch<any>(`/reviewer-comments/?course_id=${course.id}`)
       .then((data) => setComments(Array.isArray(data) ? data : data.results ?? []))
       .catch(console.error)
       .finally(() => setLoading(false));
