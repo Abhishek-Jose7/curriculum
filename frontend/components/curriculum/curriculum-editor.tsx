@@ -816,10 +816,10 @@ function ReviewerLinkPanel({ course }: { course: CourseDraft }) {
   const [resetting, setResetting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Only ADMIN, HOD, or the course's own assigned faculty may manage the reviewer link.
+  // Only ADMIN, HOD (in same department), or the course's own assigned faculty may manage the reviewer link.
   const canAccess = !!user && (
     user.role === "ADMIN" ||
-    user.role === "HOD" ||
+    (user.role === "HOD" && (!course.department_id || !user.department_id || String(user.department_id) === String(course.department_id))) ||
     (user.role === "FACULTY" && String(user.id) === String(course.faculty_user_id))
   );
 

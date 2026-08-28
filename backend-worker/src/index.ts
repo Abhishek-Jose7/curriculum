@@ -747,12 +747,18 @@ api.get("/courses/:id/review-link/", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
   const course = await c.env.DB.prepare(
-    "SELECT share_token, review_pin, review_link_generated_at, faculty_user_id FROM courses WHERE id = ?"
+    "SELECT share_token, review_pin, review_link_generated_at, faculty_user_id, semester_id FROM courses WHERE id = ?"
   ).bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found" }, 404);
-  // Only ADMIN, HOD, or the course's assigned faculty may see the review link + PIN
+  // Only ADMIN, HOD (same department), or the course's assigned faculty may see the review link + PIN
   if (user.role === "FACULTY" && course.faculty_user_id !== user.id) {
     return c.json({ detail: "Permission denied." }, 403);
+  }
+  if (user.role === "HOD") {
+    const sem = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(course.semester_id).first<any>();
+    if (sem && user.department_id && String(sem.department_id) !== String(user.department_id)) {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
   }
   if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
   const frontendUrl = c.env.FRONTEND_URL ?? "http://localhost:3000";
@@ -763,11 +769,17 @@ api.get("/courses/:id/review-link/", async (c) => {
 api.post("/courses/:id/review-pin/reset/", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
-  const course = await c.env.DB.prepare("SELECT share_token, faculty_user_id FROM courses WHERE id = ?").bind(id).first<any>();
+  const course = await c.env.DB.prepare("SELECT share_token, faculty_user_id, semester_id FROM courses WHERE id = ?").bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found" }, 404);
-  // Only ADMIN, HOD, or the course's assigned faculty may reset the PIN
+  // Only ADMIN, HOD (same department), or the course's assigned faculty may reset the PIN
   if (user.role === "FACULTY" && course.faculty_user_id !== user.id) {
     return c.json({ detail: "Permission denied." }, 403);
+  }
+  if (user.role === "HOD") {
+    const sem = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(course.semester_id).first<any>();
+    if (sem && user.department_id && String(sem.department_id) !== String(user.department_id)) {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
   }
   if (!course.share_token) return c.json({ detail: "NO_REVIEW_LINK" }, 400);
   const pin = generatePin();
