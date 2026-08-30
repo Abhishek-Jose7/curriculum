@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context";
 
-type Department = { id: number; code: string; name: string };
-type AcademicYear = { id: number; name: string };
-type Template = { id: number; name: string; is_locked: boolean; version: number };
+type Department = { id: number | string; code: string; name: string };
+type AcademicYear = { id: number | string; name: string };
+type Template = { id: number | string; name: string; is_locked: boolean; version: number };
+type SchemeItem = { id: string; entering_year: string; department_id: string; status: string };
+type OrderableCourse = { id: string; code: string; title: string; semester_id?: string };
+
 type PublishedItem = {
-  id: number;
+  id: number | string;
   version_label: string;
   pdf: string;
   year_of_study?: string;
@@ -39,18 +42,26 @@ export default function PublishingPage() {
   const { user } = useAuth();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
+  const [schemes, setSchemes] = useState<SchemeItem[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [published, setPublished] = useState<PublishedItem[]>([]);
 
   const [selectedDept, setSelectedDept] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  const [selectedScheme, setSelectedScheme] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedYos, setSelectedYos] = useState("FE");
   const [versionLabel, setVersionLabel] = useState("v1");
   const [publishing, setPublishing] = useState(false);
-  const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [approvingId, setApprovingId] = useState<number | string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Compile Order state
+  const [orderCourses, setOrderCourses] = useState<OrderableCourse[]>([]);
+  const [loadingOrder, setLoadingOrder] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [orderSaved, setOrderSaved] = useState(false);
 
   const loadData = async () => {
     try {
@@ -80,21 +91,105 @@ export default function PublishingPage() {
     void loadData();
   }, []);
 
+  useEffect(() => {
+    if (selectedDept) {
+      apiFetch<SchemeItem[]>(`/curriculum-schemes/?department_id=${encodeURIComponent(selectedDept)}`)
+        .then((list) => {
+          setSchemes(list);
+          if (list.length > 0) {
+            setSelectedScheme(list[0].id);
+          } else {
+            setSelectedScheme("");
+          }
+        })
+        .catch(() => setSchemes([]));
+    }
+  }, [selectedDept]);
+
+  // Load compile order courses whenever scheme or year_of_study changes
+  useEffect(() => {
+    if (!selectedScheme || !selectedYos) {
+      setOrderCourses([]);
+      return;
+    }
+
+    const semsMap: Record<string, [number, number]> = {
+      FE: [1, 2],
+      SE: [3, 4],
+      TE: [5, 6],
+      BE: [7, 8],
+    };
+    const sems = semsMap[selectedYos] || [1, 2];
+
+    setLoadingOrder(true);
+    Promise.all([
+      apiFetch<any[]>(`/curriculum-schemes/${selectedScheme}/semesters/${sems[0]}/courses/`),
+      apiFetch<any[]>(`/curriculum-schemes/${selectedScheme}/semesters/${sems[1]}/courses/`),
+    ])
+      .then(([s1Courses, s2Courses]) => {
+        const combined: OrderableCourse[] = [
+          ...(s1Courses || []).map((c: any) => ({ id: c.id, code: c.code, title: c.title })),
+          ...(s2Courses || []).map((c: any) => ({ id: c.id, code: c.code, title: c.title })),
+        ];
+        setOrderCourses(combined);
+      })
+      .catch(() => setOrderCourses([]))
+      .finally(() => setLoadingOrder(false));
+  }, [selectedScheme, selectedYos]);
+
+  const moveCourse = (index: number, direction: "up" | "down") => {
+    const targetIdx = direction === "up" ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= orderCourses.length) return;
+    const next = [...orderCourses];
+    const temp = next[index];
+    next[index] = next[targetIdx];
+    next[targetIdx] = temp;
+    setOrderCourses(next);
+  };
+
+  const handleSaveOrder = async () => {
+    if (!selectedScheme || !selectedYos || orderCourses.length === 0) return;
+    try {
+      setSavingOrder(true);
+      setError(null);
+      await apiFetch(`/curriculum-schemes/${selectedScheme}/compile-order`, {
+        method: "PUT",
+        body: JSON.stringify({
+          year_of_study: selectedYos,
+          ordered_course_ids: orderCourses.map((c) => c.id),
+        }),
+      });
+      setOrderSaved(true);
+      setTimeout(() => setOrderSaved(false), 3000);
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : "Failed to save compile order");
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
   const handlePublish = async () => {
-    if (!selectedDept || !selectedYear || !selectedTemplate || !selectedYos || !versionLabel.trim()) return;
+    if (!selectedDept || !selectedTemplate || !selectedYos || !versionLabel.trim()) return;
     setPublishing(true);
     setResult(null);
     setError(null);
     try {
+      const payload: any = {
+        department: selectedDept,
+        template: selectedTemplate,
+        year_of_study: selectedYos,
+        version_label: versionLabel.trim(),
+      };
+      if (selectedScheme) {
+        payload.scheme_id = selectedScheme;
+      }
+      if (selectedYear) {
+        payload.academic_year = selectedYear;
+      }
+
       const pub = await apiFetch<PublishedItem>("/published-curricula/publish/", {
         method: "POST",
-        body: JSON.stringify({
-          department: selectedDept,
-          academic_year: selectedYear,
-          template: selectedTemplate,
-          year_of_study: selectedYos,
-          version_label: versionLabel.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
       setResult(`Published successfully for ${selectedYos}! PDF booklet compiled.`);
       setPublished((prev) => [pub, ...prev]);
@@ -107,7 +202,7 @@ export default function PublishingPage() {
     }
   };
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: number | string) => {
     setApprovingId(id);
     try {
       await apiFetch(`/published-curricula/${id}/hod-approve/`, { method: "POST" });
@@ -163,13 +258,22 @@ export default function PublishingPage() {
                 </select>
               </label>
               <label className="block space-y-1.5">
-                <span className="text-[10px] font-mono font-bold text-foreground/75 uppercase tracking-wider">Academic Session</span>
+                <span className="text-[10px] font-mono font-bold text-foreground/75 uppercase tracking-wider">Scheme / Session</span>
                 <select 
                   className="h-10 w-full rounded-sm border border-border bg-background px-3 text-xs font-bold transition-all duration-150 focus-visible:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer" 
-                  value={selectedYear} 
-                  onChange={(e) => setSelectedYear(e.target.value)}
+                  value={selectedScheme} 
+                  onChange={(e) => setSelectedScheme(e.target.value)}
                 >
-                  {years.map((y) => <option key={y.id} value={y.id} className="bg-card text-foreground">{y.name}</option>)}
+                  {schemes.map((s) => (
+                    <option key={s.id} value={s.id} className="bg-card text-foreground">
+                      Scheme {s.entering_year} ({s.status})
+                    </option>
+                  ))}
+                  {schemes.length === 0 && years.map((y) => (
+                    <option key={y.id} value={y.id} className="bg-card text-foreground">
+                      AY {y.name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="block space-y-1.5">
@@ -210,6 +314,74 @@ export default function PublishingPage() {
                 />
               </label>
             </div>
+
+            {/* Compile Order Reordering Panel */}
+            {selectedScheme && orderCourses.length > 0 && (
+              <div className="border border-border/80 rounded-sm bg-muted/20 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-serif font-bold text-xs text-foreground uppercase tracking-wider">
+                      Compile Order ({selectedYos} Detailed Syllabi)
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Arrange the sequence of subjects as they will appear in the compiled handbook.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {orderSaved && (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Order Saved</span>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveOrder}
+                      disabled={savingOrder}
+                      className="h-7 text-[10px] font-bold"
+                    >
+                      {savingOrder ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                      Save Order
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  {orderCourses.map((c, idx) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between p-2 rounded bg-card border border-border text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-[10px] text-muted-foreground w-5">
+                          {idx + 1}.
+                        </span>
+                        <span className="font-mono font-bold text-primary">{c.code}</span>
+                        <span className="font-medium text-foreground">{c.title}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveCourse(idx, "up")}
+                          disabled={idx === 0}
+                          className="px-1.5 py-0.5 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          title="Move up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveCourse(idx, "down")}
+                          disabled={idx === orderCourses.length - 1}
+                          className="px-1.5 py-0.5 rounded text-xs hover:bg-muted disabled:opacity-30"
+                          title="Move down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {activeTemplate?.is_locked && (
               <div className="flex items-start gap-2.5 rounded bg-amber-500/5 border border-amber-500/10 p-4 text-[11px] text-amber-600 dark:text-amber-400 font-medium">

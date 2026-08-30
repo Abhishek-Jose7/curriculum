@@ -92,13 +92,54 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  // Start syllabus interstitial state
+  const [previousMatches, setPreviousMatches] = useState<any[]>([]);
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const [copyingFromId, setCopyingFromId] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState("");
+
   const activeCategory = useMemo(() => {
     return MACRO_CATEGORIES.find(cat => cat.tabs.some(t => t.key === active)) || MACRO_CATEGORIES[0];
   }, [active]);
 
   useEffect(() => {
-    apiFetch<CourseDraft>(`/courses/${courseId}/`).then(setCourse).catch(console.error);
+    apiFetch<CourseDraft>(`/courses/${courseId}/`)
+      .then((c) => {
+        setCourse(c);
+        if (
+          c &&
+          c.status === "DRAFT" &&
+          (!c.outcomes || c.outcomes.length === 0) &&
+          (!c.modules || c.modules.length === 0)
+        ) {
+          apiFetch<{ matches: any[] }>(`/courses/${courseId}/previous-matches/`)
+            .then((res) => {
+              if (res.matches && res.matches.length > 0) {
+                setPreviousMatches(res.matches);
+                setShowInterstitial(true);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(console.error);
   }, [courseId]);
+
+  const handleCopyPrevious = async (matchCourseId: string) => {
+    try {
+      setCopyingFromId(matchCourseId);
+      setCopyError("");
+      const updated = await apiFetch<CourseDraft>(`/courses/${courseId}/copy-from/${matchCourseId}/`, {
+        method: "POST",
+      });
+      setCourse(updated);
+      setShowInterstitial(false);
+    } catch (err: any) {
+      setCopyError(err.message || "Failed to copy content.");
+    } finally {
+      setCopyingFromId(null);
+    }
+  };
 
   const save = useCallback(async (dataToSave: CourseDraft | null) => {
     if (!dataToSave || !dataToSave.id) return;
@@ -205,12 +246,80 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
   const isAcceptedState = course.status === "APPROVED" || course.status === "PUBLISHED" || course.status === "LOCKED";
 
   return (
-    <div className={cn(
-      "grid h-[calc(100vh-110px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
-      isExpanded ? "grid-cols-1" : "xl:grid-cols-2"
-    )}>
-      {/* Left Column Form Editor */}
-      <section className={cn("min-w-0 h-full overflow-hidden bg-card flex flex-col", isExpanded && "hidden")}>
+    <>
+      {showInterstitial && previousMatches.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-lg max-w-xl w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-base font-serif font-bold flex items-center gap-2">
+                <Copy className="w-4 h-4 text-primary" /> Start Syllabus for {course.code}
+              </h3>
+              <button
+                onClick={() => setShowInterstitial(false)}
+                className="text-muted-foreground hover:text-foreground font-mono text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Found {previousMatches.length} previous syllabus version(s) matching this course pattern. You can copy the outcomes, modules, experiments, and assessment scheme from an earlier cohort, or start blank.
+            </p>
+
+            {copyError && (
+              <div className="p-2.5 text-xs rounded border border-rose-200 bg-rose-50 text-rose-700">
+                {copyError}
+              </div>
+            )}
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {previousMatches.map((m) => (
+                <div
+                  key={m.course_id}
+                  className="flex items-center justify-between p-3 rounded border border-border bg-muted/20 hover:bg-muted/40 transition-colors gap-3"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-mono font-bold text-xs text-primary">{m.code}</div>
+                    <div className="text-xs font-medium text-foreground">{m.title}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {m.entering_year ? `Cohort ${m.entering_year}` : `Academic Year ${m.academic_year_name || ""}`}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => handleCopyPrevious(m.course_id)}
+                    disabled={copyingFromId !== null}
+                    className="text-xs shrink-0"
+                  >
+                    {copyingFromId === m.course_id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                    ) : null}
+                    Use this version
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowInterstitial(false)}
+                className="text-xs"
+              >
+                Start blank instead
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={cn(
+        "grid h-[calc(100vh-110px)] gap-0 overflow-hidden rounded border border-border bg-card shadow-sm animate-fade-in text-left",
+        isExpanded ? "grid-cols-1" : "xl:grid-cols-2"
+      )}>
+        {/* Left Column Form Editor */}
+        <section className={cn("min-w-0 h-full overflow-hidden bg-card flex flex-col", isExpanded && "hidden")}>
         {/* Course identity header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 p-5 bg-background/10 shrink-0">
           <div className="space-y-1">
@@ -432,6 +541,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         </div>
       </aside>
     </div>
+    </>
   );
 }
 

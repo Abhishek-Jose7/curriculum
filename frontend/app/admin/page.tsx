@@ -181,7 +181,12 @@ function AdminContent() {
       });
       await loadSemesterCourses(semId);
     } catch (err: any) {
-      alert("Failed to assign faculty: " + (err?.message ?? "Error"));
+      const msg = err?.message || "";
+      if (msg.includes("SEMESTER_LOCKED")) {
+        alert("This semester isn't unlocked yet — unlock the semester pair in the Scheme Unlock Console first.");
+      } else {
+        alert("Failed to assign faculty: " + (err?.message ?? "Error"));
+      }
     }
   }
 

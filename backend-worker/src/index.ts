@@ -3,6 +3,10 @@ import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { BaseRepository, normalizeValue } from "./repositories/base";
 import { CoursesRepository, ReviewerRepository, WorkflowRepository } from "./repositories/curriculum";
+import { schemesRoutes } from "./routes/schemes";
+import { generateCourseCode, findPreviousMatches, copyDetailedContent } from "./services/courseCode";
+import { PreamblesRepository, TeachingComponentsRepository, CompileOrderRepository, SchemesRepository } from "./repositories/schemes";
+import { VERTICAL_SUBVERTICALS, type Vertical, type SubVertical, type TeachingComponentInput, PAIR_SEMESTERS, type YearOfStudy } from "./types/scheme";
 import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole } from "./middleware/auth";
 import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
@@ -315,6 +319,31 @@ const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "un
 api.route("/departments", deptsRoute);
 api.route("/departments/", deptsRoute);
 
+api.get("/departments/:id/preamble", async (c) => {
+  const id = c.req.param("id");
+  const content = await PreamblesRepository.get(c.env.DB, id);
+  return c.json({ department_id: id, content });
+});
+api.get("/departments/:id/preamble/", async (c) => {
+  const id = c.req.param("id");
+  const content = await PreamblesRepository.get(c.env.DB, id);
+  return c.json({ department_id: id, content });
+});
+api.put("/departments/:id/preamble", async (c) => handleSetPreamble(c));
+api.put("/departments/:id/preamble/", async (c) => handleSetPreamble(c));
+
+async function handleSetPreamble(c: Context<{ Bindings: Env; Variables: Variables }>) {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  if (user.role !== "ADMIN" && (user.role !== "HOD" || user.department_id !== id)) {
+    return c.json({ error: "DEPARTMENT_MISMATCH", detail: "Permission denied." }, 403);
+  }
+  const body = (await c.req.json().catch(() => ({}))) as { content?: string };
+  const content = body.content ?? "";
+  await PreamblesRepository.set(c.env.DB, id, content, user.id);
+  return c.json({ department_id: id, content });
+}
+
 const handleCreateAcademicYear = async (c: any) => {
   if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
   try {
@@ -503,6 +532,9 @@ const templatesRoute = crudRoute("curriculum_templates", ["department_id", "name
 api.route("/curriculum-templates", templatesRoute);
 api.route("/curriculum-templates/", templatesRoute);
 
+api.route("/curriculum-schemes", schemesRoutes);
+api.route("/curriculum-schemes/", schemesRoutes);
+
 api.get("/notifications/", async (c) => {
   const user = c.get("user");
   const rows = await c.env.DB.prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC").bind(user.id).all();
@@ -590,8 +622,102 @@ api.delete("/notifications/:id/", async (c) => {
 
 api.get("/courses/", async (c) => c.json(await new CoursesRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
 api.post("/courses/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
+  const user = c.get("user");
   const body = await c.req.json<any>();
+
+  // Scheme-based shell creation (Phase 2)
+  if (body.scheme_id) {
+    if (user.role !== "ADMIN" && user.role !== "HOD") {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
+    const scheme = await SchemesRepository.get(c.env.DB, body.scheme_id);
+    if (!scheme) return c.json({ detail: "Scheme not found." }, 404);
+    if (user.role === "HOD" && user.department_id && user.department_id !== scheme.department_id) {
+      return c.json({ error: "DEPARTMENT_MISMATCH", detail: "Department mismatch." }, 403);
+    }
+
+    const vertical = body.vertical as Vertical;
+    const subVertical = body.sub_vertical as SubVertical;
+    if (!vertical || !VERTICAL_SUBVERTICALS[vertical] || !subVertical || !VERTICAL_SUBVERTICALS[vertical].includes(subVertical)) {
+      return c.json({ error: "INVALID_SUBVERTICAL", detail: "Invalid vertical or sub_vertical selection." }, 400);
+    }
+
+    const semesterNumber = Number(body.semester_number);
+    const semester = await c.env.DB
+      .prepare("SELECT * FROM semesters WHERE scheme_id = ? AND number = ?")
+      .bind(body.scheme_id, semesterNumber)
+      .first<any>();
+    if (!semester) return c.json({ detail: "Semester not found." }, 404);
+
+    const components = body.components as TeachingComponentInput[];
+    if (!components || !Array.isArray(components) || components.length === 0) {
+      return c.json({ error: "NO_COMPONENTS", detail: "At least one teaching component is required." }, 400);
+    }
+
+    const dept = await c.env.DB
+      .prepare("SELECT code FROM departments WHERE id = ?")
+      .bind(scheme.department_id)
+      .first<{ code: string }>();
+    const programCode = dept?.code || "EC";
+
+    let code = body.code ? String(body.code).trim() : "";
+    let codeIsCustom = 0;
+    if (code) {
+      codeIsCustom = 1;
+    } else {
+      code = await generateCourseCode(c.env.DB, {
+        scheme_id: body.scheme_id,
+        scheme_year_code: scheme.scheme_year_code,
+        sub_vertical: subVertical,
+        semester_number: semesterNumber,
+        program_code: programCode,
+      });
+    }
+
+    const collision = await c.env.DB
+      .prepare("SELECT 1 FROM courses c JOIN semesters s ON c.semester_id = s.id WHERE s.scheme_id = ? AND c.code = ?")
+      .bind(body.scheme_id, code)
+      .first();
+    if (collision) {
+      return c.json({ error: "CODE_TAKEN", detail: "Course code already exists in this scheme." }, 409);
+    }
+
+    const totalCredits = components.reduce((acc, comp) => acc + (Number(comp.credit_points) || 0), 0);
+    const newCourseId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await c.env.DB
+      .prepare(
+        `INSERT INTO courses (
+          id, semester_id, code, code_is_custom, title, course_type, status,
+          faculty_user_id, vertical, sub_vertical, total_credits, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', NULL, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        newCourseId,
+        semester.id,
+        code,
+        codeIsCustom,
+        body.title || "Untitled Course",
+        body.course_type || "THEORY",
+        vertical,
+        subVertical,
+        totalCredits,
+        now,
+        now
+      )
+      .run();
+
+    await TeachingComponentsRepository.replaceForCourse(c.env.DB, newCourseId, components);
+    await generateReviewLinkIfMissing(c.env.DB, newCourseId);
+    await createCourseVersion(c.env.DB, newCourseId, user, "Course shell created");
+
+    const createdCourse = await new CoursesRepository(c.env.DB).detail(newCourseId);
+    return c.json(createdCourse, 201);
+  }
+
+  // Legacy fallback creation
+  if (!isAcademicAdmin(user)) return c.json({ detail: "Permission denied." }, 403);
   if (!body.faculty_user_id) return c.json({ error: "TEACHER_REQUIRED" }, 400);
   const semester = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(body.semester_id ?? body.semester).first<any>();
   const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(body.faculty_user_id).first<any>();
@@ -599,40 +725,188 @@ api.post("/courses/", async (c) => {
   if (!semester || teacher.department_id !== semester.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
   const course = await new CoursesRepository(c.env.DB).create(body);
   await generateReviewLinkIfMissing(c.env.DB, course.id);
-  await createCourseVersion(c.env.DB, course.id, c.get("user"), "Course created");
+  await createCourseVersion(c.env.DB, course.id, user, "Course created");
   return c.json(course, 201);
 });
-api.get("/courses/:id/", async (c) => {
+
+api.get("/courses/:id", async (c) => handleGetCourse(c));
+api.get("/courses/:id/", async (c) => handleGetCourse(c));
+
+async function handleGetCourse(c: any) {
   const course = await new CoursesRepository(c.env.DB).detail(c.req.param("id"));
   return course ? c.json(course) : c.json({ detail: "Not found." }, 404);
+}
+
+api.patch("/courses/:id/shell", requireRole("ADMIN", "HOD"), async (c) => {
+  const user = c.get("user");
+  const courseId = c.req.param("id") as string;
+  const body = (await c.req.json()) as any;
+
+  const course = await c.env.DB
+    .prepare(
+      `SELECT c.*, s.scheme_id, s.department_id
+       FROM courses c
+       JOIN semesters s ON c.semester_id = s.id
+       WHERE c.id = ?`
+    )
+    .bind(courseId)
+    .first<any>();
+
+  if (!course) return c.json({ detail: "Course not found." }, 404);
+
+  if (user.role === "HOD" && user.department_id && user.department_id !== course.department_id) {
+    return c.json({ error: "DEPARTMENT_MISMATCH", detail: "Department mismatch." }, 403);
+  }
+
+  const updates: string[] = [];
+  const params: any[] = [];
+
+  if (body.title !== undefined) {
+    updates.push("title = ?");
+    params.push(body.title);
+  }
+  if (body.vertical !== undefined) {
+    updates.push("vertical = ?");
+    params.push(body.vertical);
+  }
+  if (body.sub_vertical !== undefined) {
+    updates.push("sub_vertical = ?");
+    params.push(body.sub_vertical);
+  }
+  if (body.code !== undefined && (course.code_is_custom === 1 || body.code_is_custom === 1)) {
+    updates.push("code = ?");
+    params.push(body.code);
+    updates.push("code_is_custom = 1");
+  }
+
+  if (body.components && Array.isArray(body.components)) {
+    await TeachingComponentsRepository.replaceForCourse(c.env.DB, courseId, body.components);
+    const totalCredits = (body.components as TeachingComponentInput[]).reduce((sum, comp) => sum + (Number(comp.credit_points) || 0), 0);
+    updates.push("total_credits = ?");
+    params.push(totalCredits);
+  }
+
+  if (course.status !== "DRAFT") {
+    try {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO audit_logs (user_id, method, path, status_code, user_agent, created_at)
+           VALUES (?, 'PATCH', ?, 200, ?, ?)`
+        )
+        .bind(
+          user.id,
+          `/courses/${courseId}/shell`,
+          `Shell edited on ${course.status} course`,
+          new Date().toISOString()
+        )
+        .run();
+    } catch (e) {
+      console.warn("Audit log insert failed:", e);
+    }
+  }
+
+  const now = new Date().toISOString();
+  updates.push("updated_at = ?");
+  params.push(now);
+
+  if (updates.length > 0) {
+    await c.env.DB
+      .prepare(`UPDATE courses SET ${updates.join(", ")} WHERE id = ?`)
+      .bind(...params, courseId)
+      .run();
+  }
+
+  await createCourseVersion(c.env.DB, courseId, user, "Course shell updated");
+  const detail = await new CoursesRepository(c.env.DB).detail(courseId);
+  return c.json(detail);
 });
+
 api.put("/courses/:id/", async (c) => updateCourse(c));
 api.patch("/courses/:id/", async (c) => updateCourse(c));
 
-const handleAssignFaculty = async (c: any) => {
-  const body = await c.req.json().catch(() => ({}));
+const handleAssignFaculty = async (c: Context<{ Bindings: Env; Variables: Variables }>) => {
+  const body = ((await c.req.json().catch(() => ({}))) || {}) as any;
   const facultyUserId = body.faculty_user_id !== undefined ? body.faculty_user_id : null;
-  const courseId = c.req.param("id");
-  if (facultyUserId) {
-    const courseRow = await c.env.DB.prepare("SELECT semester_id FROM courses WHERE id = ?").bind(courseId).first();
-    const semester = courseRow ? await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind((courseRow as any).semester_id).first() : null;
-    const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(facultyUserId).first();
-    if (!teacher || teacher.role !== "FACULTY" || !teacher.is_active) return c.json({ error: "TEACHER_INVALID" }, 400);
-    if (!courseRow || !semester || teacher.department_id !== semester.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
+  const courseId = c.req.param("id") as string;
+
+  const courseRow = await c.env.DB
+    .prepare("SELECT c.semester_id, s.department_id, s.is_unlocked FROM courses c JOIN semesters s ON c.semester_id = s.id WHERE c.id = ?")
+    .bind(courseId)
+    .first<any>();
+
+  if (!courseRow) {
+    return c.json({ detail: "Course not found." }, 404);
   }
+
+  if (courseRow.is_unlocked === 0) {
+    return c.json({ error: "SEMESTER_LOCKED", detail: "This semester isn't unlocked yet." }, 400);
+  }
+
+  if (facultyUserId) {
+    const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(facultyUserId).first<any>();
+    if (!teacher || teacher.role !== "FACULTY" || !teacher.is_active) return c.json({ error: "TEACHER_INVALID" }, 400);
+    if (teacher.department_id !== courseRow.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
+  }
+
   const course = (await c.env.DB
     .prepare("UPDATE courses SET faculty_user_id = ? WHERE id = ? RETURNING *")
     .bind(facultyUserId, courseId)
     .first()) as any;
-  if (!course) {
-    return c.json({ detail: "Course not found." }, 404);
-  }
+
   await generateReviewLinkIfMissing(c.env.DB, course.id);
   return c.json(course);
 };
 
 api.patch("/courses/:id/assign-faculty", requireRole("ADMIN", "HOD"), handleAssignFaculty);
 api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), handleAssignFaculty);
+
+api.get("/courses/:id/previous-matches", async (c) => {
+  const matches = await findPreviousMatches(c.env.DB, c.req.param("id") as string);
+  return c.json({ matches });
+});
+api.get("/courses/:id/previous-matches/", async (c) => {
+  const matches = await findPreviousMatches(c.env.DB, c.req.param("id") as string);
+  return c.json({ matches });
+});
+
+api.post("/courses/:id/copy-from/:previousCourseId", async (c) => handleCopyFrom(c));
+api.post("/courses/:id/copy-from/:previousCourseId/", async (c) => handleCopyFrom(c));
+
+async function handleCopyFrom(c: Context<{ Bindings: Env; Variables: Variables }>) {
+  const user = c.get("user");
+  const targetCourseId = c.req.param("id") as string;
+  const previousCourseId = c.req.param("previousCourseId") as string;
+
+  const targetCourse = await c.env.DB
+    .prepare("SELECT c.*, s.department_id FROM courses c JOIN semesters s ON c.semester_id = s.id WHERE c.id = ?")
+    .bind(targetCourseId)
+    .first<any>();
+
+  if (!targetCourse) return c.json({ detail: "Course not found." }, 404);
+
+  const canCopy =
+    user.role === "ADMIN" ||
+    (user.role === "HOD" && user.department_id === targetCourse.department_id) ||
+    (targetCourse.faculty_user_id && targetCourse.faculty_user_id === user.id);
+
+  if (!canCopy) {
+    return c.json({ error: "NOT_ASSIGNED", detail: "You are not assigned to author this course." }, 403);
+  }
+
+  const matches = await findPreviousMatches(c.env.DB, targetCourseId);
+  const isValidMatch = matches.some((m) => m.course_id === previousCourseId);
+  if (!isValidMatch) {
+    return c.json({ error: "NOT_A_VALID_MATCH", detail: "Target course cannot be copied from this source course." }, 400);
+  }
+
+  if (targetCourse.status !== "DRAFT") {
+    return c.json({ error: "ALREADY_STARTED", detail: "Cannot copy into a course that has progressed beyond DRAFT." }, 409);
+  }
+
+  await copyDetailedContent(c.env.DB, targetCourseId, previousCourseId, user.id);
+  const updated = await new CoursesRepository(c.env.DB).detail(targetCourseId);
+  return c.json(updated);
+}
 
 const PREVIOUS_SUBJECTS: Record<string, Array<{ code: string; title: string; course_type: string; credits: number; semester: number }>> = {
   "COMP": [
@@ -911,31 +1185,47 @@ api.post("/approval-workflows/", async (c) => {
   return c.json(workflow, 201);
 });
 
-api.get("/published-curricula/", async (c) => c.json(await new BaseRepository(c.env.DB, "published_curricula", [], ["department_id", "academic_year_id", "is_public", "year_of_study"]).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+api.get("/published-curricula/", async (c) => c.json(await new BaseRepository(c.env.DB, "published_curricula", [], ["department_id", "academic_year_id", "scheme_id", "is_public", "year_of_study"]).list(Object.fromEntries(new URL(c.req.url).searchParams))));
 
 api.get("/published-curricula/archive/", requireRole('HOD', 'ADMIN'), async (c) => {
   const user = c.get('user');
+  const url = new URL(c.req.url);
+  const schemeId = url.searchParams.get("scheme_id");
+  const academicYearId = url.searchParams.get("academic_year_id");
   
   let query = `
     SELECT 
       pc.*,
       ay.name as academic_year_name,
+      cs.entering_year as scheme_entering_year,
       d.name as department_name,
       d.code as department_code
     FROM published_curricula pc
-    JOIN academic_years ay ON pc.academic_year_id = ay.id
+    LEFT JOIN academic_years ay ON pc.academic_year_id = ay.id
+    LEFT JOIN curriculum_schemes cs ON pc.scheme_id = cs.id
     JOIN departments d ON pc.department_id = d.id
   `;
   
+  const clauses: string[] = [];
   const params: any[] = [];
   
-  // HOD only sees their department
   if (user.role === 'HOD' && user.department_id) {
-    query += ' WHERE pc.department_id = ?';
+    clauses.push('pc.department_id = ?');
     params.push(user.department_id);
   }
+  if (schemeId) {
+    clauses.push('pc.scheme_id = ?');
+    params.push(schemeId);
+  } else if (academicYearId) {
+    clauses.push('pc.academic_year_id = ?');
+    params.push(academicYearId);
+  }
   
-  query += ' ORDER BY ay.starts_on DESC, pc.year_of_study ASC';
+  if (clauses.length > 0) {
+    query += ` WHERE ${clauses.join(' AND ')}`;
+  }
+  
+  query += ' ORDER BY pc.created_at DESC';
   
   const rows = await c.env.DB.prepare(query).bind(...params).all();
   return c.json(rows.results ?? []);
@@ -977,6 +1267,44 @@ api.post("/published-curricula/publish/", async (c) => {
 
   const template = await c.env.DB.prepare("SELECT * FROM curriculum_templates WHERE id = ?").bind(body.template).first<any>();
   if (!template) return c.json({ detail: "Template not found." }, 404);
+
+  if (body.scheme_id) {
+    const count = await c.env.DB.prepare(
+      "SELECT count(*) AS n FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.scheme_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED')"
+    ).bind(body.scheme_id, sems[0], sems[1]).first<any>();
+
+    const printUrl = `/print/final?department=${encodeURIComponent(body.department)}&scheme_id=${encodeURIComponent(body.scheme_id)}&year_of_study=${encodeURIComponent(body.year_of_study)}&version=${encodeURIComponent(body.version_label ?? "v1")}`;
+
+    const published = await c.env.DB.prepare(`
+      INSERT INTO published_curricula (department_id, academic_year_id, scheme_id, template_id, published_by_user_id, print_url, pdf_url, version_label, template_snapshot, render_metrics, year_of_study)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+    `).bind(
+      body.department,
+      body.academic_year || null,
+      body.scheme_id,
+      body.template,
+      c.get("user").id,
+      printUrl,
+      "",
+      body.version_label ?? "v1",
+      JSON.stringify({ css: template.css, html_template: template.html_template, name: template.name }),
+      JSON.stringify({ status: "queued", course_count: count?.n ?? 0, export: "pdf-render" }),
+      body.year_of_study
+    ).first<any>();
+
+    await c.env.DB.prepare(
+      "UPDATE courses SET status = 'PUBLISHED' WHERE id IN (SELECT c.id FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.scheme_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED'))"
+    ).bind(body.scheme_id, sems[0], sems[1]).run();
+
+    await c.env.DB.prepare("UPDATE curriculum_templates SET is_locked = 1 WHERE id = ?").bind(body.template).run();
+
+    c.executionCtx.waitUntil(
+      generatePdfTask(c.env, published.id, body.department, body.academic_year ?? "", body.version_label ?? "v1", body.year_of_study, body.scheme_id)
+    );
+
+    return c.json(published, 202);
+  }
+
   const count = await c.env.DB.prepare("SELECT count(*) AS n FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.department_id = ? AND s.academic_year_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED')").bind(body.department, body.academic_year, sems[0], sems[1]).first<any>();
   const printUrl = `/print/final?department=${encodeURIComponent(body.department)}&academic_year=${encodeURIComponent(body.academic_year)}&year_of_study=${encodeURIComponent(body.year_of_study)}&version=${encodeURIComponent(body.version_label ?? "v1")}`;
   
@@ -1294,7 +1622,7 @@ async function syncCourse(db: D1Database, courseId: string, data: any) {
   }
 }
 
-async function generatePdfTask(env: Env, publishedId: string, departmentId: string, academicYearId: string, versionLabel: string, yearOfStudy?: string) {
+async function generatePdfTask(env: Env, publishedId: string, departmentId: string, academicYearId: string, versionLabel: string, yearOfStudy?: string, schemeId?: string) {
   console.log(`Processing background PDF generation for publishedId: ${publishedId}`);
   
   try {
@@ -1309,9 +1637,11 @@ async function generatePdfTask(env: Env, publishedId: string, departmentId: stri
     }
 
     const frontendUrl = env.FRONTEND_URL ?? "http://localhost:3000";
-    const targetUrl = yearOfStudy 
-      ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&year_of_study=${encodeURIComponent(yearOfStudy)}&version=${encodeURIComponent(versionLabel)}`
-      : `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
+    const targetUrl = schemeId
+      ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&scheme_id=${encodeURIComponent(schemeId)}&year_of_study=${encodeURIComponent(yearOfStudy || "FE")}&version=${encodeURIComponent(versionLabel)}`
+      : yearOfStudy 
+        ? `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&year_of_study=${encodeURIComponent(yearOfStudy)}&version=${encodeURIComponent(versionLabel)}`
+        : `${frontendUrl}/print/final?department=${encodeURIComponent(departmentId)}&academic_year=${encodeURIComponent(academicYearId)}&version=${encodeURIComponent(versionLabel)}`;
     
     console.log(`Requesting PDF from Browserless for URL: ${targetUrl}`);
 
@@ -1396,9 +1726,9 @@ export default {
   async queue(batch: MessageBatch<any>, env: Env, ctx: ExecutionContext): Promise<void> {
     for (const message of batch.messages) {
       try {
-        const { publishedId, departmentId, academicYearId, versionLabel, yearOfStudy } = message.body || {};
+        const { publishedId, departmentId, academicYearId, versionLabel, yearOfStudy, schemeId } = message.body || {};
         if (publishedId) {
-          await generatePdfTask(env, publishedId, departmentId, academicYearId, versionLabel, yearOfStudy);
+          await generatePdfTask(env, publishedId, departmentId, academicYearId, versionLabel, yearOfStudy, schemeId);
         }
         message.ack();
       } catch (e) {

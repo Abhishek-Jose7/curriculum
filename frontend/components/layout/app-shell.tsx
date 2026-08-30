@@ -9,6 +9,7 @@ import {
   FileText,
   GraduationCap,
   LayoutDashboard,
+  Layers,
   LogOut,
   Moon,
   Sun,
@@ -36,6 +37,7 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
 
   if (role === "HOD") return [
     ...base,
+    { href: "/admin/schemes", label: "Schemes", icon: Layers },
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
     { href: "/publishing", label: "PDF Publisher", icon: FileText },
@@ -45,6 +47,7 @@ function getNavForRole(role: AuthUser["role"]): NavItem[] {
 
   if (role === "ADMIN") return [
     ...base,
+    { href: "/admin/schemes", label: "Schemes", icon: Layers },
     { href: "/courses", label: "All Courses", icon: BookOpen },
     { href: "/review", label: "Review Board", icon: CheckCircle2 },
     { href: "/publishing", label: "PDF Publisher", icon: FileText },
