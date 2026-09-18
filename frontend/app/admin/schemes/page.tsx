@@ -335,7 +335,7 @@ export default function AdminSchemesPage() {
                         Department
                       </label>
                       <select
-                        className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-zinc-900 sa-border"
+                        className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 sa-border"
                         value={createDeptId}
                         onChange={(e) => setCreateDeptId(e.target.value)}
                         required
@@ -355,7 +355,7 @@ export default function AdminSchemesPage() {
                     </label>
                     <input
                       type="text"
-                      className="w-full border rounded px-3 py-2 text-sm sa-mono sa-border bg-white dark:bg-zinc-900"
+                      className="w-full border rounded px-3 py-2 text-sm sa-mono sa-border bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100"
                       placeholder="2026-27"
                       value={newEnteringYear}
                       onChange={(e) => setNewEnteringYear(e.target.value)}
@@ -368,7 +368,7 @@ export default function AdminSchemesPage() {
                       Start From (Optional Shell Clone)
                     </label>
                     <select
-                      className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-zinc-900 sa-border"
+                      className="w-full border rounded px-3 py-2 text-sm bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 sa-border"
                       value={duplicateFromId}
                       onChange={(e) => setDuplicateFromId(e.target.value)}
                     >

@@ -909,7 +909,7 @@ async function handleCopyFrom(c: Context<{ Bindings: Env; Variables: Variables }
 }
 
 const PREVIOUS_SUBJECTS: Record<string, Array<{ code: string; title: string; course_type: string; credits: number; semester: number }>> = {
-  "COMP": [
+  "CE": [
     { code: "25BSC12CE05", title: "Discrete Mathematics and Graph Theory", course_type: "THEORY", credits: 2, semester: 3 },
     { code: "25PCC12CE05", title: "Computer Organization and Architecture", course_type: "THEORY_LAB", credits: 3, semester: 3 },
     { code: "25PCC12CE06", title: "Data Structures", course_type: "THEORY_LAB", credits: 4, semester: 3 },
@@ -940,20 +940,20 @@ const PREVIOUS_SUBJECTS: Record<string, Array<{ code: string; title: string; cou
     { code: "25PCC13CE20", title: "DevOps Lab", course_type: "LAB", credits: 1, semester: 6 },
     { code: "25PCC13CE21", title: "Advanced Microprocessors", course_type: "THEORY_LAB", credits: 3, semester: 6 }
   ],
-  "CSE": [
+  "CS": [
     { code: "25CS301", title: "Mathematical Foundations of Computer Science", course_type: "THEORY", credits: 4, semester: 3 },
     { code: "25CS302", title: "Design and Analysis of Algorithms", course_type: "THEORY_LAB", credits: 4, semester: 3 },
     { code: "25CS303", title: "Software Engineering Principles", course_type: "THEORY", credits: 3, semester: 3 },
     { code: "25CS401", title: "Database Systems and Applications", course_type: "THEORY_LAB", credits: 4, semester: 4 },
     { code: "25CS402", title: "Computer Networks", course_type: "THEORY_LAB", credits: 4, semester: 4 }
   ],
-  "ECS": [
+  "EC": [
     { code: "25EC301", title: "Electronic Devices and Circuits", course_type: "THEORY_LAB", credits: 4, semester: 3 },
     { code: "25EC302", title: "Digital System Design", course_type: "THEORY_LAB", credits: 3, semester: 3 },
     { code: "25EC401", title: "Microcontrollers and Embedded Systems", course_type: "THEORY_LAB", credits: 4, semester: 4 },
     { code: "25EC402", title: "Signals and Systems", course_type: "THEORY", credits: 3, semester: 4 }
   ],
-  "MECH": [
+  "ME": [
     { code: "25ME301", title: "Thermodynamics", course_type: "THEORY", credits: 3, semester: 3 },
     { code: "25ME302", title: "Strength of Materials", course_type: "THEORY_LAB", credits: 4, semester: 3 },
     { code: "25ME401", title: "Fluid Mechanics and Machinery", course_type: "THEORY_LAB", credits: 4, semester: 4 },

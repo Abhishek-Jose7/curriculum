@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { PrintCurriculum } from "@/lib/print-fixture";
 import { CoursePrint, SemesterStructure } from "@/components/print/course-print";
 
-export function CurriculumPrint({ curriculum, version }: { curriculum: PrintCurriculum; version: string }) {
+export function CurriculumPrint({ curriculum, version, previousSubjects }: { curriculum: PrintCurriculum; version: string; previousSubjects?: Array<{ code: string; title: string; course_type: string; credits: number; semester: number }> }) {
   const courses = curriculum.semesters.flatMap((semester) => semester.courses);
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
@@ -124,6 +124,34 @@ export function CurriculumPrint({ curriculum, version }: { curriculum: PrintCurr
         <h2>3. Syllabus Revision Protocol</h2>
         <p>Major syllabus revisions occur periodically to absorb technological shifts. Minor corrections and elective introductions may occur annually with Board of Studies recommendations and Academic Council approval.</p>
       </section>
+
+      {previousSubjects && previousSubjects.length > 0 && (
+        <section className="previous-subjects-page page">
+          <h1>PREVIOUS CURRICULUM SUBJECTS</h1>
+          <table className="official-table">
+            <thead>
+              <tr>
+                <th>Subject Code</th>
+                <th>Course Title</th>
+                <th>Course Type</th>
+                <th>Semester</th>
+                <th>Credits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {previousSubjects.map((subject) => (
+                <tr key={subject.code}>
+                  <td className="monospace bold">{subject.code}</td>
+                  <td>{subject.title}</td>
+                  <td>{subject.course_type}</td>
+                  <td className="center">{subject.semester}</td>
+                  <td className="center">{subject.credits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="reviewer-comments-book page">
         <h1>REVIEWER COMMENTS SECTION</h1>
