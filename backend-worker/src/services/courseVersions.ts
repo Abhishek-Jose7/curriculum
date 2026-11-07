@@ -1,14 +1,22 @@
 import { CoursesRepository } from "../repositories/curriculum";
 import type { AuthUser } from "../types";
 
-export async function createCourseVersion(db: D1Database, courseId: string, user: AuthUser | null, changeSummary: string) {
+export async function createCourseVersion(
+  db: D1Database,
+  courseId: string,
+  user: AuthUser | null,
+  changeSummary: string,
+  snapshot?: unknown
+) {
   const latest = await db.prepare("SELECT id, version_number FROM course_versions WHERE course_id = ? ORDER BY version_number DESC LIMIT 1").bind(courseId).first<{ id: string; version_number: number }>();
-  const snapshot = await new CoursesRepository(db).detail(courseId);
+  // Callers that just loaded the course pass their detail here, saving a full
+  // second read of the course and all of its children on every save.
+  const courseSnapshot = snapshot ?? await new CoursesRepository(db).detail(courseId);
   const row = await db.prepare(`
     INSERT INTO course_versions (course_id, version_number, edited_by_user_id, previous_version_id, snapshot, change_summary)
     VALUES (?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).bind(courseId, (latest?.version_number ?? 0) + 1, user?.id ?? null, latest?.id ?? null, JSON.stringify(snapshot), changeSummary).first();
+  `).bind(courseId, (latest?.version_number ?? 0) + 1, user?.id ?? null, latest?.id ?? null, JSON.stringify(courseSnapshot), changeSummary).first();
   return row;
 }
 

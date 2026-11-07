@@ -7,33 +7,60 @@ import { schemesRoutes } from "./routes/schemes";
 import { generateCourseCode, findPreviousMatches, copyDetailedContent } from "./services/courseCode";
 import { PreamblesRepository, TeachingComponentsRepository, CompileOrderRepository, SchemesRepository } from "./repositories/schemes";
 import { VERTICAL_SUBVERTICALS, type Vertical, type SubVertical, type TeachingComponentInput, PAIR_SEMESTERS, type YearOfStudy } from "./types/scheme";
-import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole } from "./middleware/auth";
+import { requireAuth, signJwt, isAcademicAdmin, verifyJwt, requireRole, loadCourseScope, requireCourseView, requireCourseEdit, timingSafeEqual } from "./middleware/auth";
 import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
 import { generatePin, generateReviewLinkIfMissing, isLocked, lockoutSecondsRemaining, signReviewSession, verifyReviewSession, REVIEW_PIN_CONSTANTS } from "./services/reviewSession";
 import { crudRoute } from "./routes/generic";
-import type { Env, Variables, WorkflowDecision } from "./types";
+import type { AuthUser, Env, Variables, WorkflowDecision } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 const api = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// Origins are only echoed back when explicitly trusted. Anything else gets no
+// CORS grant, so a token/cookie from this app cannot be used by a foreign site.
+function isAllowedOrigin(origin: string, env: Env): boolean {
+  const allowed = env.CORS_ALLOWED_ORIGINS ?? "http://localhost:3000";
+  const origins = allowed.split(",").map((o: string) => o.trim()).filter(Boolean);
+  if (origins.includes(origin)) return true;
+
+  let host: string;
+  try {
+    host = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  // Local development origins are trusted only outside production.
+  if (env.ENVIRONMENT !== "production" && (host === "localhost" || host === "127.0.0.1")) {
+    return true;
+  }
+
+  // Vercel preview deployments for this project only. The deployment host is
+  // "<project>-<hash>-<team>.vercel.app", so the project prefix must match a
+  // configured origin. Unrelated *.vercel.app sites are rejected.
+  if (host.endsWith(".vercel.app")) {
+    const prefix = host.split(".")[0];
+    const trustedPrefixes = origins
+      .filter((o) => o.endsWith(".vercel.app"))
+      .map((o) => {
+        try {
+          return new URL(o).hostname.split(".")[0];
+        } catch {
+          return "";
+        }
+      })
+      .filter(Boolean);
+    return trustedPrefixes.some((trusted) => prefix === trusted || prefix.startsWith(`${trusted}-`));
+  }
+
+  return false;
+}
+
 app.use(
   "*",
   cors({
-    origin: (origin, c) => {
-      const allowed = c.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:3000";
-      const origins = allowed.split(",").map((o: string) => o.trim());
-      if (origins.includes(origin)) {
-        return origin;
-      }
-      if (origin && (origin.endsWith(".vercel.app") || origin.startsWith("http://localhost:"))) {
-        return origin;
-      }
-      if (!origin && c.env.ENVIRONMENT === "development") {
-        return "*";
-      }
-      return origins[0];
-    },
+    origin: (origin, c) => (origin && isAllowedOrigin(origin, c.env) ? origin : undefined),
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Length"],
@@ -42,12 +69,25 @@ app.use(
   })
 );
 
+// Baseline hardening headers for every API response.
+app.use("*", async (c, next) => {
+  await next();
+  if (!c.res.headers.has("X-Content-Type-Options")) {
+    c.res.headers.set("X-Content-Type-Options", "nosniff");
+    c.res.headers.set("X-Frame-Options", "DENY");
+    c.res.headers.set("Referrer-Policy", "no-referrer");
+    c.res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    c.res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+});
+
 app.get("/api/fonts/:name", async (c) => serveFont(c));
 app.get("/fonts/:name", async (c) => serveFont(c));
 
 async function serveFont(c: any) {
   const name = c.req.param("name");
-  if (!name.endsWith(".ttf")) {
+  // Only plain font file names: no path segments, queries or traversal.
+  if (!/^[A-Za-z0-9_-]+\.ttf$/.test(name)) {
     return c.text("Invalid font format", 400);
   }
 
@@ -111,7 +151,11 @@ async function serveFont(c: any) {
   });
 }
 
+let refreshTokensTableReady = false;
+
 async function ensureRefreshTokensTable(db: D1Database) {
+  // Table creation only needs to happen once per Worker isolate.
+  if (refreshTokensTableReady) return;
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id TEXT PRIMARY KEY,
@@ -122,16 +166,106 @@ async function ensureRefreshTokensTable(db: D1Database) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `).run();
+  refreshTokensTableReady = true;
+}
+
+let rateLimitTableReady = false;
+
+async function ensureRateLimitTable(db: D1Database) {
+  if (rateLimitTableReady) return;
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      window_started_at INTEGER NOT NULL,
+      locked_until INTEGER
+    )
+  `).run();
+  rateLimitTableReady = true;
+}
+
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+/** Seconds remaining on an active lock, or 0 when the key is free. */
+async function rateLimitRemaining(db: D1Database, key: string): Promise<number> {
+  await ensureRateLimitTable(db);
+  const row = await db.prepare("SELECT attempts, window_started_at, locked_until FROM rate_limits WHERE key = ?")
+    .bind(key)
+    .first<{ attempts: number; window_started_at: number; locked_until: number | null }>();
+  if (!row) return 0;
+  const now = Date.now();
+  if (row.locked_until && row.locked_until > now) return Math.ceil((row.locked_until - now) / 1000);
+  if (now - row.window_started_at > LOGIN_WINDOW_MS) return 0;
+  return 0;
+}
+
+async function recordRateLimitFailure(db: D1Database, key: string, max: number, windowMs: number, lockMs: number): Promise<void> {
+  await ensureRateLimitTable(db);
+  const now = Date.now();
+  const row = await db.prepare("SELECT attempts, window_started_at FROM rate_limits WHERE key = ?")
+    .bind(key)
+    .first<{ attempts: number; window_started_at: number }>();
+  const windowExpired = !row || now - row.window_started_at > windowMs;
+  const attempts = windowExpired ? 1 : row.attempts + 1;
+  const windowStart = windowExpired ? now : row.window_started_at;
+  const lockedUntil = attempts >= max ? now + lockMs : null;
+  await db.prepare(`
+    INSERT INTO rate_limits (key, attempts, window_started_at, locked_until)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET attempts = excluded.attempts,
+      window_started_at = excluded.window_started_at, locked_until = excluded.locked_until
+  `).bind(key, attempts, windowStart, lockedUntil).run();
+}
+
+async function clearRateLimit(db: D1Database, key: string): Promise<void> {
+  await ensureRateLimitTable(db);
+  await db.prepare("DELETE FROM rate_limits WHERE key = ?").bind(key).run();
+}
+
+function clientIp(c: Context<{ Bindings: Env; Variables: Variables }>): string {
+  const forwarded = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "";
+  return forwarded.split(",")[0].trim() || "unknown";
+}
+
+async function readJsonBody<T>(c: Context<{ Bindings: Env; Variables: Variables }>): Promise<T | null> {
+  try {
+    return await c.req.json<T>();
+  } catch {
+    return null;
+  }
 }
 
 api.post("/auth/token/", async (c) => {
-  const body = await c.req.json<{ username?: string; email?: string; password?: string }>();
-  const login = body.username ?? body.email ?? "";
+  const body = await readJsonBody<{ username?: string; email?: string; password?: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
+  const login = (body.username ?? body.email ?? "").trim();
+  if (!login || !body.password) {
+    return c.json({ detail: "No active account found with the given credentials." }, 401);
+  }
+
+  // Throttle by account identifier so distributed guessing cannot brute-force a
+  // password. Only failures count, so normal sign-ins are unaffected.
+  const throttleKey = `login:${login.toLowerCase()}`;
+  const lockedFor = await rateLimitRemaining(c.env.DB, throttleKey);
+  if (lockedFor > 0) {
+    return c.json({ detail: "Too many failed sign-in attempts. Try again later.", retryAfterSeconds: lockedFor }, 429);
+  }
+
   const user = await c.env.DB.prepare("SELECT * FROM profiles WHERE (email = ? OR username = ?) AND is_active = 1").bind(login, login).first<any>();
-  if (!user) return c.json({ detail: "No active account found with the given credentials." }, 401);
+  if (!user) {
+    await recordRateLimitFailure(c.env.DB, throttleKey, LOGIN_MAX_FAILURES, LOGIN_WINDOW_MS, LOGIN_LOCK_MS);
+    return c.json({ detail: "No active account found with the given credentials." }, 401);
+  }
   
   const verified = await verifyPassword(body.password ?? "", user.password_hash ?? "");
-  if (!verified) return c.json({ detail: "No active account found with the given credentials." }, 401);
+  if (!verified) {
+    await recordRateLimitFailure(c.env.DB, throttleKey, LOGIN_MAX_FAILURES, LOGIN_WINDOW_MS, LOGIN_LOCK_MS);
+    return c.json({ detail: "No active account found with the given credentials." }, 401);
+  }
+
+  await clearRateLimit(c.env.DB, throttleKey);
   
   // Migration bridge: JIT hash migration
   if (user.password_hash && !user.password_hash.startsWith("pbkdf2_sha256$")) {
@@ -177,7 +311,8 @@ api.post("/auth/token/", async (c) => {
 });
 
 api.post("/auth/token/refresh/", async (c) => {
-  const body = await c.req.json<{ refresh?: string }>();
+  const body = await readJsonBody<{ refresh?: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
   const token = body.refresh;
   if (!token) return c.json({ detail: "Refresh token is required." }, 400);
   
@@ -188,7 +323,7 @@ api.post("/auth/token/refresh/", async (c) => {
   
   await ensureRefreshTokensTable(c.env.DB);
   
-  const stored = await c.env.DB.prepare("SELECT * FROM refresh_tokens WHERE token_id = ?").bind(payload.jti).first<any>();
+  const stored = await c.env.DB.prepare("SELECT token_id, user_id, expires_at, is_revoked FROM refresh_tokens WHERE token_id = ?").bind(payload.jti).first<any>();
   if (!stored) return c.json({ detail: "Invalid refresh token." }, 401);
   
   if (stored.is_revoked === 1) {
@@ -225,12 +360,13 @@ api.post("/auth/token/refresh/", async (c) => {
 });
 
 api.post("/auth/token/revoke/", async (c) => {
-  const body = await c.req.json<{ refresh_token?: string }>();
+  const body = await readJsonBody<{ refresh_token?: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
   const token = body.refresh_token;
   if (!token) return c.json({ detail: "Refresh token is required." }, 400);
   
   const payload = await verifyJwt(token, c.env.AUTH_JWT_SECRET);
-  if (!payload?.jti) return c.json({ detail: "Invalid token." }, 401);
+  if (!payload?.jti || payload.typ !== "refresh") return c.json({ detail: "Invalid token." }, 401);
   
   await ensureRefreshTokensTable(c.env.DB);
   await c.env.DB.prepare("UPDATE refresh_tokens SET is_revoked = 1 WHERE token_id = ?").bind(payload.jti).run();
@@ -255,8 +391,10 @@ api.use("*", requireAuth);
 api.get("/auth/me/", (c) => c.json(c.get("user")));
 
 const handleListFaculty = async (c: any) => {
+  const currentUser = c.get("user") as AuthUser;
   const roleFilter = c.req.query("role");
-  const deptFilter = c.req.query("department_id");
+  // An HOD only manages staff inside their own department.
+  const deptFilter = currentUser.role === "HOD" ? currentUser.department_id : c.req.query("department_id");
   let query = "SELECT id, email, first_name, last_name, role, department_id FROM profiles WHERE role IN ('FACULTY', 'HOD', 'ADMIN') AND is_active = 1";
   const params: any[] = [];
   if (roleFilter) {
@@ -620,7 +758,17 @@ api.delete("/notifications/:id/", async (c) => {
   return c.body(null, 204);
 });
 
-api.get("/courses/", async (c) => c.json(await new CoursesRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+api.get("/courses/", async (c) => {
+  const user = c.get("user") as AuthUser;
+  const query = Object.fromEntries(new URL(c.req.url).searchParams);
+  // Server-side scoping mirrors what each role is allowed to open.
+  if (user.is_superuser !== 1 && user.role === "HOD") {
+    query.department_id = user.department_id ?? "__no_department__";
+  } else if (user.is_superuser !== 1 && user.role !== "ADMIN") {
+    query.faculty_user_id = user.id;
+  }
+  return c.json(await new CoursesRepository(c.env.DB).list(query));
+});
 api.post("/courses/", async (c) => {
   const user = c.get("user");
   const body = await c.req.json<any>();
@@ -723,6 +871,9 @@ api.post("/courses/", async (c) => {
   const teacher = await c.env.DB.prepare("SELECT department_id, role, is_active FROM profiles WHERE id = ?").bind(body.faculty_user_id).first<any>();
   if (!teacher || teacher.role !== "FACULTY" || !teacher.is_active) return c.json({ error: "TEACHER_INVALID" }, 400);
   if (!semester || teacher.department_id !== semester.department_id) return c.json({ error: "TEACHER_DEPARTMENT_MISMATCH" }, 400);
+  if (!isDepartmentAdmin(user, semester.department_id)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   const course = await new CoursesRepository(c.env.DB).create(body);
   await generateReviewLinkIfMissing(c.env.DB, course.id);
   await createCourseVersion(c.env.DB, course.id, user, "Course created");
@@ -733,7 +884,10 @@ api.get("/courses/:id", async (c) => handleGetCourse(c));
 api.get("/courses/:id/", async (c) => handleGetCourse(c));
 
 async function handleGetCourse(c: any) {
-  const course = await new CoursesRepository(c.env.DB).detail(c.req.param("id"));
+  const id = c.req.param("id");
+  const access = await requireCourseView(c, id);
+  if (access.response) return access.response;
+  const course = await new CoursesRepository(c.env.DB).detail(id);
   return course ? c.json(course) : c.json({ detail: "Not found." }, 404);
 }
 
@@ -838,6 +992,10 @@ const handleAssignFaculty = async (c: Context<{ Bindings: Env; Variables: Variab
     return c.json({ detail: "Course not found." }, 404);
   }
 
+  if (!isDepartmentAdmin(c.get("user"), courseRow.department_id)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
+
   if (courseRow.is_unlocked === 0) {
     return c.json({ error: "SEMESTER_LOCKED", detail: "This semester isn't unlocked yet." }, 400);
   }
@@ -860,14 +1018,16 @@ const handleAssignFaculty = async (c: Context<{ Bindings: Env; Variables: Variab
 api.patch("/courses/:id/assign-faculty", requireRole("ADMIN", "HOD"), handleAssignFaculty);
 api.patch("/courses/:id/assign-faculty/", requireRole("ADMIN", "HOD"), handleAssignFaculty);
 
-api.get("/courses/:id/previous-matches", async (c) => {
-  const matches = await findPreviousMatches(c.env.DB, c.req.param("id") as string);
+const handlePreviousMatches = async (c: any) => {
+  const id = c.req.param("id") as string;
+  const access = await requireCourseView(c, id);
+  if (access.response) return access.response;
+  const matches = await findPreviousMatches(c.env.DB, id);
   return c.json({ matches });
-});
-api.get("/courses/:id/previous-matches/", async (c) => {
-  const matches = await findPreviousMatches(c.env.DB, c.req.param("id") as string);
-  return c.json({ matches });
-});
+};
+
+api.get("/courses/:id/previous-matches", handlePreviousMatches);
+api.get("/courses/:id/previous-matches/", handlePreviousMatches);
 
 api.post("/courses/:id/copy-from/:previousCourseId", async (c) => handleCopyFrom(c));
 api.post("/courses/:id/copy-from/:previousCourseId/", async (c) => handleCopyFrom(c));
@@ -972,7 +1132,13 @@ api.get("/departments/:id/previous-subjects/", async (c) => {
 });
 
 api.post("/semesters/initialize-year/", requireRole("ADMIN", "HOD"), async (c) => {
-  const { department_id, academic_year_id, year_of_study } = await c.req.json<{ department_id: string, academic_year_id: string, year_of_study: string }>();
+  const user = c.get("user") as AuthUser;
+  const body = await readJsonBody<{ department_id: string; academic_year_id: string; year_of_study: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
+  const { department_id, academic_year_id, year_of_study } = body;
+  if (!isDepartmentAdmin(user, department_id)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   
   const YEAR_SEM_MAP: Record<string, number[]> = {
     "FE": [1, 2],
@@ -1003,15 +1169,23 @@ api.post("/semesters/initialize-year/", requireRole("ADMIN", "HOD"), async (c) =
 });
 
 api.post("/courses/:id/submit/", async (c) => {
-  const course = await c.env.DB.prepare("UPDATE courses SET status = 'SUBMITTED' WHERE id = ? RETURNING *").bind(c.req.param("id")).first<any>();
+  const id = c.req.param("id");
+  const access = await requireCourseEdit(c, id);
+  if (access.response) return access.response;
+  const course = await c.env.DB.prepare("UPDATE courses SET status = 'SUBMITTED' WHERE id = ? RETURNING *").bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found." }, 404);
   await createCourseVersion(c.env.DB, course.id, c.get("user"), "Submitted for review");
   return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
 });
 
 api.post("/courses/:id/reopen/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const course = await c.env.DB.prepare("UPDATE courses SET status = 'CHANGES_REQUESTED', approved_by_user_id = NULL, approved_at = NULL WHERE id = ? RETURNING *").bind(c.req.param("id")).first<any>();
+  const id = c.req.param("id");
+  const admin = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(admin)) return c.json({ detail: "Permission denied." }, 403);
+  const scope = await loadCourseScope(c.env.DB, id);
+  if (!scope) return c.json({ detail: "Not found." }, 404);
+  if (!isDepartmentAdmin(admin, scope.department_id)) return c.json({ detail: "Permission denied." }, 403);
+  const course = await c.env.DB.prepare("UPDATE courses SET status = 'CHANGES_REQUESTED', approved_by_user_id = NULL, approved_at = NULL WHERE id = ? RETURNING *").bind(id).first<any>();
   if (!course) return c.json({ detail: "Not found." }, 404);
   await createCourseVersion(c.env.DB, course.id, c.get("user"), "Reopened by administrator");
   return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
@@ -1030,7 +1204,7 @@ api.get("/courses/:id/review-link/", async (c) => {
   }
   if (user.role === "HOD") {
     const sem = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(course.semester_id).first<any>();
-    if (sem && user.department_id && String(sem.department_id) !== String(user.department_id)) {
+    if (!user.department_id || !sem || String(sem.department_id) !== String(user.department_id)) {
       return c.json({ detail: "Permission denied." }, 403);
     }
   }
@@ -1051,7 +1225,7 @@ api.post("/courses/:id/review-pin/reset/", async (c) => {
   }
   if (user.role === "HOD") {
     const sem = await c.env.DB.prepare("SELECT department_id FROM semesters WHERE id = ?").bind(course.semester_id).first<any>();
-    if (sem && user.department_id && String(sem.department_id) !== String(user.department_id)) {
+    if (!user.department_id || !sem || String(sem.department_id) !== String(user.department_id)) {
       return c.json({ detail: "Permission denied." }, 403);
     }
   }
@@ -1065,12 +1239,18 @@ api.post("/courses/:id/review-pin/reset/", async (c) => {
 });
 
 api.get("/courses/:id/versions/", async (c) => {
-  const rows = await c.env.DB.prepare("SELECT cv.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS edited_by_name FROM course_versions cv LEFT JOIN profiles p ON p.id = cv.edited_by_user_id WHERE cv.course_id = ? ORDER BY cv.version_number DESC").bind(c.req.param("id")).all();
+  const id = c.req.param("id");
+  const access = await requireCourseView(c, id);
+  if (access.response) return access.response;
+  const rows = await c.env.DB.prepare("SELECT cv.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS edited_by_name FROM course_versions cv LEFT JOIN profiles p ON p.id = cv.edited_by_user_id WHERE cv.course_id = ? ORDER BY cv.version_number DESC").bind(id).all();
   return c.json(rows.results ?? []);
 });
 
 api.post("/courses/:id/compare_versions/", async (c) => {
-  const body = await c.req.json<{ version_a: string; version_b: string }>();
+  const access = await requireCourseView(c, c.req.param("id"));
+  if (access.response) return access.response;
+  const body = await readJsonBody<{ version_a: string; version_b: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
   const a = await c.env.DB.prepare("SELECT * FROM course_versions WHERE course_id = ? AND id = ?").bind(c.req.param("id"), body.version_a).first<any>();
   const b = await c.env.DB.prepare("SELECT * FROM course_versions WHERE course_id = ? AND id = ?").bind(c.req.param("id"), body.version_b).first<any>();
   if (!a || !b) return c.json({ detail: "Version not found." }, 404);
@@ -1081,6 +1261,8 @@ api.post("/courses/:id/compare_versions/", async (c) => {
 
 api.get("/courses/:id/compare_previous_year/", async (c) => {
   const courseId = c.req.param("id");
+  const access = await requireCourseView(c, courseId);
+  if (access.response) return access.response;
   const db = c.env.DB;
   
   // 1. Get the current course details
@@ -1139,9 +1321,15 @@ api.get("/courses/:id/compare_previous_year/", async (c) => {
 
 
 api.post("/courses/:id/rollback/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const body = await c.req.json<{ version_id: string }>();
-  const version = await c.env.DB.prepare("SELECT * FROM course_versions WHERE course_id = ? AND id = ?").bind(c.req.param("id"), body.version_id).first<any>();
+  const id = c.req.param("id");
+  const admin = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(admin)) return c.json({ detail: "Permission denied." }, 403);
+  const scope = await loadCourseScope(c.env.DB, id);
+  if (!scope) return c.json({ detail: "Not found." }, 404);
+  if (!isDepartmentAdmin(admin, scope.department_id)) return c.json({ detail: "Permission denied." }, 403);
+  const body = await readJsonBody<{ version_id: string }>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
+  const version = await c.env.DB.prepare("SELECT * FROM course_versions WHERE course_id = ? AND id = ?").bind(id, body.version_id).first<any>();
   if (!version) return c.json({ detail: "Version not found." }, 404);
   const snapshot = JSON.parse(version.snapshot);
   await new CoursesRepository(c.env.DB).update(c.req.param("id"), snapshot.course ?? snapshot);
@@ -1151,34 +1339,122 @@ api.post("/courses/:id/rollback/", async (c) => {
 
 api.post("/courses/:id/autosave/", async (c) => {
   const id = c.req.param("id");
-  const data = await c.req.json<any>();
+  const access = await requireCourseEdit(c, id);
+  if (access.response) return access.response;
+  const raw = await readJsonBody<any>(c);
+  if (!raw) return c.json({ detail: "Invalid request body." }, 400);
+  const data = sanitizeCoursePayload(raw, c.get("user"));
   await syncCourse(c.env.DB, id, data);
-  await createCourseVersion(c.env.DB, id, c.get("user"), data.change_summary ?? "Autosaved draft");
-  return c.json({ status: "saved", course: await new CoursesRepository(c.env.DB).detail(id) });
+  // Read the course once and reuse it as the version snapshot.
+  const detail = await new CoursesRepository(c.env.DB).detail(id);
+  await createCourseVersion(c.env.DB, id, c.get("user"), data.change_summary ?? "Autosaved draft", detail);
+  return c.json({ status: "saved", course: detail });
 });
 
 api.get("/reviewer-comments/", async (c) => {
+  const user = c.get("user") as AuthUser;
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
-  const rows = await new ReviewerRepository(c.env.DB).list(query);
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  for (const column of ["course_id", "section_key", "is_resolved"]) {
+    const value = query[column];
+    if (value !== undefined && value !== "") {
+      clauses.push(`rc.${column} = ?`);
+      params.push(value);
+    }
+  }
   // Unsubmitted external-review drafts are only visible through the PIN-gated public link.
-  const visible = query.status ? rows : rows.filter((r: any) => r.status !== "DRAFT");
-  return c.json(visible);
+  if (query.status) {
+    clauses.push("rc.status = ?");
+    params.push(query.status);
+  } else {
+    clauses.push("rc.status != 'DRAFT'");
+  }
+  // Same ownership model as course reads: department HOD, assigned faculty, or admin.
+  if (user.role === "HOD") {
+    clauses.push("s.department_id = ?");
+    params.push(user.department_id ?? "");
+  } else if (user.is_superuser !== 1 && user.role !== "ADMIN") {
+    clauses.push("c.faculty_user_id = ?");
+    params.push(user.id);
+  }
+  const rows = await c.env.DB.prepare(`
+    SELECT rc.*
+    FROM reviewer_comments rc
+    JOIN courses c ON c.id = rc.course_id
+    JOIN semesters s ON s.id = c.semester_id
+    WHERE ${clauses.join(" AND ")}
+    ORDER BY rc.created_at DESC
+  `).bind(...params).all();
+  return c.json(rows.results ?? []);
 });
 api.post("/reviewer-comments/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const row = await new ReviewerRepository(c.env.DB).create({ ...(await c.req.json()), reviewer_user_id: c.get("user").id });
+  const user = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(user)) return c.json({ detail: "Permission denied." }, 403);
+  const body = await readJsonBody<any>(c);
+  if (!body || !body.course_id) return c.json({ detail: "course_id is required." }, 400);
+  const scope = await loadCourseScope(c.env.DB, body.course_id);
+  if (!scope) return c.json({ detail: "Course not found." }, 404);
+  if (!isDepartmentAdmin(user, scope.department_id)) return c.json({ detail: "Permission denied." }, 403);
+  const row = await new ReviewerRepository(c.env.DB).create({ ...body, reviewer_user_id: user.id });
   return c.json(row, 201);
 });
-api.post("/reviewer-comments/:id/resolve/", async (c) => c.json(await new ReviewerRepository(c.env.DB).update(c.req.param("id"), { is_resolved: 1, resolved_by_user_id: c.get("user").id, resolved_at: new Date().toISOString() })));
+api.post("/reviewer-comments/:id/resolve/", async (c) => {
+  const user = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(user)) return c.json({ detail: "Permission denied." }, 403);
+  const comment = await c.env.DB.prepare("SELECT id, course_id FROM reviewer_comments WHERE id = ?")
+    .bind(c.req.param("id"))
+    .first<{ id: string; course_id: string }>();
+  if (!comment) return c.json({ detail: "Not found." }, 404);
+  const scope = await loadCourseScope(c.env.DB, comment.course_id);
+  if (!scope) return c.json({ detail: "Course not found." }, 404);
+  if (!isDepartmentAdmin(user, scope.department_id)) return c.json({ detail: "Permission denied." }, 403);
+  return c.json(await new ReviewerRepository(c.env.DB).update(comment.id, { is_resolved: 1, resolved_by_user_id: user.id, resolved_at: new Date().toISOString() }));
+});
 
-api.get("/approval-workflows/", async (c) => c.json(await new WorkflowRepository(c.env.DB).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+api.get("/approval-workflows/", async (c) => {
+  const user = c.get("user") as AuthUser;
+  const query = Object.fromEntries(new URL(c.req.url).searchParams);
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  for (const column of ["course_id", "decision", "actor_user_id"]) {
+    const value = query[column];
+    if (value !== undefined && value !== "") {
+      clauses.push(`aw.${column} = ?`);
+      params.push(value);
+    }
+  }
+  if (user.role === "HOD") {
+    clauses.push("s.department_id = ?");
+    params.push(user.department_id ?? "");
+  } else if (user.is_superuser !== 1 && user.role !== "ADMIN") {
+    clauses.push("c.faculty_user_id = ?");
+    params.push(user.id);
+  }
+  const rows = await c.env.DB.prepare(`
+    SELECT aw.*
+    FROM approval_workflows aw
+    JOIN courses c ON c.id = aw.course_id
+    JOIN semesters s ON s.id = c.semester_id
+    ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+    ORDER BY aw.created_at DESC
+  `).bind(...params).all();
+  return c.json(rows.results ?? []);
+});
 api.post("/approval-workflows/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const body = await c.req.json<{ course: string; decision: WorkflowDecision; note?: string }>();
+  const user = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(user)) return c.json({ detail: "Permission denied." }, 403);
+  const body = await readJsonBody<{ course: string; decision: WorkflowDecision; note?: string }>(c);
+  if (!body || !body.course) return c.json({ detail: "course is required." }, 400);
   const transitions: Record<WorkflowDecision, string> = { REQUEST_CHANGES: "CHANGES_REQUESTED", APPROVE: "APPROVED", REJECT: "CHANGES_REQUESTED", PUBLISH: "PUBLISHED" };
+  const to = transitions[body.decision];
+  if (!to) return c.json({ detail: "Invalid decision." }, 400);
   const course = await c.env.DB.prepare("SELECT * FROM courses WHERE id = ?").bind(body.course).first<any>();
   if (!course) return c.json({ detail: "Course not found." }, 404);
-  const to = transitions[body.decision];
+  const scope = await loadCourseScope(c.env.DB, body.course);
+  if (!scope || !isDepartmentAdmin(user, scope.department_id)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   await c.env.DB.prepare("UPDATE courses SET status = ?, approved_by_user_id = CASE WHEN ? = 'APPROVED' THEN ? ELSE approved_by_user_id END, approved_at = CASE WHEN ? = 'APPROVED' THEN CURRENT_TIMESTAMP ELSE approved_at END WHERE id = ?").bind(to, to, c.get("user").id, to, body.course).run();
   const workflow = await new WorkflowRepository(c.env.DB).create({ course_id: body.course, actor_user_id: c.get("user").id, from_status: course.status, to_status: to, decision: body.decision, note: body.note ?? "" });
   await createCourseVersion(c.env.DB, body.course, c.get("user"), `Workflow decision: ${body.decision}`);
@@ -1248,14 +1524,19 @@ api.get("/published-curricula/:id/download/", async (c) => {
   object.writeHttpMetadata(headers);
   headers.set("etag", object.httpEtag);
   headers.set("Content-Type", "application/pdf");
-  headers.set("Content-Disposition", `attachment; filename="curriculum-${id}.pdf"`);
+  headers.set("Content-Disposition", `attachment; filename="curriculum-${id.replace(/[^A-Za-z0-9_-]/g, "")}.pdf"`);
   
   return new Response(object.body, { headers });
 });
 
 api.post("/published-curricula/publish/", async (c) => {
-  if (!isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
-  const body = await c.req.json<any>();
+  const publisher = c.get("user") as AuthUser;
+  if (!isAcademicAdmin(publisher)) return c.json({ detail: "Permission denied." }, 403);
+  const body = await readJsonBody<any>(c);
+  if (!body) return c.json({ detail: "Invalid request body." }, 400);
+  if (!isDepartmentAdmin(publisher, body.department)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
   
   const YEAR_SEM_MAP: Record<string, number[]> = {
     FE: [1, 2], SE: [3, 4], TE: [5, 6], BE: [7, 8]
@@ -1267,8 +1548,18 @@ api.post("/published-curricula/publish/", async (c) => {
 
   const template = await c.env.DB.prepare("SELECT * FROM curriculum_templates WHERE id = ?").bind(body.template).first<any>();
   if (!template) return c.json({ detail: "Template not found." }, 404);
+  // Legacy templates may be shared across departments; only scope when the
+  // template itself belongs to one.
+  if (template.department_id != null && !isDepartmentAdmin(publisher, template.department_id)) {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
 
   if (body.scheme_id) {
+    const scheme = await SchemesRepository.get(c.env.DB, body.scheme_id);
+    if (!scheme) return c.json({ detail: "Scheme not found." }, 404);
+    if (!isDepartmentAdmin(publisher, scheme.department_id)) {
+      return c.json({ detail: "Permission denied." }, 403);
+    }
     const count = await c.env.DB.prepare(
       "SELECT count(*) AS n FROM courses c JOIN semesters s ON s.id = c.semester_id WHERE s.scheme_id = ? AND s.number IN (?,?) AND c.status IN ('APPROVED','PUBLISHED')"
     ).bind(body.scheme_id, sems[0], sems[1]).first<any>();
@@ -1376,18 +1667,29 @@ async function requireReviewSession(
 
 app.post("/public/review/:token/verify/", async (c) => {
   const token = c.req.param("token");
-  const { pin } = await c.req.json<any>();
+  const body = await readJsonBody<{ pin?: string }>(c);
+  if (!body) return c.json({ error: "FEEDBACK_INVALID" }, 400);
+  const pin = body.pin;
   const course = await c.env.DB.prepare(
     `SELECT id, code, title, review_pin, review_pin_failed_attempts, review_pin_locked_until
      FROM courses WHERE share_token = ?`
   ).bind(token).first<any>();
   if (!course) return c.json({ error: "TOKEN_INVALID" }, 404);
 
+  // Per-IP throttle so one client cannot exhaust the shared course lockout and
+  // deny access to legitimate reviewers.
+  const throttleKey = `review-pin:${clientIp(c)}:${token}`;
+  const throttledFor = await rateLimitRemaining(c.env.DB, throttleKey);
+  if (throttledFor > 0) {
+    return c.json({ error: "RATE_LIMITED", retryAfterSeconds: throttledFor }, 429);
+  }
+
   if (isLocked(course)) {
     return c.json({ error: "LOCKED", retryAfterSeconds: lockoutSecondsRemaining(course) }, 429);
   }
 
-  if (pin !== course.review_pin) {
+  if (!course.review_pin || !timingSafeEqual(String(pin ?? ""), String(course.review_pin))) {
+    await recordRateLimitFailure(c.env.DB, throttleKey, 30, LOGIN_WINDOW_MS, LOGIN_LOCK_MS);
     const attempts = (course.review_pin_failed_attempts ?? 0) + 1;
     const lockedUntil =
       attempts >= REVIEW_PIN_CONSTANTS.MAX_ATTEMPTS
@@ -1403,6 +1705,7 @@ app.post("/public/review/:token/verify/", async (c) => {
   await c.env.DB.prepare(
     "UPDATE courses SET review_pin_failed_attempts = 0, review_pin_locked_until = NULL WHERE id = ?"
   ).bind(course.id).run();
+  await clearRateLimit(c.env.DB, throttleKey);
 
   const sessionToken = await signReviewSession(c.env.AUTH_JWT_SECRET, course.id, token);
   return c.json({
@@ -1499,13 +1802,15 @@ app.post("/public/review/:token/submit/", requireReviewSession, async (c) => {
 
   const title = `New reviewer comments on ${course?.code ?? ""} — ${course?.title ?? ""}`;
   const bodyText = `${drafts.results.length} review comment(s) submitted.`;
-  for (const userId of new Set(notifyUserIds)) {
-    await c.env.DB.prepare(`
-      INSERT INTO notifications (id, user_id, title, body, link, is_read, created_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?)
-    `).bind(
-      crypto.randomUUID(), userId, title, bodyText, `/courses/${courseId}`, now
-    ).run();
+  // One batched round trip instead of one insert per recipient.
+  const recipients = Array.from(new Set(notifyUserIds));
+  if (recipients.length > 0) {
+    await c.env.DB.batch(recipients.map((userId) =>
+      c.env.DB.prepare(`
+        INSERT INTO notifications (id, user_id, title, body, link, is_read, created_at)
+        VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).bind(crypto.randomUUID(), userId, title, bodyText, `/courses/${courseId}`, now)
+    ));
   }
 
   return c.json({ submittedCount: drafts.results.length });
@@ -1513,20 +1818,59 @@ app.post("/public/review/:token/submit/", requireReviewSession, async (c) => {
 
 app.onError((err, c) => {
   console.error("Backend error:", err);
-  const message = err.message || "An unexpected server error occurred.";
+  const message = err?.message || "";
   if (message.includes("UNIQUE constraint failed") || message.includes("SQLITE_CONSTRAINT")) {
     return c.json({ detail: "A record with this number/code already exists for this selection." }, 400);
   }
-  return c.json({ detail: message }, 400);
+  // Never leak internal SQL/runtime details to the client.
+  return c.json({ detail: "An unexpected server error occurred." }, 500);
 });
 
 app.route("/api", api);
 
 async function updateCourse(c: any) {
-  const body = await c.req.json();
-  const course = await new CoursesRepository(c.env.DB).update(c.req.param("id"), body);
-  await createCourseVersion(c.env.DB, course.id, c.get("user"), body.change_summary ?? "Course updated");
-  return c.json(await new CoursesRepository(c.env.DB).detail(course.id));
+  const id = c.req.param("id");
+  const access = await requireCourseEdit(c, id);
+  if (access.response) return access.response;
+  const raw = await readJsonBody<any>(c);
+  if (!raw) return c.json({ detail: "Invalid request body." }, 400);
+  const body = sanitizeCoursePayload(raw, c.get("user"));
+  const course = await new CoursesRepository(c.env.DB).update(id, body);
+  // Build the version snapshot from the detail we return, avoiding a second
+  // full course re-read per update.
+  const detail = await new CoursesRepository(c.env.DB).detail(course.id);
+  await createCourseVersion(c.env.DB, course.id, c.get("user"), body.change_summary ?? "Course updated", detail);
+  return c.json(detail);
+}
+
+// Fields only an administrator may change. Faculty and HOD edits go through the
+// dedicated approval/assignment endpoints, so stripping them here prevents
+// self-approval, status forgery and reassignment via a course payload.
+const PRIVILEGED_COURSE_FIELDS = [
+  "status",
+  "faculty_user_id",
+  "approved_by_user_id",
+  "approved_at",
+  "share_token",
+  "review_pin",
+  "review_pin_failed_attempts",
+  "review_pin_locked_until",
+  "review_link_generated_at",
+];
+
+function sanitizeCoursePayload(body: Record<string, any>, user: AuthUser): Record<string, any> {
+  const clean = { ...body };
+  if (user.is_superuser !== 1 && user.role !== "ADMIN") {
+    for (const field of PRIVILEGED_COURSE_FIELDS) delete clean[field];
+  }
+  return clean;
+}
+
+function isDepartmentAdmin(user: AuthUser, departmentId: string | number | null | undefined): boolean {
+  if (user.is_superuser === 1 || user.role === "ADMIN") return true;
+  // D1 returns department ids as numbers while request bodies carry strings.
+  return user.role === "HOD" && user.department_id != null && departmentId != null
+    && String(user.department_id) === String(departmentId);
 }
 
 async function syncCourse(db: D1Database, courseId: string, data: any) {
@@ -1572,10 +1916,13 @@ async function syncCourse(db: D1Database, courseId: string, data: any) {
     }
   };
 
-  await collectSyncStatements("course_outcomes", "course_id", courseId, data.outcomes, ["code", "description", "bloom_level", "sort_order", "po_map"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-  await collectSyncStatements("experiments", "course_id", courseId, data.experiments, ["number", "title", "description", "hours"]);
-  await collectSyncStatements("assessment_schemes", "course_id", courseId, data.assessments, ["component", "marks", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
-  await collectSyncStatements("reference_books", "course_id", courseId, data.reference_books ?? data.references, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 }));
+  // Independent child collections: load their existing id sets concurrently.
+  await Promise.all([
+    collectSyncStatements("course_outcomes", "course_id", courseId, data.outcomes, ["code", "description", "bloom_level", "sort_order", "po_map"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 })),
+    collectSyncStatements("experiments", "course_id", courseId, data.experiments, ["number", "title", "description", "hours"]),
+    collectSyncStatements("assessment_schemes", "course_id", courseId, data.assessments, ["component", "marks", "description", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 })),
+    collectSyncStatements("reference_books", "course_id", courseId, data.reference_books ?? data.references, ["title", "authors", "publisher", "edition", "year", "is_textbook", "sort_order"], (item, i) => ({ ...item, sort_order: item.sort_order ?? item.order ?? i + 1 })),
+  ]);
 
   if (data.modules) {
     const table = "modules";
@@ -1587,6 +1934,9 @@ async function syncCourse(db: D1Database, courseId: string, data: any) {
     const existing = await db.prepare(`SELECT id FROM ${table} WHERE ${parentColumn} = ?`).bind(parentId).all<any>();
     const existingIds = new Set((existing.results ?? []).map((r) => String(r.id)));
     const seen = new Set<string>();
+    // Module rows must be queued before their topic rows, so topic work is
+    // collected concurrently but appended after the module loop.
+    const topicJobs: Promise<void>[] = [];
 
     for (let i = 0; i < items.length; i++) {
       const item = { ...items[i] };
@@ -1606,9 +1956,11 @@ async function syncCourse(db: D1Database, courseId: string, data: any) {
       }
 
       if (item.topics) {
-        await collectSyncStatements("topics", "module_id", item.id, item.topics, ["title", "description", "sort_order"], (topic, tIdx) => ({ ...topic, sort_order: topic.sort_order ?? topic.order ?? tIdx + 1 }));
+        topicJobs.push(collectSyncStatements("topics", "module_id", item.id, item.topics, ["title", "description", "sort_order"], (topic, tIdx) => ({ ...topic, sort_order: topic.sort_order ?? topic.order ?? tIdx + 1 })));
       }
     }
+
+    await Promise.all(topicJobs);
 
     for (const id of existingIds) {
       if (!seen.has(id)) {

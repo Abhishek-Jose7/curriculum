@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpen, Check, ClipboardList, Copy, Eye, FlaskConical, Library, MessageSquare, Plus, RefreshCw, Save, ScrollText, Trash2, Calendar, AlertTriangle, FileCode, CheckCircle2, Loader2, FileSearch } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
 import { A4Preview } from "@/components/curriculum/a4-preview";
@@ -87,6 +87,9 @@ const MACRO_CATEGORIES: MacroCategory[] = [
 export function CurriculumEditor({ courseId }: { courseId: string }) {
   const [active, setActive] = useState<TabKey>("basic");
   const [course, setCourse] = useState<CourseDraft | null>(null);
+  // The print preview is heavy; let it trail fast keystrokes instead of
+  // re-rendering the full A4 document on every character.
+  const deferredCourse = useDeferredValue(course);
   const [version, setVersion] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -534,7 +537,7 @@ export function CurriculumEditor({ courseId }: { courseId: string }) {
         </div>
         <div className="flex-1 overflow-hidden relative">
           <A4Preview 
-            course={course} 
+            course={deferredCourse ?? course} 
             isFullScreen={isExpanded}
             onToggleFullScreen={() => setIsExpanded(prev => !prev)}
           />

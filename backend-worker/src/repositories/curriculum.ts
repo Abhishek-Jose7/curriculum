@@ -22,7 +22,9 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     
     const filterColumns = ["semester_id", "faculty_user_id", "course_type", "status"];
     for (const column of filterColumns) {
-      const value = query[column];
+      // Accept `semester` as an alias for `semester_id`; the admin console has
+      // always sent that name and it used to be silently ignored.
+      const value = column === "semester_id" ? (query.semester_id ?? query.semester) : query[column];
       if (value !== undefined && value !== "") {
         clauses.push(`c.${column} = ?`);
         values.push(value);
@@ -68,24 +70,46 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
   }
 
   async detail(id: string) {
-    const course = await this.get(id);
-    if (!course) return null;
-    const [outcomes, modules, experiments, assessments, referenceBooks, comments, components] = await Promise.all([
-      this.db.prepare("SELECT *, sort_order AS `order` FROM course_outcomes WHERE course_id = ? ORDER BY sort_order, code").bind(id).all(),
-      new ModulesRepository(this.db).forCourse(id),
-      this.db.prepare("SELECT *, number AS `order` FROM experiments WHERE course_id = ? ORDER BY number").bind(id).all(),
-      this.db.prepare("SELECT *, sort_order AS `order` FROM assessment_schemes WHERE course_id = ? ORDER BY sort_order").bind(id).all(),
-      this.db.prepare("SELECT *, sort_order AS `order` FROM reference_books WHERE course_id = ? ORDER BY is_textbook, sort_order").bind(id).all(),
-      this.db.prepare("SELECT rc.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS reviewer_name FROM reviewer_comments rc LEFT JOIN profiles p ON p.id = rc.reviewer_user_id WHERE rc.course_id = ? AND rc.status = 'SUBMITTED' ORDER BY rc.section_key, rc.created_at DESC").bind(id).all(),
-      this.db.prepare("SELECT * FROM course_teaching_components WHERE course_id = ? ORDER BY sort_order ASC").bind(id).all(),
+    // One batched round trip for the course and its flat child collections.
+    // Only module topics need a follow-up lookup because they key off module ids.
+    const [courseResult, outcomes, modulesResult, experiments, assessments, referenceBooks, comments, components] = await this.db.batch<any>([
+      this.db.prepare("SELECT * FROM courses WHERE id = ?").bind(id),
+      this.db.prepare("SELECT *, sort_order AS `order` FROM course_outcomes WHERE course_id = ? ORDER BY sort_order, code").bind(id),
+      this.db.prepare("SELECT * FROM modules WHERE course_id = ? ORDER BY number").bind(id),
+      this.db.prepare("SELECT *, number AS `order` FROM experiments WHERE course_id = ? ORDER BY number").bind(id),
+      this.db.prepare("SELECT *, sort_order AS `order` FROM assessment_schemes WHERE course_id = ? ORDER BY sort_order").bind(id),
+      this.db.prepare("SELECT *, sort_order AS `order` FROM reference_books WHERE course_id = ? ORDER BY is_textbook, sort_order").bind(id),
+      this.db.prepare("SELECT rc.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS reviewer_name FROM reviewer_comments rc LEFT JOIN profiles p ON p.id = rc.reviewer_user_id WHERE rc.course_id = ? AND rc.status = 'SUBMITTED' ORDER BY rc.section_key, rc.created_at DESC").bind(id),
+      this.db.prepare("SELECT * FROM course_teaching_components WHERE course_id = ? ORDER BY sort_order ASC").bind(id),
     ]);
+
+    const course = (courseResult.results ?? [])[0];
+    if (!course) return null;
+
+    const moduleRows = (modulesResult.results ?? []) as any[];
+    const topicsByModule = new Map<string, any[]>();
+    if (moduleRows.length > 0) {
+      const moduleIds = moduleRows.map((m) => m.id);
+      const placeholders = moduleIds.map(() => "?").join(",");
+      const topicsResult = await this.db
+        .prepare(`SELECT *, sort_order AS \`order\` FROM topics WHERE module_id IN (${placeholders}) ORDER BY sort_order`)
+        .bind(...moduleIds)
+        .all<any>();
+      for (const topic of topicsResult.results ?? []) {
+        const key = String(topic.module_id);
+        const list = topicsByModule.get(key);
+        if (list) list.push(topic);
+        else topicsByModule.set(key, [topic]);
+      }
+    }
+
     return serializeCourse({
       ...course,
       outcomes: (outcomes.results ?? []).map((o: any) => ({
         ...o,
         po_map: typeof o.po_map === "string" ? parseJson(o.po_map, {}) : (o.po_map || {})
       })),
-      modules,
+      modules: moduleRows.map((m) => ({ ...m, topics: topicsByModule.get(String(m.id)) ?? [] })),
       experiments: experiments.results ?? [],
       assessments: assessments.results ?? [],
       reference_books: referenceBooks.results ?? [],

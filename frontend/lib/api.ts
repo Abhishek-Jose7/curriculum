@@ -4,7 +4,11 @@ export type ApiOptions = RequestInit & { token?: string };
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
+  // Only declare a JSON body when there is one; a Content-Type on GETs forces
+  // an extra CORS preflight on every request.
+  if (options.body !== undefined && options.body !== null && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   
   // Auto-resolve token from local storage if not explicitly provided
   const resolvedToken = options.token || (typeof window !== "undefined" ? window.localStorage.getItem("accessToken") : undefined);

@@ -95,6 +95,7 @@ CREATE INDEX IF NOT EXISTS courses_status_idx ON courses(status);
 CREATE INDEX IF NOT EXISTS courses_faculty_user_idx ON courses(faculty_user_id);
 CREATE INDEX IF NOT EXISTS courses_type_idx ON courses(course_type);
 CREATE INDEX IF NOT EXISTS courses_semester_idx ON courses(semester_id);
+CREATE INDEX IF NOT EXISTS courses_code_idx ON courses(code);
 
 CREATE TABLE IF NOT EXISTS course_outcomes (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))),
@@ -131,6 +132,8 @@ CREATE TABLE IF NOT EXISTS topics (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS topics_module_idx ON topics(module_id);
 
 CREATE TABLE IF NOT EXISTS experiments (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))),
@@ -218,6 +221,9 @@ CREATE TABLE IF NOT EXISTS reviewer_comments (
 );
 
 CREATE INDEX IF NOT EXISTS reviewer_comments_section_idx ON reviewer_comments(course_id, section_key, is_resolved);
+CREATE INDEX IF NOT EXISTS assessment_schemes_course_idx ON assessment_schemes(course_id);
+CREATE INDEX IF NOT EXISTS reference_books_course_idx ON reference_books(course_id);
+CREATE INDEX IF NOT EXISTS approval_workflows_course_idx ON approval_workflows(course_id);
 
 CREATE TABLE IF NOT EXISTS approval_workflows (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))),
@@ -286,6 +292,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS audit_logs_user_created_idx ON audit_logs(user_id, created_at);
 CREATE INDEX IF NOT EXISTS audit_logs_path_idx ON audit_logs(path);
+CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications(user_id, created_at);
+CREATE INDEX IF NOT EXISTS published_curricula_dept_year_idx ON published_curricula(department_id, academic_year_id);
+CREATE INDEX IF NOT EXISTS profiles_department_role_idx ON profiles(department_id, role);
 
 CREATE TRIGGER IF NOT EXISTS touch_departments AFTER UPDATE ON departments WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE departments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS touch_profiles AFTER UPDATE ON profiles WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;

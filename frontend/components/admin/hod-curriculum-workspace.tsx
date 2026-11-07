@@ -116,6 +116,40 @@ export function HodCurriculumWorkspace() {
     void loadInitialData();
   }, [user]);
 
+  // Build the semester cards from a single department course fetch instead of
+  // issuing one request per semester (8 requests on every reload).
+  const loadSemestersWithCourses = async (semList: SemesterData[]): Promise<SemesterData[]> => {
+    const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
+    let allCourses: any[] = [];
+    try {
+      const courseRes = await apiFetch<any>(`/courses/?department_id=${selectedDeptId}`);
+      allCourses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
+    } catch (err) {
+      console.error("Failed to load department courses", err);
+    }
+
+    const bySemester = new Map<string, any[]>();
+    for (const course of allCourses) {
+      const key = String(course.semester_id ?? course.semester ?? "");
+      const list = bySemester.get(key);
+      if (list) list.push(course);
+      else bySemester.set(key, [course]);
+    }
+
+    return activeSems.map((semNum) => {
+      const sem = semList.find(s => s.number === semNum);
+      if (sem) {
+        return { ...sem, courses: bySemester.get(String(sem.id)) ?? [] };
+      }
+      return {
+        id: `placeholder-${semNum}`,
+        number: semNum,
+        title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
+        courses: []
+      };
+    });
+  };
+
   // Load semesters and previous subjects when selection changes
   useEffect(() => {
     if (!selectedDeptId || !selectedYearId) return;
@@ -126,27 +160,8 @@ export function HodCurriculumWorkspace() {
         const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
         const semList: SemesterData[] = Array.isArray(semRes) ? semRes : semRes.results ?? [];
         
-        // Filter by the selected Year of Study
-        const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
-
-        // Load subjects for each semester (with placeholders if not configured)
-        const semsWithCourses = await Promise.all(
-          activeSems.map(async (semNum) => {
-            const sem = semList.find(s => s.number === semNum);
-            if (sem) {
-              const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
-              const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
-              return { ...sem, courses };
-            } else {
-              return {
-                id: `placeholder-${semNum}`,
-                number: semNum,
-                title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
-                courses: []
-              };
-            }
-          })
-        );
+        // Subjects arrive in one department fetch, grouped by semester.
+        const semsWithCourses = await loadSemestersWithCourses(semList);
         
         setSemesters(semsWithCourses);
 
@@ -180,25 +195,7 @@ export function HodCurriculumWorkspace() {
       // Reload sems
       const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
       const semList: SemesterData[] = Array.isArray(semRes) ? semRes : semRes.results ?? [];
-      const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
-
-      const semsWithCourses = await Promise.all(
-        activeSems.map(async (semNum) => {
-          const sem = semList.find(s => s.number === semNum);
-          if (sem) {
-            const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
-            const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
-            return { ...sem, courses };
-          } else {
-            return {
-              id: `placeholder-${semNum}`,
-              number: semNum,
-              title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
-              courses: []
-            };
-          }
-        })
-      );
+      const semsWithCourses = await loadSemestersWithCourses(semList);
       setSemesters(semsWithCourses);
       alert(`${selectedYearOfStudy} Semesters initialized successfully!`);
     } catch (err: any) {
@@ -254,24 +251,7 @@ export function HodCurriculumWorkspace() {
       // Reload sems and courses
       const semRes = await apiFetch<any>(`/semesters/?department_id=${selectedDeptId}&academic_year_id=${selectedYearId}`);
       const semList: SemesterData[] = Array.isArray(semRes) ? semRes : semRes.results ?? [];
-      const activeSems = YEAR_OF_STUDY_OPTIONS.find(y => y.label === selectedYearOfStudy)?.sems || [];
-      const semsWithCourses = await Promise.all(
-        activeSems.map(async (semNum) => {
-          const sem = semList.find(s => s.number === semNum);
-          if (sem) {
-            const courseRes = await apiFetch<any>(`/courses/?semester_id=${sem.id}`);
-            const courses = Array.isArray(courseRes) ? courseRes : courseRes.results ?? [];
-            return { ...sem, courses };
-          } else {
-            return {
-              id: `placeholder-${semNum}`,
-              number: semNum,
-              title: `Semester ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII"][semNum - 1]}`,
-              courses: []
-            };
-          }
-        })
-      );
+      const semsWithCourses = await loadSemestersWithCourses(semList);
       setSemesters(semsWithCourses);
       
       // Clear forms

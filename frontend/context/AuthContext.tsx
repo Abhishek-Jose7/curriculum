@@ -5,6 +5,28 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://curriculum-backend.collacou.workers.dev/api";
 const USER_STORAGE_KEY = "curriculum_user";
 
+// Keep the same object identity when a refetch returns unchanged data so that
+// pages whose effects depend on `user` do not refetch everything.
+function sameUser(a: AuthUser | null, b: AuthUser | null) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.id === b.id
+    && a.email === b.email
+    && a.role === b.role
+    && (a.department_id ?? null) === (b.department_id ?? null)
+    && a.first_name === b.first_name
+    && a.last_name === b.last_name
+    && a.is_superuser === b.is_superuser;
+}
+
+// Mirror the attributes the backend used to set the cookie, otherwise some
+// browsers keep the stale session cookie after logout.
+function clearAccessCookie() {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const secure = window.location.protocol === "https:";
+  document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=${secure ? "None" : "Lax"}${secure ? "; Secure" : ""}`;
+}
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -51,8 +73,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers["Authorization"] = `Bearer ${token}`;
       }
       const res = await fetch(`${API_URL}/auth/me/`, { credentials: "include", headers });
-      const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
-      const secureFlag = isSecure ? "; Secure" : "";
 
       if (!res.ok) {
         // Session expired or invalid - clear and redirect to login
@@ -61,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           window.localStorage.removeItem(USER_STORAGE_KEY);
           window.localStorage.removeItem("accessToken");
           // Clear HttpOnly cookie by clearing the document.cookie record
-          document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${secureFlag}`;
+          clearAccessCookie();
           // Redirect to login only if not already there
           if (window.location.pathname !== "/login") {
             window.location.href = "/login";
@@ -70,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const data: AuthUser = await res.json();
-      setUser(data);
+      setUser((prev) => (sameUser(prev, data) ? prev : data));
       if (typeof window !== "undefined") {
         window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
         // Backend already sets curriculum_access cookie; do not override it
@@ -78,10 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null);
       if (typeof window !== "undefined") {
-        const isSecure = window.location.protocol === "https:";
         window.localStorage.removeItem(USER_STORAGE_KEY);
         window.localStorage.removeItem("accessToken");
-        document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+        clearAccessCookie();
         if (window.location.pathname !== "/login") {
           window.location.href = "/login";
         }
@@ -109,10 +128,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
     setUser(null);
     if (typeof window !== "undefined") {
-      const isSecure = window.location.protocol === "https:";
       window.localStorage.removeItem(USER_STORAGE_KEY);
       window.localStorage.removeItem("accessToken");
-      document.cookie = `curriculum_access=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+      clearAccessCookie();
       window.location.href = "/login";
     }
   }, []);

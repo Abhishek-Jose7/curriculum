@@ -128,7 +128,7 @@ function AdminContent() {
   async function loadSemesterCourses(semId: string) {
     setLoadingSemCourses(semId);
     try {
-      const res = await apiFetch<any[]>(`/courses/?semester=${semId}`);
+      const res = await apiFetch<any[]>(`/courses/?semester_id=${semId}`);
       const list = Array.isArray(res) ? res : (res as any).results ?? [];
       setSemCourses((prev) => ({ ...prev, [semId]: list }));
     } catch (err) {
@@ -213,30 +213,44 @@ function AdminContent() {
   const loadAllOptions = async () => {
     setLoadingOptions(true);
     try {
-      const depts = await apiFetch<any>("/departments/");
+      // Everything the admin console needs, in one round of parallel requests
+      // instead of a serial chain plus one course request per semester.
+      const [depts, years, sems, courses, faculty] = await Promise.all([
+        apiFetch<any>("/departments/"),
+        apiFetch<any>("/academic-years/"),
+        apiFetch<any>("/semesters/"),
+        apiFetch<any>("/courses/").catch((err) => {
+          console.error("Failed to load courses", err);
+          return [];
+        }),
+        apiFetch<any>("/profiles/faculty/").catch((err) => {
+          console.error("Failed to load faculty users", err);
+          return [];
+        }),
+      ]);
+
       const deptsList = Array.isArray(depts) ? depts : depts.results ?? [];
       setDepartments(deptsList);
       if (deptsList.length > 0) setSemDept(String(deptsList[0].id));
 
-      const years = await apiFetch<any>("/academic-years/");
       const yearsList = Array.isArray(years) ? years : years.results ?? [];
       setAcademicYears(yearsList);
       if (yearsList.length > 0) setSemYear(String(yearsList[0].id));
 
-      const sems = await apiFetch<any>("/semesters/");
       const semsList = Array.isArray(sems) ? sems : sems.results ?? [];
       setSemesters(semsList);
-      for (const sem of semsList) {
-        void loadSemesterCourses(String(sem.id));
-      }
 
-      try {
-        const faculty = await apiFetch<any>("/profiles/faculty/");
-        const facultyList = Array.isArray(faculty) ? faculty : faculty.results ?? [];
-        setFacultyUsers(facultyList);
-      } catch (err) {
-        console.error("Failed to load faculty users", err);
+      const courseList = Array.isArray(courses) ? courses : courses?.results ?? [];
+      const grouped: Record<string, any[]> = {};
+      for (const course of courseList) {
+        const key = String(course.semester_id ?? course.semester ?? "");
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(course);
       }
+      setSemCourses(grouped);
+
+      const facultyList = Array.isArray(faculty) ? faculty : faculty.results ?? [];
+      setFacultyUsers(facultyList);
     } catch (err) {
       console.error("Failed to load schema options", err);
     } finally {

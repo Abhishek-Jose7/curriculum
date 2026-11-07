@@ -56,7 +56,7 @@ export default function HomePage() {
       }
     }
     void load();
-  }, [authLoading, user]);
+  }, [authLoading, user?.id, user?.role]);
 
   return (
     <AppShell>
