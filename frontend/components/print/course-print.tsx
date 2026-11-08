@@ -3,13 +3,14 @@ import type { CourseDraft } from "@/types/curriculum";
 import type { PrintAcademicYear, PrintDepartment, PrintSemester } from "@/lib/print-fixture";
 
 type CoursePrintProps = {
-  course: CourseDraft;
-  department: PrintDepartment;
-  academicYear: PrintAcademicYear;
+  course: CourseDraft | any;
+  department: PrintDepartment | any;
+  academicYear?: PrintAcademicYear | any;
   reviewerMode?: boolean;
+  pageNumber?: number | string;
 };
 
-export function InstitutionalHeader({ department }: { department: PrintDepartment }) {
+export function InstitutionalHeader({ department, pageNumber }: { department: PrintDepartment | any; pageNumber?: number | string }) {
   return (
     <header className="print-running-header institutional-header">
       <div className="header-logo">
@@ -17,15 +18,20 @@ export function InstitutionalHeader({ department }: { department: PrintDepartmen
       </div>
       <div className="header-text bold font-bold">
         <p className="italic bold font-bold">Society of St. Francis Xavier, Pilar&apos;s</p>
-        <p className="college bold font-bold">{department.college_name}</p>
+        <p className="college bold font-bold">{department?.college_name || "Fr. Conceicao Rodrigues College of Engineering"}</p>
         <p className="bold font-bold">Fr. Agnel Ashram, Bandstand, Bandra (W), Mumbai - 400 050</p>
-        <p className="italic bold font-bold">(Autonomous College affiliated to {department.university_name})</p>
+        <p className="italic bold font-bold">(Autonomous College affiliated to {department?.university_name || "University of Mumbai"})</p>
       </div>
+      {pageNumber !== undefined && (
+        <div className="header-page-number" style={{ display: "table-cell", verticalAlign: "middle", width: "12mm", textAlign: "right", fontWeight: "bold", fontSize: "11pt" }}>
+          {pageNumber}
+        </div>
+      )}
     </header>
   );
 }
 
-export function CoursePrint({ course, department, reviewerMode = false }: CoursePrintProps) {
+export function CoursePrint({ course, department, reviewerMode = false, pageNumber }: CoursePrintProps) {
   const isLab = course.course_type === "LAB";
   const hasLab = Boolean(course.practical_hours) || course.course_type === "LAB" || course.course_type === "THEORY_LAB" || course.course_type === "PROJECT";
   const internal = course.internal_marks || 0;
@@ -34,7 +40,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
   const eseMaxVal = course.external_marks || 0;
   const eseMinVal = course.passing_marks || (eseMaxVal === 50 ? 20 : eseMaxVal === 60 ? 24 : Math.round(eseMaxVal * 0.4));
   const theoryTotalVal = iseVal + mseVal + eseMaxVal;
-  const moduleHours = course.modules.reduce((sum, module) => sum + (module.contact_hours || 0), 0);
+  const moduleHours = course.modules.reduce((sum: number, module: any) => sum + (module.contact_hours || 0), 0);
 
   const getExperiments = (experiments: any[]) => {
     if (!experiments || experiments.length === 0) {
@@ -70,7 +76,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
 
   return (
     <article className="course-section page">
-      <InstitutionalHeader department={department} />
+      <InstitutionalHeader department={department} pageNumber={pageNumber} />
       <h1 className="doc-title">Course Content{hasLab && !isLab ? " (includes Practical)" : isLab ? " (Practical Only)" : ""}</h1>
 
       {reviewerMode ? (
@@ -170,7 +176,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
             <td>{course.pre_requisites || "--"}</td>
           </tr>
           <tr><td colSpan={3}>After the successful completion students should be able to:</td></tr>
-          {course.outcomes.map((outcome, index) => (
+          {course.outcomes.map((outcome: any, index: number) => (
             <tr key={outcome.code}>
               {index === 0 ? <td className="bold" rowSpan={course.outcomes.length}>Course Outcomes</td> : null}
               <td className="bold center">{outcome.code}</td>
@@ -198,7 +204,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
               <th>Hrs.</th>
             </tr>
           </thead>
-          {course.modules.map((module) => {
+          {course.modules.map((module: any) => {
             const units = module.topics?.length ? module.topics : [];
             const rowSpan = units.length + 1;
             
@@ -218,7 +224,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
                   <td className="center" rowSpan={rowSpan}>{module.references || "--"}</td>
                   <td className="center" rowSpan={rowSpan}>{module.contact_hours}</td>
                 </tr>
-                {units.map((unit, index) => (
+                {units.map((unit: any, index: number) => (
                   <tr key={`mod-unit-${module.number}-${index}`}>
                     <td className="bold center">{module.number}.{index + 1}</td>
                     <td>{renderUnitText(unit)}</td>
@@ -326,7 +332,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
       <section className="references-block avoid-break">
         <h2 className="section-label">Recommended Books:</h2>
         <ul>
-          {course.reference_books.map((book) => (
+          {course.reference_books.map((book: any) => (
             <li key={`${course.code}-${book.title}`}>{book.authors}. {book.title}. {book.publisher}, {book.edition}, {book.year}.</li>
           ))}
         </ul>
@@ -335,7 +341,7 @@ export function CoursePrint({ course, department, reviewerMode = false }: Course
       <section className="references-block avoid-break" style={{ marginTop: "12px" }}>
         <h2 className="section-label">Video Lectures:</h2>
         <ol style={{ paddingLeft: "20px" }}>
-          {(course.online_resources || []).length > 0 ? (course.online_resources || []).map((resource, idx) => (
+          {(course.online_resources || []).length > 0 ? (course.online_resources || []).map((resource: any, idx: number) => (
             <li key={idx} style={{ wordBreak: "break-all" }}>{resource}</li>
           )) : (
             <>
@@ -478,7 +484,7 @@ function CoPoMatrix({ course }: { course: CourseDraft }) {
           </tr>
         </thead>
         <tbody>
-          {course.outcomes.map((outcome) => {
+          {course.outcomes.map((outcome: any) => {
             const poMap = outcome.po_map || {};
             return (
               <tr key={outcome.code}>
@@ -531,7 +537,7 @@ function ReviewerComments({ course }: { course: CourseDraft }) {
           </tr>
         </thead>
         <tbody>
-          {course.comments.map((comment) => (
+          {(course.comments || []).map((comment: any) => (
             <tr key={comment.id}>
               <td>{comment.section_label}</td>
               <td>{comment.body}</td>

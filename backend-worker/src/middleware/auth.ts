@@ -3,10 +3,35 @@ import type { AuthUser, Env, Role, Variables } from "../types";
 
 const encoder = new TextEncoder();
 
+interface CacheEntry {
+  user: AuthUser;
+  expiresAt: number;
+}
+
+// In-memory cache for authenticated user profiles to eliminate repeated D1 queries on every request.
+// Cache TTL: 60 seconds; capacity-capped to prevent isolate memory leaks.
+const USER_CACHE = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 60 * 1000;
+
+export function invalidateUserCache(userId?: string) {
+  if (userId) {
+    USER_CACHE.delete(userId);
+  } else {
+    USER_CACHE.clear();
+  }
+}
+
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const path = c.req.path;
-  // Token endpoints are the only ones reachable without an access token.
-  if (path === "/api/auth/token/" || path === "/api/auth/token/refresh/" || path === "/api/auth/token/revoke/" || path === "/api/auth/logout/") {
+  // Token endpoints and public print/download endpoints are reachable without an access token.
+  if (
+    path === "/api/auth/token/" ||
+    path === "/api/auth/token/refresh/" ||
+    path === "/api/auth/token/revoke/" ||
+    path === "/api/auth/logout/" ||
+    (path.startsWith("/api/published-curricula/") && path.endsWith("/download/")) ||
+    path.includes("/booklet-data")
+  ) {
     await next();
     return;
   }
@@ -21,8 +46,26 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variabl
   if (!token) return c.json({ detail: "Authentication credentials were not provided." }, 401);
   const payload = await verifyJwt(token, c.env.AUTH_JWT_SECRET);
   if (!payload?.sub) return c.json({ detail: "Invalid token." }, 401);
-  const user = await c.env.DB.prepare("SELECT id, email, role, department_id, first_name, last_name, is_superuser FROM profiles WHERE id = ? AND is_active = 1").bind(payload.sub).first<AuthUser>();
-  if (!user) return c.json({ detail: "User not found or inactive." }, 401);
+  const now = Date.now();
+  const cached = USER_CACHE.get(payload.sub);
+  let user: AuthUser | null = null;
+
+  if (cached && cached.expiresAt > now) {
+    user = cached.user;
+  } else {
+    user = await c.env.DB.prepare(
+      "SELECT id, email, role, department_id, first_name, last_name, is_superuser FROM profiles WHERE id = ? AND is_active = 1"
+    ).bind(payload.sub).first<AuthUser>();
+    if (!user) {
+      USER_CACHE.delete(payload.sub);
+      return c.json({ detail: "User not found or inactive." }, 401);
+    }
+    if (USER_CACHE.size > 500) {
+      const oldestKey = USER_CACHE.keys().next().value;
+      if (oldestKey) USER_CACHE.delete(oldestKey);
+    }
+    USER_CACHE.set(payload.sub, { user, expiresAt: now + CACHE_TTL_MS });
+  }
   c.set("user", user);
   await next();
 }

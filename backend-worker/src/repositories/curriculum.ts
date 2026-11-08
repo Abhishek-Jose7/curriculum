@@ -45,12 +45,7 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     const sql = `
       SELECT 
         c.*,
-        trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name,
-        (SELECT count(*) FROM course_outcomes co WHERE co.course_id = c.id) AS outcomes_count,
-        (SELECT count(*) FROM modules m WHERE m.course_id = c.id) AS modules_count,
-        (SELECT count(*) FROM experiments e WHERE e.course_id = c.id) AS experiments_count,
-        (SELECT count(*) FROM assessment_schemes a WHERE a.course_id = c.id) AS assessments_count,
-        (SELECT count(*) FROM reference_books rb WHERE rb.course_id = c.id) AS reference_books_count
+        trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name
       FROM courses c
       JOIN semesters s ON c.semester_id = s.id
       LEFT JOIN profiles p ON c.faculty_user_id = p.id
@@ -58,14 +53,47 @@ export class CoursesRepository extends BaseRepository<CourseRow> {
     `;
 
     const result = await this.db.prepare(sql).bind(...values).all();
-    return (result.results ?? []).map(row => ({
+    const courseRows = (result.results ?? []) as any[];
+    if (courseRows.length === 0) {
+      return [] as unknown as CourseRow[];
+    }
+
+    const courseIds = courseRows.map((c) => c.id);
+    const outcomesCount = new Map<string, number>();
+    const modulesCount = new Map<string, number>();
+    const expCount = new Map<string, number>();
+    const assCount = new Map<string, number>();
+    const refCount = new Map<string, number>();
+
+    // Batch child aggregations in single round-trip chunks of up to 80 courses to avoid parameter limits
+    const CHUNK_SIZE = 80;
+    for (let i = 0; i < courseIds.length; i += CHUNK_SIZE) {
+      const chunk = courseIds.slice(i, i + CHUNK_SIZE);
+      const placeholders = chunk.map(() => "?").join(",");
+
+      const [outcomesRes, modulesRes, expRes, assRes, refRes] = await this.db.batch<any>([
+        this.db.prepare(`SELECT course_id, count(*) as cnt FROM course_outcomes WHERE course_id IN (${placeholders}) GROUP BY course_id`).bind(...chunk),
+        this.db.prepare(`SELECT course_id, count(*) as cnt FROM modules WHERE course_id IN (${placeholders}) GROUP BY course_id`).bind(...chunk),
+        this.db.prepare(`SELECT course_id, count(*) as cnt FROM experiments WHERE course_id IN (${placeholders}) GROUP BY course_id`).bind(...chunk),
+        this.db.prepare(`SELECT course_id, count(*) as cnt FROM assessment_schemes WHERE course_id IN (${placeholders}) GROUP BY course_id`).bind(...chunk),
+        this.db.prepare(`SELECT course_id, count(*) as cnt FROM reference_books WHERE course_id IN (${placeholders}) GROUP BY course_id`).bind(...chunk),
+      ]);
+
+      for (const r of (outcomesRes.results ?? [])) outcomesCount.set(r.course_id, Number(r.cnt) || 0);
+      for (const r of (modulesRes.results ?? [])) modulesCount.set(r.course_id, Number(r.cnt) || 0);
+      for (const r of (expRes.results ?? [])) expCount.set(r.course_id, Number(r.cnt) || 0);
+      for (const r of (assRes.results ?? [])) assCount.set(r.course_id, Number(r.cnt) || 0);
+      for (const r of (refRes.results ?? [])) refCount.set(r.course_id, Number(r.cnt) || 0);
+    }
+
+    return courseRows.map(row => ({
       ...row,
       faculty_name: (row.faculty_name as string) || "",
-      outcomes: Array.from({ length: (row.outcomes_count as number) || 0 }, (_, i) => ({ code: `CO${i+1}` })),
-      modules: Array.from({ length: (row.modules_count as number) || 0 }, (_, i) => ({ number: i + 1 })),
-      experiments: Array.from({ length: (row.experiments_count as number) || 0 }, (_, i) => ({ number: i + 1 })),
-      assessments: Array.from({ length: (row.assessments_count as number) || 0 }, (_, i) => ({ component: `C${i+1}` })),
-      reference_books: Array.from({ length: (row.reference_books_count as number) || 0 }, (_, i) => ({ title: `B${i+1}` })),
+      outcomes: Array.from({ length: outcomesCount.get(row.id) || 0 }, (_, i) => ({ code: `CO${i+1}` })),
+      modules: Array.from({ length: modulesCount.get(row.id) || 0 }, (_, i) => ({ number: i + 1 })),
+      experiments: Array.from({ length: expCount.get(row.id) || 0 }, (_, i) => ({ number: i + 1 })),
+      assessments: Array.from({ length: assCount.get(row.id) || 0 }, (_, i) => ({ component: `C${i+1}` })),
+      reference_books: Array.from({ length: refCount.get(row.id) || 0 }, (_, i) => ({ title: `B${i+1}` })),
     })) as unknown as CourseRow[];
   }
 

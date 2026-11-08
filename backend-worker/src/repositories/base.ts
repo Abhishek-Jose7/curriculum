@@ -19,7 +19,16 @@ export class BaseRepository<T extends Record<string, unknown>> {
       }
     }
     const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
-    const result = await this.db.prepare(`SELECT * FROM ${this.table}${where}`).bind(...values).all<T>();
+    let pagination = "";
+    if (query.limit && !isNaN(Number(query.limit))) {
+      const limitVal = Math.max(1, Math.min(500, Number(query.limit)));
+      pagination += ` LIMIT ${limitVal}`;
+      if (query.offset && !isNaN(Number(query.offset))) {
+        const offsetVal = Math.max(0, Number(query.offset));
+        pagination += ` OFFSET ${offsetVal}`;
+      }
+    }
+    const result = await this.db.prepare(`SELECT * FROM ${this.table}${where}${pagination}`).bind(...values).all<T>();
     return result.results ?? [];
   }
 

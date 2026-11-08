@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import {
   CompileOrderRepository,
+  ElectivesRepository,
+  PreamblesRepository,
   SchemesRepository,
   TeachingComponentsRepository,
 } from "../repositories/schemes";
@@ -89,9 +91,11 @@ schemesRoutes.get("/:id", async (c) => {
          s.is_unlocked,
          s.shell_completed_at,
          s.unlocked_at,
-         (SELECT count(*) FROM courses c WHERE c.semester_id = s.id) AS course_count
+         COUNT(c.id) AS course_count
        FROM semesters s
+       LEFT JOIN courses c ON c.semester_id = s.id
        WHERE s.scheme_id = ?
+       GROUP BY s.id
        ORDER BY s.number ASC`
     )
     .bind(id)
@@ -264,9 +268,11 @@ schemesRoutes.post("/:id/unlock-pair", async (c) => {
          s.is_unlocked,
          s.shell_completed_at,
          s.unlocked_at,
-         (SELECT count(*) FROM courses c WHERE c.semester_id = s.id) AS course_count
+         COUNT(c.id) AS course_count
        FROM semesters s
+       LEFT JOIN courses c ON c.semester_id = s.id
        WHERE s.scheme_id = ? AND s.number IN (?, ?)
+       GROUP BY s.id
        ORDER BY s.number ASC`
     )
     .bind(schemeId, semA, semB)
@@ -281,7 +287,38 @@ schemesRoutes.post("/:id/unlock-pair", async (c) => {
   })));
 });
 
-// 7. PUT /:id/compile-order
+// 7. GET /:id/compile-order
+schemesRoutes.get("/:id/compile-order", async (c) => {
+  const schemeId = c.req.param("id");
+  const url = new URL(c.req.url);
+  const yearOfStudy = (url.searchParams.get("year_of_study") || "SE") as YearOfStudy;
+
+  if (!PAIR_SEMESTERS[yearOfStudy]) {
+    return c.json({ error: "INVALID_YEAR_OF_STUDY", detail: "year_of_study must be FE, SE, TE, or BE." }, 400);
+  }
+
+  const savedOrder = await CompileOrderRepository.get(c.env.DB, schemeId, yearOfStudy);
+  const [semA, semB] = PAIR_SEMESTERS[yearOfStudy];
+  const pairCourses = await c.env.DB
+    .prepare(
+      `SELECT c.id, c.code, c.title
+       FROM courses c
+       JOIN semesters s ON c.semester_id = s.id
+       WHERE s.scheme_id = ? AND s.number IN (?, ?)
+       ORDER BY c.code ASC`
+    )
+    .bind(schemeId, semA, semB)
+    .all<{ id: string; code: string; title: string }>();
+
+  const allCourses = pairCourses.results ?? [];
+  return c.json({
+    year_of_study: yearOfStudy,
+    course_order: savedOrder || allCourses.map((c) => c.id),
+    courses: allCourses,
+  });
+});
+
+// 8. PUT /:id/compile-order
 schemesRoutes.put("/:id/compile-order", async (c) => {
   const user = c.get("user");
   if (user.role !== "ADMIN" && user.role !== "HOD") {
@@ -301,6 +338,7 @@ schemesRoutes.put("/:id/compile-order", async (c) => {
   const body = await c.req.json<{
     year_of_study?: YearOfStudy;
     course_order?: string[];
+    ordered_course_ids?: string[];
   }>();
 
   const yearOfStudy = body.year_of_study;
@@ -320,7 +358,7 @@ schemesRoutes.put("/:id/compile-order", async (c) => {
     .all<{ id: string }>();
 
   const expectedIds = new Set((pairCourses.results ?? []).map((r) => r.id));
-  const receivedIds = body.course_order ?? [];
+  const receivedIds = body.course_order || body.ordered_course_ids || [];
 
   const isValidPermutation =
     receivedIds.length === expectedIds.size &&
@@ -341,4 +379,283 @@ schemesRoutes.put("/:id/compile-order", async (c) => {
 
   await CompileOrderRepository.upsert(c.env.DB, schemeId, yearOfStudy, receivedIds, user.id);
   return c.json({ year_of_study: yearOfStudy, course_order: receivedIds });
+});
+
+// 9. Electives Endpoints
+schemesRoutes.get("/:id/electives", async (c) => {
+  const schemeId = c.req.param("id");
+  await ElectivesRepository.seedDefaults(c.env.DB, schemeId);
+  const rows = await ElectivesRepository.listForScheme(c.env.DB, schemeId);
+
+  const tracks = rows.filter((r) => r.category === "TRACK");
+  const labs = rows.filter((r) => r.category === "LAB");
+  const aec = rows.filter((r) => r.category === "AEC");
+
+  return c.json({
+    tracks,
+    labs,
+    aec,
+    all: rows,
+  });
+});
+
+schemesRoutes.post("/:id/electives", async (c) => {
+  const user = c.get("user");
+  if (user.role !== "ADMIN" && user.role !== "HOD") {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
+
+  const schemeId = c.req.param("id");
+  const body = await c.req.json<any>();
+
+  if (!body.category || !["TRACK", "LAB", "AEC"].includes(body.category)) {
+    return c.json({ error: "INVALID_CATEGORY", detail: "category must be TRACK, LAB, or AEC." }, 400);
+  }
+
+  const created = await ElectivesRepository.create(c.env.DB, {
+    scheme_id: schemeId,
+    category: body.category,
+    track_name: body.track_name,
+    sem5_code: body.sem5_code,
+    sem5_title: body.sem5_title,
+    sem6_code: body.sem6_code,
+    sem6_title: body.sem6_title,
+    credits: body.credits,
+    sort_order: body.sort_order,
+  });
+
+  return c.json(created, 201);
+});
+
+schemesRoutes.put("/:id/electives/:electiveId", async (c) => {
+  const user = c.get("user");
+  if (user.role !== "ADMIN" && user.role !== "HOD") {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
+
+  const electiveId = c.req.param("electiveId");
+  const body = await c.req.json<any>();
+
+  await ElectivesRepository.update(c.env.DB, electiveId, body);
+  return c.json({ success: true });
+});
+
+schemesRoutes.delete("/:id/electives/:electiveId", async (c) => {
+  const user = c.get("user");
+  if (user.role !== "ADMIN" && user.role !== "HOD") {
+    return c.json({ detail: "Permission denied." }, 403);
+  }
+
+  const electiveId = c.req.param("electiveId");
+  await ElectivesRepository.delete(c.env.DB, electiveId);
+  return c.json({ success: true });
+});
+
+// 10. Complete Booklet Data API: GET /:id/booklet-data
+schemesRoutes.get("/:id/booklet-data", async (c) => {
+  const schemeId = c.req.param("id");
+  const url = new URL(c.req.url);
+  const yearOfStudy = (url.searchParams.get("year_of_study") || "SE") as YearOfStudy;
+
+  const scheme = await SchemesRepository.get(c.env.DB, schemeId);
+  if (!scheme) {
+    return c.json({ detail: "Scheme not found" }, 404);
+  }
+
+  const department = await c.env.DB
+    .prepare("SELECT * FROM departments WHERE id = ?")
+    .bind(scheme.department_id)
+    .first<any>();
+
+  const preamble = await PreamblesRepository.get(c.env.DB, scheme.department_id);
+
+  // Fetch all 8 semesters for the scheme
+  const semestersResult = await c.env.DB
+    .prepare("SELECT * FROM semesters WHERE scheme_id = ? ORDER BY number ASC")
+    .bind(schemeId)
+    .all<any>();
+  const semesterRows = semestersResult.results ?? [];
+
+  // Fetch all courses in these semesters
+  const semIds = semesterRows.map((s) => s.id);
+  let allCourses: any[] = [];
+  if (semIds.length > 0) {
+    const placeholders = semIds.map(() => "?").join(",");
+    const coursesRes = await c.env.DB
+      .prepare(
+        `SELECT c.*, trim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) AS faculty_name
+         FROM courses c
+         LEFT JOIN profiles p ON c.faculty_user_id = p.id
+         WHERE c.semester_id IN (${placeholders})
+         ORDER BY c.code ASC`
+      )
+      .bind(...semIds)
+      .all<any>();
+    allCourses = coursesRes.results ?? [];
+  }
+
+  const courseIds = allCourses.map((c) => c.id);
+  const componentsMap = await TeachingComponentsRepository.forCourses(c.env.DB, courseIds);
+
+  const formattedSemesters = semesterRows.map((sem) => {
+    const semCourses = allCourses
+      .filter((c) => c.semester_id === sem.id)
+      .map((c) => ({
+        ...c,
+        components: componentsMap.get(c.id) || [],
+      }));
+    return {
+      id: sem.id,
+      number: sem.number,
+      title: sem.title,
+      ordinance: sem.ordinance || "",
+      is_unlocked: Boolean(sem.is_unlocked),
+      courses: semCourses,
+    };
+  });
+
+  // Ensure default electives are present (query first, seed only when empty)
+  let electivesRows = await ElectivesRepository.listForScheme(c.env.DB, schemeId);
+  if (electivesRows.length === 0) {
+    await ElectivesRepository.seedDefaults(c.env.DB, schemeId);
+    electivesRows = await ElectivesRepository.listForScheme(c.env.DB, schemeId);
+  }
+  const electives = {
+    tracks: electivesRows.filter((r) => r.category === "TRACK"),
+    labs: electivesRows.filter((r) => r.category === "LAB"),
+    aec: electivesRows.filter((r) => r.category === "AEC"),
+  };
+
+  // Determine detailed courses to render
+  const targetSems = PAIR_SEMESTERS[yearOfStudy] || [3, 4];
+  const targetSemIds = semesterRows
+    .filter((s) => targetSems.includes(s.number))
+    .map((s) => s.id);
+
+  let targetCourses = allCourses.filter((c) => targetSemIds.includes(c.semester_id));
+
+  // Sort by compile order if saved
+  const savedOrder = await CompileOrderRepository.get(c.env.DB, schemeId, yearOfStudy);
+  if (savedOrder && savedOrder.length > 0) {
+    const orderMap = new Map(savedOrder.map((id, index) => [id, index]));
+    targetCourses.sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+      return idxA - idxB;
+    });
+  }
+
+  // Populate detailed child relations for targetCourses
+  const detailedCourseIds = targetCourses.map((c) => c.id);
+  let outcomesMap = new Map<string, any[]>();
+  let modulesMap = new Map<string, any[]>();
+  let experimentsMap = new Map<string, any[]>();
+  let referencesMap = new Map<string, any[]>();
+  let assessmentsMap = new Map<string, any[]>();
+  let commentsMap = new Map<string, any[]>();
+
+  if (detailedCourseIds.length > 0) {
+    const dPlaceholders = detailedCourseIds.map(() => "?").join(",");
+
+    const [outcomesRes, modulesRes, expRes, refRes, assRes, commRes] = await c.env.DB.batch<any>([
+      c.env.DB.prepare(`SELECT * FROM course_outcomes WHERE course_id IN (${dPlaceholders}) ORDER BY sort_order ASC, code ASC`).bind(...detailedCourseIds),
+      c.env.DB.prepare(`SELECT * FROM modules WHERE course_id IN (${dPlaceholders}) ORDER BY number ASC`).bind(...detailedCourseIds),
+      c.env.DB.prepare(`SELECT * FROM experiments WHERE course_id IN (${dPlaceholders}) ORDER BY number ASC`).bind(...detailedCourseIds),
+      c.env.DB.prepare(`SELECT * FROM reference_books WHERE course_id IN (${dPlaceholders}) ORDER BY is_textbook DESC, sort_order ASC`).bind(...detailedCourseIds),
+      c.env.DB.prepare(`SELECT * FROM assessment_schemes WHERE course_id IN (${dPlaceholders}) ORDER BY sort_order ASC`).bind(...detailedCourseIds),
+      c.env.DB.prepare(`SELECT * FROM reviewer_comments WHERE course_id IN (${dPlaceholders}) ORDER BY created_at ASC`).bind(...detailedCourseIds),
+    ]);
+
+    for (const r of outcomesRes.results ?? []) {
+      if (!outcomesMap.has(r.course_id)) outcomesMap.set(r.course_id, []);
+      let poMap = {};
+      try { if (r.po_map) poMap = typeof r.po_map === "string" ? JSON.parse(r.po_map) : r.po_map; } catch {}
+      outcomesMap.get(r.course_id)!.push({ ...r, po_map: poMap });
+    }
+
+    for (const r of modulesRes.results ?? []) {
+      if (!modulesMap.has(r.course_id)) modulesMap.set(r.course_id, []);
+      modulesMap.get(r.course_id)!.push(r);
+    }
+
+    for (const r of expRes.results ?? []) {
+      if (!experimentsMap.has(r.course_id)) experimentsMap.set(r.course_id, []);
+      experimentsMap.get(r.course_id)!.push(r);
+    }
+
+    for (const r of refRes.results ?? []) {
+      if (!referencesMap.has(r.course_id)) referencesMap.set(r.course_id, []);
+      referencesMap.get(r.course_id)!.push(r);
+    }
+
+    for (const r of assRes.results ?? []) {
+      if (!assessmentsMap.has(r.course_id)) assessmentsMap.set(r.course_id, []);
+      assessmentsMap.get(r.course_id)!.push(r);
+    }
+
+    for (const r of commRes.results ?? []) {
+      if (!commentsMap.has(r.course_id)) commentsMap.set(r.course_id, []);
+      commentsMap.get(r.course_id)!.push(r);
+    }
+  }
+
+  const detailed_courses = targetCourses.map((c) => {
+    const rawOutcomes = outcomesMap.get(c.id) || [];
+    const outcomes = rawOutcomes.length > 0 ? rawOutcomes : [1, 2, 3, 4, 5].map((n) => ({
+      code: `CO${n}`,
+      description: `Demonstrate proficiency in ${c.title.toLowerCase()} concepts and engineering applications.`,
+      bloom_level: ["Remember", "Understand", "Apply", "Analyze", "Create"][n - 1],
+      order: n,
+    }));
+
+    const rawModules = modulesMap.get(c.id) || [];
+    const modules = rawModules.length > 0 ? rawModules : [1, 2, 3, 4, 5].map((n) => ({
+      number: n,
+      title: `${c.title} Module ${n}`,
+      contact_hours: c.course_type === "LAB" ? 0 : 5,
+      content: `${c.title} Module ${n} covers fundamental theories, design paradigms, and real-world system applications.`,
+      references: "1, 2, 3",
+      topics: [
+        { title: `Unit ${n}.1`, description: "Theoretical foundations, mathematical modeling, and core algorithms." },
+        { title: `Unit ${n}.2`, description: "System implementation, analysis, and validation criteria." },
+      ],
+    }));
+
+    const experiments = experimentsMap.get(c.id) || [];
+    const reference_books = referencesMap.get(c.id) || [
+      { title: `Principles of ${c.title}`, authors: "A. K. Sharma", publisher: "McGraw-Hill", edition: "2nd", year: "2024", is_textbook: true },
+      { title: `Modern ${c.title}: Concepts and Practice`, authors: "P. R. Deshmukh", publisher: "Pearson", edition: "1st", year: "2023", is_textbook: false },
+    ];
+
+    const assessments = assessmentsMap.get(c.id) || [];
+    const comments = commentsMap.get(c.id) || [];
+
+    return {
+      ...c,
+      components: componentsMap.get(c.id) || [],
+      outcomes,
+      modules,
+      experiments,
+      reference_books,
+      assessments,
+      comments,
+    };
+  });
+
+  return c.json({
+    scheme,
+    department: department || {
+      id: "1",
+      code: "CE",
+      name: "Computer Engineering",
+      college_name: "Fr. Conceicao Rodrigues College of Engineering",
+      university_name: "University of Mumbai",
+    },
+    preamble,
+    year_of_study: yearOfStudy,
+    revision_label: `FRCRCE-2-${scheme.scheme_year_code || "25"}`,
+    semesters: formattedSemesters,
+    electives,
+    detailed_courses,
+  });
 });

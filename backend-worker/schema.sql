@@ -311,4 +311,32 @@ CREATE TRIGGER IF NOT EXISTS touch_course_invitations AFTER UPDATE ON course_inv
 CREATE TRIGGER IF NOT EXISTS touch_reviewer_comments AFTER UPDATE ON reviewer_comments WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE reviewer_comments SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS touch_curriculum_templates AFTER UPDATE ON curriculum_templates WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE curriculum_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS touch_published_curricula AFTER UPDATE ON published_curricula WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE published_curricula SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+CREATE TABLE IF NOT EXISTS scheme_electives (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))),
+  scheme_id TEXT NOT NULL REFERENCES curriculum_schemes(id) ON DELETE CASCADE,
+  category TEXT NOT NULL CHECK (category IN ('TRACK', 'LAB', 'AEC')),
+  track_name TEXT NOT NULL DEFAULT '',
+  sem5_code TEXT NOT NULL DEFAULT '',
+  sem5_title TEXT NOT NULL DEFAULT '',
+  sem6_code TEXT NOT NULL DEFAULT '',
+  sem6_title TEXT NOT NULL DEFAULT '',
+  credits REAL NOT NULL DEFAULT 3,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS scheme_electives_scheme_idx ON scheme_electives(scheme_id, category, sort_order);
+
+-- Query performance indexes
+CREATE INDEX IF NOT EXISTS idx_course_outcomes_course_order ON course_outcomes(course_id, sort_order ASC, code ASC);
+CREATE INDEX IF NOT EXISTS idx_assessment_schemes_course_sort ON assessment_schemes(course_id, sort_order ASC);
+CREATE INDEX IF NOT EXISTS idx_reference_books_course_textbook_sort ON reference_books(course_id, is_textbook DESC, sort_order ASC);
+CREATE INDEX IF NOT EXISTS idx_topics_module_sort ON topics(module_id, sort_order ASC);
+CREATE INDEX IF NOT EXISTS idx_reviewer_comments_course_submitted ON reviewer_comments(course_id, status, section_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_semesters_scheme_number ON semesters(scheme_id, number ASC);
+CREATE INDEX IF NOT EXISTS idx_courses_semester_status ON courses(semester_id, status);
+CREATE INDEX IF NOT EXISTS idx_courses_code_suffix ON courses(substr(code, 3));
+CREATE INDEX IF NOT EXISTS idx_published_curricula_scheme ON published_curricula(scheme_id);
+
 CREATE TRIGGER IF NOT EXISTS touch_notifications AFTER UPDATE ON notifications WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE notifications SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;

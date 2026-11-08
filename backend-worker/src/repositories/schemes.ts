@@ -175,7 +175,10 @@ export const SchemesRepository = {
     }
 
     if (statements.length > 0) {
-      await db.batch(statements);
+      const BATCH_SIZE = 80;
+      for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+        await db.batch(statements.slice(i, i + BATCH_SIZE));
+      }
     }
 
     const created = await SchemesRepository.get(db, id);
@@ -287,7 +290,10 @@ export const TeachingComponentsRepository = {
     }
 
     if (statements.length > 0) {
-      await db.batch(statements);
+      const BATCH_SIZE = 80;
+      for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+        await db.batch(statements.slice(i, i + BATCH_SIZE));
+      }
     }
   },
 };
@@ -362,4 +368,158 @@ export const PreamblesRepository = {
       .bind(department_id, content, updated_by_user_id, now)
       .run();
   },
+};
+
+export interface SchemeElectiveRow {
+  id: string;
+  scheme_id: string;
+  category: "TRACK" | "LAB" | "AEC";
+  track_name: string;
+  sem5_code: string;
+  sem5_title: string;
+  sem6_code: string;
+  sem6_title: string;
+  credits: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const ElectivesRepository = {
+  async listForScheme(db: D1Database, scheme_id: string): Promise<SchemeElectiveRow[]> {
+    const result = await db
+      .prepare(
+        "SELECT * FROM scheme_electives WHERE scheme_id = ? ORDER BY category ASC, sort_order ASC, created_at ASC"
+      )
+      .bind(scheme_id)
+      .all<SchemeElectiveRow>();
+    return result.results ?? [];
+  },
+
+  async create(db: D1Database, input: {
+    scheme_id: string;
+    category: "TRACK" | "LAB" | "AEC";
+    track_name?: string;
+    sem5_code?: string;
+    sem5_title?: string;
+    sem6_code?: string;
+    sem6_title?: string;
+    credits?: number;
+    sort_order?: number;
+  }): Promise<SchemeElectiveRow> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.prepare(`
+      INSERT INTO scheme_electives (id, scheme_id, category, track_name, sem5_code, sem5_title, sem6_code, sem6_title, credits, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      input.scheme_id,
+      input.category,
+      input.track_name || "",
+      input.sem5_code || "",
+      input.sem5_title || "",
+      input.sem6_code || "",
+      input.sem6_title || "",
+      input.credits ?? 3,
+      input.sort_order ?? 0,
+      now,
+      now
+    ).run();
+
+    const row = await db.prepare("SELECT * FROM scheme_electives WHERE id = ?").bind(id).first<SchemeElectiveRow>();
+    return row!;
+  },
+
+  async update(db: D1Database, id: string, input: Partial<SchemeElectiveRow>): Promise<void> {
+    const now = new Date().toISOString();
+    await db.prepare(`
+      UPDATE scheme_electives SET
+        category = COALESCE(?, category),
+        track_name = COALESCE(?, track_name),
+        sem5_code = COALESCE(?, sem5_code),
+        sem5_title = COALESCE(?, sem5_title),
+        sem6_code = COALESCE(?, sem6_code),
+        sem6_title = COALESCE(?, sem6_title),
+        credits = COALESCE(?, credits),
+        sort_order = COALESCE(?, sort_order),
+        updated_at = ?
+      WHERE id = ?
+    `).bind(
+      input.category ?? null,
+      input.track_name ?? null,
+      input.sem5_code ?? null,
+      input.sem5_title ?? null,
+      input.sem6_code ?? null,
+      input.sem6_title ?? null,
+      input.credits ?? null,
+      input.sort_order ?? null,
+      now,
+      id
+    ).run();
+  },
+
+  async delete(db: D1Database, id: string): Promise<void> {
+    await db.prepare("DELETE FROM scheme_electives WHERE id = ?").bind(id).run();
+  },
+
+  async seedDefaults(db: D1Database, scheme_id: string): Promise<void> {
+    const existing = await db.prepare("SELECT count(*) as count FROM scheme_electives WHERE scheme_id = ?").bind(scheme_id).first<{ count: number }>();
+    if (existing && existing.count > 0) return;
+
+    const now = new Date().toISOString();
+    const stmts: D1PreparedStatement[] = [];
+
+    const tracks = [
+      { track: "Block chain", s5_code: "25PEC13CE11", s5_title: "Block chain Technology", s6_code: "25PEC13CE21", s6_title: "Decentralized finance" },
+      { track: "AIML", s5_code: "25PEC13CE12", s5_title: "Deep Learning and Reinforcement Learning", s6_code: "25PEC13CE22", s6_title: "LLM and GenAI" },
+      { track: "Security", s5_code: "25PEC13CE13", s5_title: "Cyber Security", s6_code: "25PEC13CE23", s6_title: "Digital Forensic" },
+      { track: "Data science", s5_code: "25PEC13CE14", s5_title: "Big data analytics", s6_code: "25PEC13CE24", s6_title: "Business Intelligence" },
+      { track: "ARVR", s5_code: "25PEC13CE15", s5_title: "Computer Graphics", s6_code: "25PEC13CE25", s6_title: "ARVR" },
+      { track: "UI", s5_code: "25PEC13CE16", s5_title: "HMI", s6_code: "25PEC13CE26", s6_title: "UX/UI Design" },
+      { track: "Computing", s5_code: "25PEC13CE17", s5_title: "Geographical Information Systems", s6_code: "25PEC13CE27", s6_title: "Quantum Computing" },
+      { track: "Networking", s5_code: "25PEC13CE18", s5_title: "Computer Network", s6_code: "25PEC13CE28", s6_title: "Advanced Network Communication" },
+    ];
+
+    tracks.forEach((t, i) => {
+      stmts.push(db.prepare(`
+        INSERT INTO scheme_electives (id, scheme_id, category, track_name, sem5_code, sem5_title, sem6_code, sem6_title, credits, sort_order, created_at, updated_at)
+        VALUES (?, ?, 'TRACK', ?, ?, ?, ?, ?, 3, ?, ?, ?)
+      `).bind(crypto.randomUUID(), scheme_id, t.track, t.s5_code, t.s5_title, t.s6_code, t.s6_title, i + 1, now, now));
+    });
+
+    const labs = [
+      { s5_code: "25PECL13CE11", s5_title: "Image processing Lab", s6_code: "25PECL13CE21", s6_title: "Social Media Analytics Lab" },
+      { s5_code: "25PECL13CE12", s5_title: "Natural Language Processing Lab", s6_code: "25PECL13CE22", s6_title: "Ethical Hacking Lab" },
+      { s5_code: "25PECL13CE13", s5_title: "IIOT lab", s6_code: "25PECL13CE23", s6_title: "Advance Java Lab" },
+      { s5_code: "25PECL13CE14", s5_title: "Innovative Product Development Lab-Phase1 (Start-up)", s6_code: "25PECL13CE24", s6_title: "Innovative Product Development Lab-Phase2 (Start-up)" },
+      { s5_code: "25PECL13CE15", s5_title: "Open-Source Intelligence and Threat Intelligence lab", s6_code: "25PECL13CE25", s6_title: "Explainable AI Lab" },
+      { s5_code: "", s5_title: "", s6_code: "25PECL13CE26", s6_title: "Software testing and Quality Assurance" },
+    ];
+
+    labs.forEach((l, i) => {
+      stmts.push(db.prepare(`
+        INSERT INTO scheme_electives (id, scheme_id, category, track_name, sem5_code, sem5_title, sem6_code, sem6_title, credits, sort_order, created_at, updated_at)
+        VALUES (?, ?, 'LAB', '', ?, ?, ?, ?, 1, ?, ?, ?)
+      `).bind(crypto.randomUUID(), scheme_id, l.s5_code, l.s5_title, l.s6_code, l.s6_title, i + 1, now, now));
+    });
+
+    const aec = [
+      { code: "25AEC12CE021", title: "Sanskrit for Beginners" },
+      { code: "25AEC12CE022", title: "Telugu for Beginners" },
+      { code: "25AEC12CE023", title: "Kannada for Beginners" },
+      { code: "25AEC12CE024", title: "Tamil for Beginners" },
+    ];
+
+    aec.forEach((a, i) => {
+      stmts.push(db.prepare(`
+        INSERT INTO scheme_electives (id, scheme_id, category, track_name, sem5_code, sem5_title, sem6_code, sem6_title, credits, sort_order, created_at, updated_at)
+        VALUES (?, ?, 'AEC', '', ?, ?, '', '', 2, ?, ?, ?)
+      `).bind(crypto.randomUUID(), scheme_id, a.code, a.title, i + 1, now, now));
+    });
+
+    if (stmts.length > 0) {
+      await db.batch(stmts);
+    }
+  }
 };

@@ -42,6 +42,19 @@ interface ComponentDraft {
   credit_points: number;
 }
 
+interface SchemeElectiveItem {
+  id: string;
+  scheme_id: string;
+  category: "TRACK" | "LAB" | "AEC";
+  track_name?: string;
+  sem5_code?: string;
+  sem5_title?: string;
+  sem6_code?: string;
+  sem6_title?: string;
+  credits: number;
+  sort_order: number;
+}
+
 const VERTICAL_OPTIONS: Vertical[] = ["BSESC", "PCPEC", "MDC", "SC", "HSSM", "EL", "LLC", "BC"];
 const COMPONENT_TYPES: TeachingComponentType[] = ["TH", "TU", "PR", "SL"];
 
@@ -51,13 +64,32 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
   const { user } = useAuth();
 
   const [scheme, setScheme] = useState<CurriculumScheme | null>(null);
-  const [activeSem, setActiveSem] = useState<number>(1);
+  const [activeTab, setActiveTab] = useState<number | "electives">(1);
+  const activeSem = typeof activeTab === "number" ? activeTab : 1;
   const [courses, setCourses] = useState<SchemeCourseRow[]>([]);
   const [loadingScheme, setLoadingScheme] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [finishingSem, setFinishingSem] = useState(false);
+
+  // Electives Management State
+  const [electivesData, setElectivesData] = useState<{
+    tracks: SchemeElectiveItem[];
+    labs: SchemeElectiveItem[];
+    aec: SchemeElectiveItem[];
+  }>({ tracks: [], labs: [], aec: [] });
+  const [loadingElectives, setLoadingElectives] = useState(false);
+  const [electiveCategory, setElectiveCategory] = useState<"TRACK" | "LAB" | "AEC">("TRACK");
+  const [newTrackName, setNewTrackName] = useState("");
+  const [newSem5Code, setNewSem5Code] = useState("");
+  const [newSem5Title, setNewSem5Title] = useState("");
+  const [newSem6Code, setNewSem6Code] = useState("");
+  const [newSem6Title, setNewSem6Title] = useState("");
+  const [newAecCode, setNewAecCode] = useState("");
+  const [newAecTitle, setNewAecTitle] = useState("");
+  const [addingElective, setAddingElective] = useState(false);
+  const [deletingElectiveId, setDeletingElectiveId] = useState<string | null>(null);
 
   // Add Subject Form State
   const [vertical, setVertical] = useState<Vertical>("BSESC");
@@ -81,13 +113,100 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
 
   useEffect(() => {
     loadScheme();
+    loadElectives();
   }, [id]);
 
   useEffect(() => {
-    if (scheme) {
-      loadCourses(activeSem);
+    if (scheme && typeof activeTab === "number") {
+      loadCourses(activeTab);
+    } else if (activeTab === "electives") {
+      loadElectives();
     }
-  }, [scheme, activeSem]);
+  }, [scheme, activeTab]);
+
+  async function loadElectives() {
+    try {
+      setLoadingElectives(true);
+      const res = await apiFetch<any>(`/curriculum-schemes/${id}/electives`);
+      setElectivesData({
+        tracks: res.tracks || [],
+        labs: res.labs || [],
+        aec: res.aec || [],
+      });
+    } catch (err: any) {
+      console.error("Failed to load electives:", err);
+    } finally {
+      setLoadingElectives(false);
+    }
+  }
+
+  async function handleAddElective(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setAddingElective(true);
+      let payload: any = { category: electiveCategory };
+      if (electiveCategory === "TRACK") {
+        if (!newTrackName.trim() || !newSem5Title.trim() || !newSem6Title.trim()) return;
+        payload = {
+          ...payload,
+          track_name: newTrackName.trim(),
+          sem5_code: newSem5Code.trim() || undefined,
+          sem5_title: newSem5Title.trim(),
+          sem6_code: newSem6Code.trim() || undefined,
+          sem6_title: newSem6Title.trim(),
+          credits: 3,
+        };
+      } else if (electiveCategory === "LAB") {
+        if (!newSem5Title.trim() || !newSem6Title.trim()) return;
+        payload = {
+          ...payload,
+          sem5_code: newSem5Code.trim() || undefined,
+          sem5_title: newSem5Title.trim(),
+          sem6_code: newSem6Code.trim() || undefined,
+          sem6_title: newSem6Title.trim(),
+          credits: 1,
+        };
+      } else if (electiveCategory === "AEC") {
+        if (!newAecTitle.trim()) return;
+        payload = {
+          ...payload,
+          sem5_code: newAecCode.trim() || undefined,
+          sem5_title: newAecTitle.trim(),
+          credits: 2,
+        };
+      }
+      await apiFetch(`/curriculum-schemes/${id}/electives`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setNewTrackName("");
+      setNewSem5Code("");
+      setNewSem5Title("");
+      setNewSem6Code("");
+      setNewSem6Title("");
+      setNewAecCode("");
+      setNewAecTitle("");
+      await loadElectives();
+    } catch (err: any) {
+      setError(err.message || "Failed to add elective");
+    } finally {
+      setAddingElective(false);
+    }
+  }
+
+  async function handleDeleteElective(electiveId: string) {
+    try {
+      setDeletingElectiveId(electiveId);
+      await apiFetch(`/curriculum-schemes/${id}/electives/${electiveId}`, {
+        method: "DELETE",
+      });
+      await loadElectives();
+    } catch (err: any) {
+      setError(err.message || "Failed to delete elective");
+    } finally {
+      setDeletingElectiveId(null);
+    }
+  }
 
   async function loadScheme() {
     try {
@@ -255,7 +374,7 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
 
       await loadScheme();
       if (activeSem < 8) {
-        setActiveSem(activeSem + 1);
+        setActiveTab(activeSem + 1);
       }
     } catch (err: any) {
       try {
@@ -416,17 +535,17 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          {/* 8-Semester Tab Strip */}
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
+          {/* 8-Semester + Electives Tab Strip */}
+          <div className="grid grid-cols-3 sm:grid-cols-9 gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-lg">
             {Array.from({ length: 8 }, (_, i) => i + 1).map((semNum) => {
               const semData = scheme.semesters?.find((s) => s.number === semNum);
               const isFinished = Boolean(semData?.shell_completed_at);
-              const isActive = activeSem === semNum;
+              const isActive = activeTab === semNum;
 
               return (
                 <button
                   key={semNum}
-                  onClick={() => setActiveSem(semNum)}
+                  onClick={() => setActiveTab(semNum)}
                   className={`flex flex-col items-center py-2 px-1 rounded-md text-xs font-semibold transition-colors relative ${
                     isActive
                       ? "bg-white dark:bg-zinc-900 shadow-sm text-[#1B2430] dark:text-zinc-100"
@@ -443,6 +562,22 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
                 </button>
               );
             })}
+            <button
+              onClick={() => setActiveTab("electives")}
+              className={`flex flex-col items-center py-2 px-1 rounded-md text-xs font-semibold transition-colors relative ${
+                activeTab === "electives"
+                  ? "bg-white dark:bg-zinc-900 shadow-sm text-primary dark:text-zinc-100 font-bold"
+                  : "text-zinc-600 hover:bg-white/50 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <div className="flex items-center gap-1">
+                <Layers className="w-3 h-3 text-primary" />
+                <span>Electives</span>
+              </div>
+              <span className="text-[10px] font-normal text-zinc-500">
+                {electivesData.tracks.length + electivesData.labs.length + electivesData.aec.length} courses
+              </span>
+            </button>
           </div>
 
           {error && (
@@ -452,7 +587,8 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-          {/* Split-Screen Authoring Area */}
+          {/* Split-Screen Authoring Area OR Electives Management */}
+          {activeTab !== "electives" ? (
           <div className="flex flex-col lg:flex-row gap-6 items-start">
             {/* Left Panel: Add Subject Form (420px width) */}
             <div className="w-full lg:w-[420px] flex-shrink-0 bg-white dark:bg-zinc-900 border sa-border rounded-lg p-4 sm:p-5 space-y-4 shadow-sm">
@@ -836,6 +972,357 @@ export default function SchemeAuthorPage({ params }: { params: Promise<{ id: str
               )}
             </div>
           </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Electives Header Card */}
+              <div className="bg-white dark:bg-zinc-900 border sa-border rounded-lg p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 sa-border">
+                  <div>
+                    <h2 className="text-lg font-bold sa-display flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-primary" />
+                      <span>Program Elective Courses Management</span>
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Configure the official Elective Tracks, Elective Labs, and Modern Indian Languages (AEC). These dynamically update Page 7 of the Curriculum Booklet.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono px-2.5 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                      {electivesData.tracks.length} Tracks · {electivesData.labs.length} Labs · {electivesData.aec.length} AEC
+                    </span>
+                  </div>
+                </div>
+
+                {/* Add Elective Form */}
+                <form onSubmit={handleAddElective} className="bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-lg border sa-border space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                      Add New Elective Offering
+                    </span>
+                    <div className="flex items-center gap-1.5 bg-zinc-200 dark:bg-zinc-700 p-0.5 rounded text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setElectiveCategory("TRACK")}
+                        className={`px-2.5 py-1 rounded ${electiveCategory === "TRACK" ? "bg-white dark:bg-zinc-900 shadow-sm text-primary" : "text-zinc-600 dark:text-zinc-300"}`}
+                      >
+                        Track (3 Credits)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setElectiveCategory("LAB")}
+                        className={`px-2.5 py-1 rounded ${electiveCategory === "LAB" ? "bg-white dark:bg-zinc-900 shadow-sm text-primary" : "text-zinc-600 dark:text-zinc-300"}`}
+                      >
+                        Lab Pair (1 Credit)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setElectiveCategory("AEC")}
+                        className={`px-2.5 py-1 rounded ${electiveCategory === "AEC" ? "bg-white dark:bg-zinc-900 shadow-sm text-primary" : "text-zinc-600 dark:text-zinc-300"}`}
+                      >
+                        AEC Language (2 Credits)
+                      </button>
+                    </div>
+                  </div>
+
+                  {electiveCategory === "TRACK" && (
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                      <div className="md:col-span-1">
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">Track Domain</label>
+                        <input
+                          type="text"
+                          required
+                          value={newTrackName}
+                          onChange={(e) => setNewTrackName(e.target.value)}
+                          placeholder="e.g. Cloud Computing"
+                          className="w-full border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                        />
+                      </div>
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="block text-[11px] font-semibold text-zinc-600">Sem V - PCE1 (Code &amp; Title)</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="text"
+                            value={newSem5Code}
+                            onChange={(e) => setNewSem5Code(e.target.value)}
+                            placeholder="25PEC13CE19"
+                            className="border rounded px-2 py-1.5 text-xs font-mono bg-white dark:bg-zinc-900 sa-border"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={newSem5Title}
+                            onChange={(e) => setNewSem5Title(e.target.value)}
+                            placeholder="Sem V Course Title"
+                            className="col-span-2 border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                          />
+                        </div>
+                      </div>
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="block text-[11px] font-semibold text-zinc-600">Sem VI - PCE2 (Code &amp; Title)</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="text"
+                            value={newSem6Code}
+                            onChange={(e) => setNewSem6Code(e.target.value)}
+                            placeholder="25PEC13CE29"
+                            className="border rounded px-2 py-1.5 text-xs font-mono bg-white dark:bg-zinc-900 sa-border"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={newSem6Title}
+                            onChange={(e) => setNewSem6Title(e.target.value)}
+                            placeholder="Sem VI Course Title"
+                            className="col-span-2 border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {electiveCategory === "LAB" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-semibold text-zinc-600">Sem. V - PECL1 (Lab 1 Credit)</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="text"
+                            value={newSem5Code}
+                            onChange={(e) => setNewSem5Code(e.target.value)}
+                            placeholder="25PECL13CE17"
+                            className="border rounded px-2 py-1.5 text-xs font-mono bg-white dark:bg-zinc-900 sa-border"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={newSem5Title}
+                            onChange={(e) => setNewSem5Title(e.target.value)}
+                            placeholder="Lab Title (Sem V)"
+                            className="col-span-2 border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-semibold text-zinc-600">Sem. VI - PECL2 (Lab 1 Credit)</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="text"
+                            value={newSem6Code}
+                            onChange={(e) => setNewSem6Code(e.target.value)}
+                            placeholder="25PECL13CE27"
+                            className="border rounded px-2 py-1.5 text-xs font-mono bg-white dark:bg-zinc-900 sa-border"
+                          />
+                          <input
+                            type="text"
+                            required
+                            value={newSem6Title}
+                            onChange={(e) => setNewSem6Title(e.target.value)}
+                            placeholder="Lab Title (Sem VI)"
+                            className="col-span-2 border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {electiveCategory === "AEC" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">Course Code</label>
+                        <input
+                          type="text"
+                          value={newAecCode}
+                          onChange={(e) => setNewAecCode(e.target.value)}
+                          placeholder="25AEC12CE025"
+                          className="w-full border rounded px-2.5 py-1.5 text-xs font-mono bg-white dark:bg-zinc-900 sa-border"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-[11px] font-semibold text-zinc-600 mb-1">Language Course Title (2 Credits)</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAecTitle}
+                          onChange={(e) => setNewAecTitle(e.target.value)}
+                          placeholder="e.g. Gujarati for Beginners"
+                          className="w-full border rounded px-2.5 py-1.5 text-xs bg-white dark:bg-zinc-900 sa-border"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="submit"
+                      disabled={addingElective}
+                      size="sm"
+                      className="bg-[#1B2430] hover:bg-[#2A374A] text-white text-xs h-8"
+                    >
+                      {addingElective ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Plus className="w-3.5 h-3.5 mr-1.5" />}
+                      Add Elective to Booklet
+                    </Button>
+                  </div>
+                </form>
+
+                {/* Electives Listing */}
+                {loadingElectives ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#A6763A]" />
+                  </div>
+                ) : (
+                  <div className="space-y-6 pt-2">
+                    {/* Tracks Table */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <span>1. Program Elective Tracks</span>
+                          <span className="text-[10px] font-mono font-normal text-muted-foreground">(Credits Assigned: 3 each)</span>
+                        </h3>
+                        <span className="text-xs font-mono text-zinc-500">{electivesData.tracks.length} tracks registered</span>
+                      </div>
+                      <div className="border sa-border rounded-lg overflow-hidden">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-zinc-100 dark:bg-zinc-800 border-b sa-border font-semibold text-zinc-700 dark:text-zinc-300">
+                            <tr>
+                              <th className="p-2.5 w-1/4">Track</th>
+                              <th className="p-2.5 w-5/12">Sem. V - PCE1 (Th+Pr) Credits 3</th>
+                              <th className="p-2.5 w-5/12">Sem. VI - PCE2 (Th+Pr) Credits 3</th>
+                              <th className="p-2.5 w-16 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y sa-border divide-zinc-200 dark:divide-zinc-800">
+                            {electivesData.tracks.map((track) => (
+                              <tr key={track.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                                <td className="p-2.5 font-bold text-zinc-900 dark:text-zinc-100">{track.track_name}</td>
+                                <td className="p-2.5">
+                                  {track.sem5_code && <span className="font-mono text-zinc-500 mr-1.5">{track.sem5_code}:</span>}
+                                  <span>{track.sem5_title}</span>
+                                </td>
+                                <td className="p-2.5">
+                                  {track.sem6_code && <span className="font-mono text-zinc-500 mr-1.5">{track.sem6_code}:</span>}
+                                  <span>{track.sem6_title}</span>
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    onClick={() => handleDeleteElective(track.id)}
+                                    disabled={deletingElectiveId === track.id}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded"
+                                    title="Delete Track"
+                                  >
+                                    {deletingElectiveId === track.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Labs Table */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <span>2. Program Elective Labs</span>
+                          <span className="text-[10px] font-mono font-normal text-muted-foreground">(Credits Assigned: 1 each)</span>
+                        </h3>
+                        <span className="text-xs font-mono text-zinc-500">{electivesData.labs.length} labs registered</span>
+                      </div>
+                      <div className="border sa-border rounded-lg overflow-hidden">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-zinc-100 dark:bg-zinc-800 border-b sa-border font-semibold text-zinc-700 dark:text-zinc-300">
+                            <tr>
+                              <th className="p-2.5 w-1/2">Sem. V - PECL1: (Lab) Credits 1</th>
+                              <th className="p-2.5 w-1/2">Sem. VI - PECL2: (Lab) Credits 1</th>
+                              <th className="p-2.5 w-16 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y sa-border divide-zinc-200 dark:divide-zinc-800">
+                            {electivesData.labs.map((lab) => (
+                              <tr key={lab.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                                <td className="p-2.5">
+                                  {lab.sem5_code && <span className="font-mono text-zinc-500 mr-1.5">{lab.sem5_code}:</span>}
+                                  <span>{lab.sem5_title}</span>
+                                </td>
+                                <td className="p-2.5">
+                                  {lab.sem6_code && <span className="font-mono text-zinc-500 mr-1.5">{lab.sem6_code}:</span>}
+                                  <span>{lab.sem6_title}</span>
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    onClick={() => handleDeleteElective(lab.id)}
+                                    disabled={deletingElectiveId === lab.id}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded"
+                                    title="Delete Lab Pair"
+                                  >
+                                    {deletingElectiveId === lab.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Modern Indian Languages (AEC) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <span>3. List of Modern Indian Language (AEC)</span>
+                          <span className="text-[10px] font-mono font-normal text-muted-foreground">(Credits Assigned: 2)</span>
+                        </h3>
+                        <span className="text-xs font-mono text-zinc-500">{electivesData.aec.length} courses registered</span>
+                      </div>
+                      <div className="border sa-border rounded-lg overflow-hidden">
+                        <table className="w-full text-xs text-left border-collapse">
+                          <thead className="bg-zinc-100 dark:bg-zinc-800 border-b sa-border font-semibold text-zinc-700 dark:text-zinc-300">
+                            <tr>
+                              <th className="p-2.5 w-1/4">Course Code</th>
+                              <th className="p-2.5 w-7/12">Course Title</th>
+                              <th className="p-2.5 w-1/6 text-center">Credits</th>
+                              <th className="p-2.5 w-16 text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y sa-border divide-zinc-200 dark:divide-zinc-800">
+                            {electivesData.aec.map((item) => (
+                              <tr key={item.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30">
+                                <td className="p-2.5 font-mono text-zinc-700 dark:text-zinc-300">{item.sem5_code || "--"}</td>
+                                <td className="p-2.5 font-medium">{item.sem5_title}</td>
+                                <td className="p-2.5 text-center font-bold">{item.credits}</td>
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    onClick={() => handleDeleteElective(item.id)}
+                                    disabled={deletingElectiveId === item.id}
+                                    className="text-red-500 hover:text-red-700 p-1 rounded"
+                                    title="Delete Course"
+                                  >
+                                    {deletingElectiveId === item.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Edit Shell Modal */}
           {editingCourse && (

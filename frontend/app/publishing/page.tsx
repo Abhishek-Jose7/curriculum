@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, FileCheck2, Lock, Loader2, AlertTriangle, CheckCircle2, BookOpen } from "lucide-react";
+import { Download, FileCheck2, Lock, Loader2, AlertTriangle, CheckCircle2, BookOpen, Eye } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { RoleGuard } from "@/components/layout/role-guard";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,11 @@ type OrderableCourse = { id: string; code: string; title: string; semester_id?: 
 type PublishedItem = {
   id: number | string;
   version_label: string;
-  pdf: string;
+  pdf?: string;
+  pdf_url?: string;
+  print_url?: string;
+  scheme_id?: string;
+  department_id?: string;
   year_of_study?: string;
   hod_approved_at?: string | null;
   created_at: string;
@@ -55,6 +59,7 @@ export default function PublishingPage() {
   const [publishing, setPublishing] = useState(false);
   const [approvingId, setApprovingId] = useState<number | string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [lastCompiledItem, setLastCompiledItem] = useState<PublishedItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Compile Order state
@@ -125,12 +130,24 @@ export default function PublishingPage() {
     Promise.all([
       apiFetch<any[]>(`/curriculum-schemes/${selectedScheme}/semesters/${sems[0]}/courses/`),
       apiFetch<any[]>(`/curriculum-schemes/${selectedScheme}/semesters/${sems[1]}/courses/`),
+      apiFetch<{ course_order?: string[] }>(`/curriculum-schemes/${selectedScheme}/compile-order?year_of_study=${selectedYos}`).catch(() => ({ course_order: [] })),
     ])
-      .then(([s1Courses, s2Courses]) => {
+      .then(([s1Courses, s2Courses, orderRes]) => {
         const combined: OrderableCourse[] = [
           ...(s1Courses || []).map((c: any) => ({ id: c.id, code: c.code, title: c.title })),
           ...(s2Courses || []).map((c: any) => ({ id: c.id, code: c.code, title: c.title })),
         ];
+
+        const savedOrder = orderRes?.course_order || [];
+        if (savedOrder.length > 0) {
+          const map = new Map(savedOrder.map((id, idx) => [id, idx]));
+          combined.sort((a, b) => {
+            const idxA = map.has(a.id) ? map.get(a.id)! : 999;
+            const idxB = map.has(b.id) ? map.get(b.id)! : 999;
+            return idxA - idxB;
+          });
+        }
+
         setOrderCourses(combined);
       })
       .catch(() => setOrderCourses([]))
@@ -156,6 +173,7 @@ export default function PublishingPage() {
         method: "PUT",
         body: JSON.stringify({
           year_of_study: selectedYos,
+          course_order: orderCourses.map((c) => c.id),
           ordered_course_ids: orderCourses.map((c) => c.id),
         }),
       });
@@ -192,6 +210,7 @@ export default function PublishingPage() {
         body: JSON.stringify(payload),
       });
       setResult(`Published successfully for ${selectedYos}! PDF booklet compiled.`);
+      setLastCompiledItem(pub);
       setPublished((prev) => [pub, ...prev]);
       const tmpls = await apiFetch<Template[] | { results: Template[] }>("/curriculum-templates/");
       setTemplates(Array.isArray(tmpls) ? tmpls : tmpls.results ?? []);
@@ -398,9 +417,23 @@ export default function PublishingPage() {
             )}
 
             {result && (
-              <div className="flex items-start gap-2.5 rounded bg-emerald-500/5 border border-emerald-500/10 p-4 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold font-serif">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500/80 mt-0.5" />
-                <span>{result}</span>
+              <div className="rounded bg-emerald-500/10 border border-emerald-500/20 p-4 text-[12px] text-emerald-800 dark:text-emerald-300 font-serif flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-bold">{result}</span>
+                </div>
+                {lastCompiledItem?.print_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="h-8 text-[11px] font-bold uppercase tracking-wider border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 shrink-0"
+                  >
+                    <a href={lastCompiledItem.print_url} target="_blank" rel="noopener noreferrer">
+                      <Eye className="mr-1.5 h-3.5 w-3.5" /> View Compiled Booklet
+                    </a>
+                  </Button>
+                )}
               </div>
             )}
 
@@ -469,13 +502,33 @@ export default function PublishingPage() {
                         </Button>
                       )}
 
-                      {item.pdf && (
-                        <Button variant="secondary" asChild className="h-8 text-[10px] font-bold uppercase tracking-wider rounded-sm border-border/60 hover:bg-muted">
-                          <a href={item.pdf} target="_blank" rel="noopener noreferrer">
-                            <Download className="mr-1.5 h-3.5 w-3.5" /> Download Booklet
+                      {item.print_url && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          asChild 
+                          className="h-8 text-[10px] font-bold uppercase tracking-wider rounded-sm border-primary/40 text-primary hover:bg-primary/10"
+                        >
+                          <a href={item.print_url} target="_blank" rel="noopener noreferrer">
+                            <Eye className="mr-1.5 h-3.5 w-3.5" /> View / Print
                           </a>
                         </Button>
                       )}
+
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        asChild 
+                        className="h-8 text-[10px] font-bold uppercase tracking-wider rounded-sm border-border/60 hover:bg-muted"
+                      >
+                        <a 
+                          href={item.pdf_url || item.pdf || `/api/published-curricula/${item.id}/download/`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" /> Download Booklet
+                        </a>
+                      </Button>
                     </div>
                   </div>
                 ))}
