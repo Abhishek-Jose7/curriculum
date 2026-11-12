@@ -100,6 +100,8 @@ async function serveFont(c: any) {
       if (fontObject) {
         fontBuffer = await fontObject.arrayBuffer();
       }
+    } else if (c.env.FILES_KV) {
+      fontBuffer = await c.env.FILES_KV.get(cacheKey, "arrayBuffer");
     }
   } catch (e) {
     console.error("Failed to read from R2:", e);
@@ -128,6 +130,8 @@ async function serveFont(c: any) {
             await c.env.BUCKET.put(cacheKey, fontBuffer.slice(0), {
               httpMetadata: { contentType: "font/ttf" }
             });
+          } else if (c.env.FILES_KV && fontBuffer) {
+            await c.env.FILES_KV.put(cacheKey, fontBuffer.slice(0));
           }
           break;
         }
@@ -1544,6 +1548,16 @@ api.get("/published-curricula/:id/download/", async (c) => {
       headers.set("Content-Disposition", `attachment; filename="curriculum-${id.replace(/[^A-Za-z0-9_-]/g, "")}.pdf"`);
       return new Response(object.body, { headers });
     }
+  } else if (c.env.FILES_KV) {
+    const data = await c.env.FILES_KV.get(key, "arrayBuffer");
+    if (data) {
+      return new Response(data, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="curriculum-${id.replace(/[^A-Za-z0-9_-]/g, "")}.pdf"`,
+        },
+      });
+    }
   }
 
   // Fallback to print_url if R2 bucket object not generated yet
@@ -2083,9 +2097,13 @@ async function generatePdfTask(env: Env, publishedId: string, departmentId: stri
     const pdfBuffer = await response.arrayBuffer();
 
     const pdfKey = `published/${publishedId}.pdf`;
-    await env.BUCKET.put(pdfKey, pdfBuffer, {
-      httpMetadata: { contentType: "application/pdf" }
-    });
+    if (env.BUCKET) {
+      await env.BUCKET.put(pdfKey, pdfBuffer, {
+        httpMetadata: { contentType: "application/pdf" }
+      });
+    } else if (env.FILES_KV) {
+      await env.FILES_KV.put(pdfKey, pdfBuffer);
+    }
 
     const pdfUrl = `/api/published-curricula/${publishedId}/download/`;
     await env.DB.prepare(`

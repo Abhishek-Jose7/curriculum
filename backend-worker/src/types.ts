@@ -4,7 +4,8 @@ export type WorkflowDecision = "REQUEST_CHANGES" | "APPROVE" | "REJECT" | "PUBLI
 
 export type Env = {
   DB: D1Database;
-  BUCKET: R2Bucket;
+  BUCKET?: R2Bucket;
+  FILES_KV?: KVNamespace;
   AUTH_JWT_SECRET: string;
   FRONTEND_URL?: string;
   BROWSERLESS_API_TOKEN: string;
