@@ -6,6 +6,7 @@ import {
   SchemesRepository,
   TeachingComponentsRepository,
 } from "../repositories/schemes";
+import { cacheMiddleware, purgeEdgeCache } from "../middleware/cache";
 import type { Env, Variables } from "../types";
 import type { YearOfStudy } from "../types/scheme";
 import { PAIR_SEMESTERS } from "../types/scheme";
@@ -61,7 +62,7 @@ schemesRoutes.post("/", async (c) => {
 });
 
 // 2. GET / (List schemes)
-schemesRoutes.get("/", async (c) => {
+schemesRoutes.get("/", cacheMiddleware(60), async (c) => {
   const url = new URL(c.req.url);
   const department_id = url.searchParams.get("department_id");
 
@@ -77,7 +78,7 @@ schemesRoutes.get("/", async (c) => {
 });
 
 // 3. GET /:id/ (Get scheme detail with semesters)
-schemesRoutes.get("/:id", async (c) => {
+schemesRoutes.get("/:id", cacheMiddleware(60), async (c) => {
   const id = c.req.param("id");
   const scheme = await SchemesRepository.get(c.env.DB, id);
   if (!scheme) {
@@ -116,7 +117,7 @@ schemesRoutes.get("/:id", async (c) => {
 });
 
 // 4. GET /:id/semesters/:number/courses (Courses in a semester with components)
-schemesRoutes.get("/:id/semesters/:number/courses", async (c) => {
+schemesRoutes.get("/:id/semesters/:number/courses", cacheMiddleware(45), async (c) => {
   const schemeId = c.req.param("id");
   const semNumber = parseInt(c.req.param("number"), 10);
 
@@ -288,7 +289,7 @@ schemesRoutes.post("/:id/unlock-pair", async (c) => {
 });
 
 // 7. GET /:id/compile-order
-schemesRoutes.get("/:id/compile-order", async (c) => {
+schemesRoutes.get("/:id/compile-order", cacheMiddleware(60), async (c) => {
   const schemeId = c.req.param("id");
   const url = new URL(c.req.url);
   const yearOfStudy = (url.searchParams.get("year_of_study") || "SE") as YearOfStudy;
@@ -382,7 +383,7 @@ schemesRoutes.put("/:id/compile-order", async (c) => {
 });
 
 // 9. Electives Endpoints
-schemesRoutes.get("/:id/electives", async (c) => {
+schemesRoutes.get("/:id/electives", cacheMiddleware(60), async (c) => {
   const schemeId = c.req.param("id");
   await ElectivesRepository.seedDefaults(c.env.DB, schemeId);
   const rows = await ElectivesRepository.listForScheme(c.env.DB, schemeId);
@@ -452,7 +453,7 @@ schemesRoutes.delete("/:id/electives/:electiveId", async (c) => {
 });
 
 // 10. Complete Booklet Data API: GET /:id/booklet-data
-schemesRoutes.get("/:id/booklet-data", async (c) => {
+schemesRoutes.get("/:id/booklet-data", cacheMiddleware(60), async (c) => {
   const schemeId = c.req.param("id");
   const url = new URL(c.req.url);
   const yearOfStudy = (url.searchParams.get("year_of_study") || "SE") as YearOfStudy;

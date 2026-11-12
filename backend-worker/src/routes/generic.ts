@@ -1,14 +1,15 @@
 import { Hono } from "hono";
 import { BaseRepository } from "../repositories/base";
 import { isAcademicAdmin } from "../middleware/auth";
+import { cacheMiddleware, purgeEdgeCache } from "../middleware/cache";
 import type { Env, Variables } from "../types";
 
-export function crudRoute(table: string, columns: string[], filters: string[], adminWrite = true) {
+export function crudRoute(table: string, columns: string[], filters: string[], adminWrite = true, cacheTtlSeconds = 120) {
   const app = new Hono<{ Bindings: Env; Variables: Variables }>();
   
-  app.get("/", async (c) => c.json(await new BaseRepository(c.env.DB, table, columns, filters).list(Object.fromEntries(new URL(c.req.url).searchParams))));
+  app.get("/", cacheMiddleware(cacheTtlSeconds), async (c) => c.json(await new BaseRepository(c.env.DB, table, columns, filters).list(Object.fromEntries(new URL(c.req.url).searchParams))));
   
-  app.get("/:id/", async (c) => {
+  app.get("/:id/", cacheMiddleware(cacheTtlSeconds), async (c) => {
     const row = await new BaseRepository(c.env.DB, table, columns, filters).get(c.req.param("id"));
     return row ? c.json(row) : c.json({ detail: "Not found." }, 404);
   });
@@ -17,6 +18,7 @@ export function crudRoute(table: string, columns: string[], filters: string[], a
     if (adminWrite && !isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
     try {
       const created = await new BaseRepository(c.env.DB, table, columns, filters).create(await c.req.json());
+      purgeEdgeCache([c.req.url], c);
       return c.json(created, 201);
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -31,6 +33,7 @@ export function crudRoute(table: string, columns: string[], filters: string[], a
     if (adminWrite && !isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
     try {
       const updated = await new BaseRepository(c.env.DB, table, columns, filters).update(c.req.param("id"), await c.req.json());
+      purgeEdgeCache([c.req.url, c.req.url.replace(/\/$/, "")], c);
       return c.json(updated);
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -45,6 +48,7 @@ export function crudRoute(table: string, columns: string[], filters: string[], a
     if (adminWrite && !isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
     try {
       const updated = await new BaseRepository(c.env.DB, table, columns, filters).update(c.req.param("id"), await c.req.json());
+      purgeEdgeCache([c.req.url, c.req.url.replace(/\/$/, "")], c);
       return c.json(updated);
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -58,6 +62,7 @@ export function crudRoute(table: string, columns: string[], filters: string[], a
   app.delete("/:id/", async (c) => {
     if (adminWrite && !isAcademicAdmin(c.get("user"))) return c.json({ detail: "Permission denied." }, 403);
     await new BaseRepository(c.env.DB, table, columns, filters).delete(c.req.param("id"));
+    purgeEdgeCache([c.req.url, c.req.url.replace(/\/$/, "")], c);
     return c.body(null, 204);
   });
   

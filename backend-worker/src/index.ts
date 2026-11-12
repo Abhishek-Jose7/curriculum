@@ -12,6 +12,7 @@ import { verifyPassword, hashPassword } from "./services/auth";
 import { createCourseVersion, diffSnapshots } from "./services/courseVersions";
 import { generatePin, generateReviewLinkIfMissing, isLocked, lockoutSecondsRemaining, signReviewSession, verifyReviewSession, REVIEW_PIN_CONSTANTS } from "./services/reviewSession";
 import { crudRoute } from "./routes/generic";
+import { cacheMiddleware, memGet, memSet, memClear, purgeEdgeCache } from "./middleware/cache";
 import type { AuthUser, Env, Variables, WorkflowDecision } from "./types";
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -91,20 +92,31 @@ async function serveFont(c: any) {
     return c.text("Invalid font format", 400);
   }
 
-  const cacheKey = `fonts/${name}`;
+  // 1. Try Cache API first (Unlimited & Free)
+  const cache = (caches as any).default;
+  const cacheKey = new Request(c.req.url, { method: "GET" });
+  try {
+    const cachedResponse = await cache.match(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+  } catch (e) {}
+
+  // 2. Try KV / R2 storage fallback
+  const storageKey = `fonts/${name}`;
   let fontBuffer: ArrayBuffer | null = null;
 
   try {
     if (c.env.BUCKET) {
-      const fontObject = await c.env.BUCKET.get(cacheKey);
+      const fontObject = await c.env.BUCKET.get(storageKey);
       if (fontObject) {
         fontBuffer = await fontObject.arrayBuffer();
       }
     } else if (c.env.FILES_KV) {
-      fontBuffer = await c.env.FILES_KV.get(cacheKey, "arrayBuffer");
+      fontBuffer = await c.env.FILES_KV.get(storageKey, "arrayBuffer");
     }
   } catch (e) {
-    console.error("Failed to read from R2:", e);
+    console.error("Failed to read font from storage:", e);
   }
 
   if (!fontBuffer) {
@@ -126,12 +138,17 @@ async function serveFont(c: any) {
         const response = await fetch(url);
         if (response.ok) {
           fontBuffer = await response.arrayBuffer();
+          // Write to durable store asynchronously so user doesn't wait
           if (c.env.BUCKET && fontBuffer) {
-            await c.env.BUCKET.put(cacheKey, fontBuffer.slice(0), {
-              httpMetadata: { contentType: "font/ttf" }
-            });
+            c.executionCtx.waitUntil(
+              c.env.BUCKET.put(storageKey, fontBuffer.slice(0), {
+                httpMetadata: { contentType: "font/ttf" }
+              })
+            );
           } else if (c.env.FILES_KV && fontBuffer) {
-            await c.env.FILES_KV.put(cacheKey, fontBuffer.slice(0));
+            c.executionCtx.waitUntil(
+              c.env.FILES_KV.put(storageKey, fontBuffer.slice(0))
+            );
           }
           break;
         }
@@ -145,14 +162,20 @@ async function serveFont(c: any) {
     return c.text("Font not found", 404);
   }
 
-  return new Response(fontBuffer, {
+  // Build response with 1-year cache headers and store into Edge Cache API
+  const fontResponse = new Response(fontBuffer, {
     headers: {
       "Content-Type": "font/ttf",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Cache-Control": "public, max-age=31536000",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Access-Control-Allow-Origin": "*"
     }
   });
+
+  try {
+    c.executionCtx.waitUntil(cache.put(cacheKey, fontResponse.clone()));
+  } catch (e) {}
+
+  return fontResponse;
 }
 
 let refreshTokensTableReady = false;
@@ -414,8 +437,8 @@ const handleListFaculty = async (c: any) => {
   return c.json(rows.results ?? []);
 };
 
-api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), handleListFaculty);
-api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), handleListFaculty);
+api.get("/profiles/faculty", requireRole("ADMIN", "HOD"), cacheMiddleware(60), handleListFaculty);
+api.get("/profiles/faculty/", requireRole("ADMIN", "HOD"), cacheMiddleware(60), handleListFaculty);
 
 api.post("/teachers/", requireRole("ADMIN", "HOD"), async (c) => {
   const user = c.get("user");
@@ -462,12 +485,12 @@ const deptsRoute = crudRoute("departments", ["code", "name", "college_name", "un
 api.route("/departments", deptsRoute);
 api.route("/departments/", deptsRoute);
 
-api.get("/departments/:id/preamble", async (c) => {
+api.get("/departments/:id/preamble", cacheMiddleware(120), async (c) => {
   const id = c.req.param("id");
   const content = await PreamblesRepository.get(c.env.DB, id);
   return c.json({ department_id: id, content });
 });
-api.get("/departments/:id/preamble/", async (c) => {
+api.get("/departments/:id/preamble/", cacheMiddleware(120), async (c) => {
   const id = c.req.param("id");
   const content = await PreamblesRepository.get(c.env.DB, id);
   return c.json({ department_id: id, content });
@@ -484,6 +507,7 @@ async function handleSetPreamble(c: Context<{ Bindings: Env; Variables: Variable
   const body = (await c.req.json().catch(() => ({}))) as { content?: string };
   const content = body.content ?? "";
   await PreamblesRepository.set(c.env.DB, id, content, user.id);
+  purgeEdgeCache([c.req.url, c.req.url.replace(/\/$/, ""), `/api/departments/${id}/preamble`, `/api/departments/${id}/preamble/`], c);
   return c.json({ department_id: id, content });
 }
 
@@ -763,7 +787,7 @@ api.delete("/notifications/:id/", async (c) => {
   return c.body(null, 204);
 });
 
-api.get("/courses/", async (c) => {
+api.get("/courses/", cacheMiddleware(60), async (c) => {
   const user = c.get("user") as AuthUser;
   const query = Object.fromEntries(new URL(c.req.url).searchParams);
   // Server-side scoping mirrors what each role is allowed to open.
@@ -885,8 +909,8 @@ api.post("/courses/", async (c) => {
   return c.json(course, 201);
 });
 
-api.get("/courses/:id", async (c) => handleGetCourse(c));
-api.get("/courses/:id/", async (c) => handleGetCourse(c));
+api.get("/courses/:id", cacheMiddleware(30), async (c) => handleGetCourse(c));
+api.get("/courses/:id/", cacheMiddleware(30), async (c) => handleGetCourse(c));
 
 async function handleGetCourse(c: any) {
   const id = c.req.param("id");
@@ -1536,7 +1560,16 @@ api.get("/published-curricula/archive/", requireRole('HOD', 'ADMIN'), async (c) 
 
 api.get("/published-curricula/:id/download/", async (c) => {
   const id = c.req.param("id");
+  const cache = (caches as any).default;
+  const cacheKey = new Request(c.req.url, { method: "GET" });
+
+  try {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  } catch (e) {}
+
   const key = `published/${id}.pdf`;
+  let pdfResponse: Response | null = null;
   
   if (c.env.BUCKET) {
     const object = await c.env.BUCKET.get(key);
@@ -1545,22 +1578,31 @@ api.get("/published-curricula/:id/download/", async (c) => {
       object.writeHttpMetadata(headers);
       headers.set("etag", object.httpEtag);
       headers.set("Content-Type", "application/pdf");
+      headers.set("Cache-Control", "public, max-age=3600");
       headers.set("Content-Disposition", `attachment; filename="curriculum-${id.replace(/[^A-Za-z0-9_-]/g, "")}.pdf"`);
-      return new Response(object.body, { headers });
+      pdfResponse = new Response(object.body, { headers });
     }
   } else if (c.env.FILES_KV) {
     const data = await c.env.FILES_KV.get(key, "arrayBuffer");
     if (data) {
-      return new Response(data, {
+      pdfResponse = new Response(data, {
         headers: {
           "Content-Type": "application/pdf",
+          "Cache-Control": "public, max-age=3600",
           "Content-Disposition": `attachment; filename="curriculum-${id.replace(/[^A-Za-z0-9_-]/g, "")}.pdf"`,
         },
       });
     }
   }
 
-  // Fallback to print_url if R2 bucket object not generated yet
+  if (pdfResponse) {
+    try {
+      c.executionCtx.waitUntil(cache.put(cacheKey, pdfResponse.clone()));
+    } catch (e) {}
+    return pdfResponse;
+  }
+
+  // Fallback to print_url if R2/KV object not generated yet
   const record = await c.env.DB.prepare("SELECT print_url FROM published_curricula WHERE id = ?").bind(id).first<any>();
   if (record?.print_url) {
     return c.redirect(record.print_url);
